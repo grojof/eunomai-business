@@ -64,7 +64,11 @@ cd connector
 uv run --group dev pytest                    # the whole suite against a fake git server
 ```
 
-After changing dependencies (`connector/uv.lock`), refresh the bill of materials:
+Dependencies are maintained by a daily workflow (`.github/workflows/dependencies.yml`, `tools/update_dependencies.py`):
+it proposes the newest versions the project's own rules allow as one pull request, and opens an issue when a known
+vulnerability has no allowed fix. Tests run on every pull request, on Linux and Windows.
+
+After changing dependencies by hand (`connector/uv.lock`), refresh the bill of materials:
 
 ```powershell
 python tools\sbom.py
