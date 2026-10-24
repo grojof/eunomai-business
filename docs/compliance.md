@@ -58,6 +58,8 @@ Grouped by the control themes of an information-security management system (such
   | dulwich | Apache-2.0 OR GPL-2.0-or-later | Used under Apache-2.0 |
   | certifi | MPL-2.0 | Unmodified; MPL obligations apply only to changes in its own files |
 
+- **The complete list:** `connector/sbom.cdx.json`, a CycloneDX 1.5 software bill of materials with every
+  runtime package, its version, hashes, license and dependencies. It ships inside the plugin.
 - **eunomai-business's own license:** not yet chosen.
 
 ## The organization's responsibility
