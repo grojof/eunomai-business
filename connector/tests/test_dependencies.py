@@ -27,3 +27,16 @@ def test_constraints_match_the_lock():
         return [line for line in text.splitlines() if line and not line.lstrip().startswith("#")]
 
     assert pins(committed) == pins(exported), "run the uv export command at the top of constraints.txt"
+
+
+def test_the_sbom_lists_exactly_what_is_installed_with_licenses():
+    """sbom.cdx.json (tools/sbom.py) describes the same packages and versions as constraints.txt."""
+    import json
+    import re
+
+    bom = json.loads((CONNECTOR / "sbom.cdx.json").read_text(encoding="utf-8"))
+    pins = set(re.findall(r"^([A-Za-z0-9_.-]+)==([^\s;]+)", (CONNECTOR / "constraints.txt").read_text(
+        encoding="utf-8"), re.M))
+    listed = {(c["name"], c["version"]) for c in bom["components"]}
+    assert bom["bomFormat"] == "CycloneDX" and listed == pins, "run python tools/sbom.py"
+    assert all(c["licenses"] for c in bom["components"])

@@ -64,6 +64,16 @@ cd connector
 uv run --group dev pytest                    # the whole suite against a fake git server
 ```
 
+After changing dependencies (`connector/uv.lock`), refresh what users' computers install and the bill of
+materials:
+
+```powershell
+cd connector
+uv export --frozen --no-dev --no-emit-project --no-hashes --format requirements.txt -o constraints.txt
+cd ..
+python tools\sbom.py
+```
+
 ## Documentation
 
 | Journey | Pages |
