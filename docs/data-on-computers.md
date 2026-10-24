@@ -35,6 +35,11 @@ When the connector stops, the report the user can send to IT contains the worksp
 the version, the files involved, the connector version, the computer's OS and the time. It never contains
 tokens. It travels only if the user sends the e-mail.
 
+## Calls to public services
+
+`dependency_check` asks PyPI, npm and OSV (`api.osv.dev`) about packages. It sends package names and versions
+only; nothing about the user or the project.
+
 ## On servers
 
 | What | Where | Lasts | How to end it |

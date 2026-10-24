@@ -9,6 +9,15 @@
   "diagnostics": false,
   "_support_email": "Where users send what the connector cannot resolve on its own. Optional, but without it users get the report and no e-mail link.",
   "support_email": "it-support@example.org",
+  "_specialist": "How the specialist works. Languages: documentation and specifications, and code (defaults to the documentation language); technical terms stay in English. Code is written only in projects listed here, or anywhere when free_development is on (allowed_technologies limits it; empty means any). See docs/configuration.md",
+  "docs_language": "en",
+  "code_language": "en",
+  "free_development": false,
+  "allowed_technologies": [],
+  "projects": {
+    "https://git.example.internal/team/app": {"technologies": ["Python", "HTML, CSS and JavaScript"]}
+  },
+  "dependency_exceptions": [],
   "providers": {
     "directory": {
       "authorize_url": "https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/authorize",

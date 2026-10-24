@@ -35,6 +35,20 @@ contain internal host names, so keep the built zip inside the organization.
 | `diagnostics` | `false` | `true` adds the diagnostic tools (`diag_*`), the validation skills and a hook log. For validating an installation; keep `false` for users. |
 | `providers` | — | Sign-in providers, by name. Must include `git`. See below. |
 
+### The specialist
+
+| Key | Default | What it does |
+|---|---|---|
+| `docs_language` | `en` | Language of documentation, specifications and pull request summaries (`es`, `en`, ...) |
+| `code_language` | the documentation's | Language of identifiers and comments. Technical terms stay in English |
+| `free_development` | `false` | `true` lets the specialist write code in any workspace, with `allowed_technologies`. For IT profiles, not for business users |
+| `allowed_technologies` | `[]` | With free development, the technologies allowed; empty means any |
+| `projects` | `{}` | Repository address → `{"technologies": [...]}`: the projects where code may be written, and with what |
+| `dependency_exceptions` | `[]` | `{"package": "pypi:<name>" or "npm:<name>", "reason": "..."}`: packages IT vetted despite failing the origin or activity rules. A known vulnerability is never excepted |
+
+Without a project entry or free development, the specialist analyses, shapes and specifies, and delivers that to
+IT as a proposal, but writes no code.
+
 Keys starting with `_` are comments. Any other unknown key is an error, so a typo does not go unnoticed.
 
 **`workspaces_root`:** avoid folders synced by OneDrive (a synced `.git` folder breaks) and anything under
@@ -127,6 +141,7 @@ Set by the plugin from the build; listed so nothing is hidden. Users never set t
 | `EUNOMAI_WORKSPACES_ROOT` | `workspaces_root` |
 | `EUNOMAI_DIAGNOSTICS` | `1` or `0`, from `diagnostics` |
 | `EUNOMAI_SUPPORT_EMAIL` | `support_email` |
+| `EUNOMAI_SPECIALIST` | The specialist's settings, as JSON |
 | `EUNOMAI_EXPANSION_PROBE` | Lets the diagnostics check that `${CLAUDE_PLUGIN_ROOT}` is expanded |
 
 The connector also changes `GIT_CONFIG_SYSTEM`, `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL` **for its own

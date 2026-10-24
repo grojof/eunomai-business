@@ -20,16 +20,56 @@ ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_SRC = ROOT / "plugin"
 CONNECTOR_SRC = ROOT / "connector"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache")
-KEYS = {"uvx", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email", "providers"}
+SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies", "projects",
+                   "dependency_exceptions"}
+KEYS = {"uvx", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
+        "providers"} | SPECIALIST_KEYS
 PROVIDER_KEYS = {"authorize_url", "token_url", "client_id", "scopes", "redirect_uri", "userinfo_url", "login_field"}
 PROVIDER_REQUIRED = {"authorize_url", "token_url", "client_id", "redirect_uri", "userinfo_url"}
 LOOPBACK = {"127.0.0.1", "localhost"}
 EMAIL = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
+LANGUAGE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
+EXCEPTION = re.compile(r"^(pypi|npm):[A-Za-z0-9@/._-]+$")
+
+
+def _strings(value) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value)
+
+
+def validate_specialist(cfg: dict) -> list[str]:
+    errors = []
+    for key in ("docs_language", "code_language"):
+        if cfg.get(key) and not LANGUAGE.match(str(cfg[key])):
+            errors.append(f"{key} must be a language code such as en or es")
+    if not isinstance(cfg.get("free_development", False), bool):
+        errors.append("free_development must be true or false")
+    if not _strings(cfg.get("allowed_technologies", [])):
+        errors.append("allowed_technologies must be a list of names")
+    projects = cfg.get("projects", {})
+    if not isinstance(projects, dict):
+        errors.append("projects must be an object: repository URL -> {technologies}")
+    else:
+        for url, project in projects.items():
+            if urlsplit(url).scheme != "https":
+                errors.append(f"projects: {url!r} must be an https repository URL")
+            if not isinstance(project, dict) or not _strings(project.get("technologies", [])):
+                errors.append(f"projects.{url}: technologies must be a list of names")
+    exceptions = cfg.get("dependency_exceptions", [])
+    if not isinstance(exceptions, list):
+        errors.append("dependency_exceptions must be a list")
+    else:
+        for item in exceptions:
+            if not isinstance(item, dict) or not EXCEPTION.match(str(item.get("package", ""))) \
+                    or not str(item.get("reason", "")).strip():
+                errors.append('dependency_exceptions: each needs "package" ("pypi:<name>" or "npm:<name>") '
+                              'and a "reason"')
+    return errors
 
 
 def validate(cfg: dict) -> list[str]:
     """Every problem in the configuration, so IT fixes them in one pass. Keys starting with "_" are comments."""
     errors = [f"unknown setting {key!r}" for key in cfg if not key.startswith("_") and key not in KEYS]
+    errors += validate_specialist(cfg)
     if cfg.get("connector_source", "bundled") not in ("bundled", "path"):
         errors.append('connector_source must be "bundled" or "path"')
     if cfg.get("connector_source") == "path" and not cfg.get("connector_path"):
@@ -97,6 +137,8 @@ def build(cfg: dict, out_dir: Path) -> Path:
                                 separators=(",", ":")),
         "WORKSPACES_ROOT": cfg.get("workspaces_root") or "~/eunomai-business-workspaces",
         "DIAGNOSTICS": "1" if diagnostics else "0",
+        "SPECIALIST": json.dumps({k: cfg[k] for k in sorted(SPECIALIST_KEYS) if k in cfg}, separators=(",", ":"),
+                                 ensure_ascii=False),
         "SUPPORT_EMAIL": cfg.get("support_email") or "",
     }
     for template in out.rglob("*.template"):

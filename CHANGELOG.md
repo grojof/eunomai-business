@@ -8,6 +8,12 @@
 - **Stops go to IT, not to the user:** when the connector is not certain, or an unexpected error happens, the user
   gets one plain sentence and IT a report, with an e-mail link when `support_email` is set.
 - **New setting `support_email`;** new dependency `merge3` (needed by dulwich to combine file contents).
+- **The specialist (first version):** the `specialist` skill guides a business user from a vague idea to a pull
+  request (understand, shape, specify, build, deliver), writing OpenSpec files without its command-line tool.
+- **Settings for the specialist:** `docs_language`, `code_language`, `free_development` (off by default),
+  `allowed_technologies`, `projects`, `dependency_exceptions`; tool `specialist_settings`.
+- **`dependency_check`:** which package version may be used, decided by rules (vulnerabilities, yanked,
+  deprecated, origin, activity, age), deny by default.
 - **Guard probe (diagnostics):** the diagnostic hook denies two test markers, as a JSON answer and as exit code 2,
   and logs input field names and timings, to validate the planned file guard (H9).
 
