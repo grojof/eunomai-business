@@ -95,7 +95,9 @@ flowchart TD
     where -- yes --> ff{"Fast-forward<br/>possible?"}
     ff -- yes --> moved["Back up, then move to the<br/>latest main branch"]
     ff -- no --> stop
-    where -- no --> accepted{"Version accepted?<br/>in main, or its PR merged"}
+    where -- no --> saved{"Anything saved<br/>in the version?"}
+    saved -- no --> moved
+    saved -- yes --> accepted{"Version accepted?<br/>in main, or its PR merged"}
     accepted -- yes --> retire["Back up, back to the main<br/>branch, retire the version"]
     accepted -- no --> clean{"No file changed<br/>on both sides?"}
     clean -- yes --> combine["Back up, add the latest<br/>main changes to the version"]
@@ -106,7 +108,7 @@ flowchart TD
     classDef safeguard fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef halt fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
     class keep,fetch action
-    class where,ff,accepted,clean decision
+    class where,saved,ff,accepted,clean decision
     class moved,retire,combine safeguard
     class stop halt
 ```
@@ -140,7 +142,7 @@ sequenceDiagram
 | Build tool | `tools/build.py`: organization configuration + source → `eunomai-business.zip`, after validating the configuration | Built |
 | Bill of materials | `tools/sbom.py` → `connector/sbom.cdx.json`, regenerated whenever `connector/uv.lock` changes | Built |
 | Maintenance | GitHub workflows: tests on every pull request (Linux, Windows); daily dependency update (`tools/update_dependencies.py`) | Built |
-| Tests | `connector/tests/`: sign-in, workspaces, versions, barriers, build, tool list and the dependency pins, against a fake git server (`uv run --group dev pytest` in `connector/`) | Built |
+| Tests | `connector/tests/`: sign-in, workspaces, versions, updates, barriers, the dependency check, the hook, the build and the tool list, against a fake git server (`uv run --frozen --group dev pytest` in `connector/`) | Built |
 
 ## Connector modules
 
@@ -172,7 +174,7 @@ sequenceDiagram
 | Clone, send, branches, save points | Standard git over HTTPS | Yes |
 | Git sign-in | OAuth 2.0 public client with PKCE; user endpoint and login field configurable | Yes in principle; tested only with Gitea |
 | Sending the token | HTTP basic auth (login + OAuth token) | Works with Gitea; to be checked per hosting |
-| Pull request, its merged state, and branch link | Gitea API (`/api/v1/repos/.../pulls`) and Gitea web paths | **No**: Gitea only; without it, an accepted version is recognized only by its history (not after a squash merge) |
+| Pull request, its merged state, and branch link | Gitea API (`/api/v1/repos/.../pulls`, the 250 most recently updated) and Gitea web paths | **No**: Gitea only; without it, an accepted version is recognized only by its history (not after a squash merge) |
 | Check that the token only goes to the git host | Compares the repository's origin (scheme, host, port) with the `userinfo_url` origin | Works when both share an origin (Gitea); GitHub uses a separate API host |
 
 **Planned:** a hosting adapter per server type (Gitea first, then GitHub and GitHub Enterprise), chosen in the
@@ -201,9 +203,8 @@ Before it is built, validation must show (check H9 in
 - the hook is quick enough to run on every tool call;
 - it works without Git on the computer.
 
-**Measured (H9):** both ways of denying stop the tool, for file tools and for the sandbox's shell alike; the
-hook runs on the user's computer in both cases. Launching it takes about 150 ms per tool call. The guard will deny
-with a JSON answer, which shows the user only the reason (exit code 2 also shows the hook's command line).
+**Measured:** see check H9 in [validation](validation/hypotheses.md); the guard will deny with a JSON answer,
+which shows the user only the reason.
 
 **Limits, stated now:** a hook sees a shell command as text. Reading a file by path is easy to catch; a command
 built to hide it is not. The guard reduces mistakes and casual exposure; the real boundary for secrets is not

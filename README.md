@@ -61,7 +61,7 @@ python tools\build.py                        # -> dist\eunomai-business.zip
 
 ```powershell
 cd connector
-uv run --group dev pytest                    # the whole suite against a fake git server
+uv run --frozen --group dev pytest           # the whole suite against a fake git server
 ```
 
 Dependencies are maintained by a daily workflow (`.github/workflows/dependencies.yml`, `tools/update_dependencies.py`):

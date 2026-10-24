@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Coherence fixes (independent review):** network errors narrowed (a local disk problem is not "check the
+  network"); the proposal lookup pages through recent pull requests; IT reports name the build; the specialist
+  handles a failed sign-in, an unknown proposal and the recommended version; the daily workflow runs upgraded
+  packages without write access and closes its issue once problems are gone.
 - **Security hardening (independent review):** the workspace configuration is pinned once checked, so a filter
   written into `.git/config` during an operation can no longer run on the computer; content is never filtered;
   the repository address comes from the connector's registry, not from `.git/config`; one operation at a time

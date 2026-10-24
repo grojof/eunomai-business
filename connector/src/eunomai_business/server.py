@@ -16,7 +16,9 @@ mcp = MCPServer("eunomai-business", instructions=(
     "language, and nothing technical. When `status` is \"needs_it\", the connector stopped to keep the user's work "
     "safe: say so with `user_message` and offer `email_link`, which opens an e-mail to IT with the report already "
     "written; show `it_report` only if the user asks for details. When `status` is \"unreachable\", ask the user to "
-    "check the network or VPN and try again. Never try to work around a stop with other tools or the shell."))
+    "check the network or VPN and try again. A result with `error` is a mistake in how a tool was called (not "
+    "signed in yet, a name that is not allowed): take the step it names or correct the call; never show it to the "
+    "user. Never try to work around a stop with other tools or the shell."))
 
 # Mistakes in how a tool was called: Claude fixes the call. A server that cannot be reached is the user's network.
 # Anything else unexpected goes to IT, never to the user.

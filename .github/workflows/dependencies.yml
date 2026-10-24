@@ -1,7 +1,10 @@
 name: Dependencies
 
 # Every day: bring dependencies to the newest versions the project's own rules allow, propose them as one pull
-# request, and keep an issue open for anything no allowed version solves.
+# request, and keep an issue open while anything no allowed version solves remains.
+#
+# The job that runs freshly upgraded packages has read-only access. Writing (branch, pull request, issue) happens in
+# separate jobs on fresh runners that execute no project code and accept only the three files the update produces.
 on:
   schedule:
     - cron: "23 5 * * *"
@@ -18,46 +21,69 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      actions: write
-    env:
-      BRANCH: automation/dependencies
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          persist-credentials: false  # freshly upgraded packages run below: no token on disk for them
+          persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
         with:
           version: "0.13.5"
 
       - name: Update within the rules
-        run: >-
-          uv run --project connector --frozen --python 3.12 python tools/update_dependencies.py
-          --summary "$RUNNER_TEMP/summary.md" --problems "$RUNNER_TEMP/problems.md"
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          uv run --project connector --frozen --python 3.12 python tools/update_dependencies.py \
+            --summary "$RUNNER_TEMP/out/summary.md" --problems "$RUNNER_TEMP/out/problems.md"
 
       - name: Test the update
         id: changes
         run: |
           if git diff --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
-          cd connector && uv run --frozen --group dev --python 3.12 pytest -q
+          (cd connector && uv run --frozen --group dev --python 3.12 pytest -q)
+          cp connector/uv.lock connector/pyproject.toml connector/sbom.cdx.json "$RUNNER_TEMP/out/"
 
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: update
+          path: ${{ runner.temp }}/out/
+          retention-days: 5
+
+  propose:
+    needs: update
+    if: needs.update.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      BRANCH: automation/dependencies
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: update
+          path: ${{ runner.temp }}/in
       - name: Propose the update
-        if: steps.changes.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
+          cp "$RUNNER_TEMP/in/uv.lock" "$RUNNER_TEMP/in/pyproject.toml" "$RUNNER_TEMP/in/sbom.cdx.json" connector/
+          unexpected=$(git status --porcelain | grep -v -E '^ M connector/(uv\.lock|pyproject\.toml|sbom\.cdx\.json)$' || true)
+          if [ -n "$unexpected" ]; then echo "unexpected changes: $unexpected"; exit 1; fi
           gh auth setup-git
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$BRANCH"
-          git commit -qam "Dependencies: newest versions allowed by the project's rules"
+          git commit -q --no-verify -am "Dependencies: newest versions allowed by the project's rules"
           git push -qf "https://github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
           {
-            cat "$RUNNER_TEMP/summary.md"
+            cat "$RUNNER_TEMP/in/summary.md"
             echo
             echo "Prepared by the daily Dependencies workflow; tests passed on Linux, and the Tests workflow was"
             echo "started on Linux and Windows for this branch (see Actions)."
@@ -70,16 +96,28 @@ jobs:
           fi
           gh workflow run tests.yml --ref "$BRANCH"
 
-      - name: Report what no allowed version solves
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
+  report:
+    needs: update
+    if: always() && needs.update.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: "Dependencies: problems no allowed version solves"
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: update
+          path: ${{ runner.temp }}/in
+      - name: Keep the issue in line with the problems
         run: |
-          [ -s "$RUNNER_TEMP/problems.md" ] || exit 0
-          title="Dependencies: problems no allowed version solves"
-          number=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
-          if [ -n "$number" ]; then
-            gh issue edit "$number" --body-file "$RUNNER_TEMP/problems.md"
-          else
-            gh issue create --title "$title" --body-file "$RUNNER_TEMP/problems.md"
+          number=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')
+          if [ -s "$RUNNER_TEMP/in/problems.md" ]; then
+            if [ -n "$number" ]; then gh issue edit "$number" --body-file "$RUNNER_TEMP/in/problems.md"
+            else gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/in/problems.md"; fi
+          elif [ -n "$number" ]; then
+            gh issue close "$number" --comment "Resolved: the daily check finds no problem left."
           fi
