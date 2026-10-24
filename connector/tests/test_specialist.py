@@ -139,3 +139,21 @@ def test_in_doubt_the_answer_is_no(monkeypatch):
     monkeypatch.setattr(deps, "_get", down)
     assert tools._safe(deps.check, "pypi", "pkg")["status"] == "unreachable"
     assert "error" in tools._safe(deps.check, "maven", "pkg")
+
+
+def test_a_burst_of_fresh_releases_does_not_get_past_the_two_weeks(monkeypatch):
+    """Many clean releases in a few days: the newest mature one is recommended, never a fresh one."""
+    releases = {f"1.{n}.0": (30 + n, False) for n in range(5)}
+    releases.update({f"2.{n}.0": (10 - n * 0.5, False) for n in range(11)})
+    pypi(monkeypatch, releases)
+    result = deps.check("pypi", "pkg")
+    assert result["version"] == "1.4.0" and "note" not in result  # the newest mature one, no 2.x
+
+
+@pytest.mark.parametrize("url, has_source", [
+    ("https://github.com/org/pkg", True), ("git+https://gitlab.com/org/pkg.git", True),
+    ("https://git.example.org/org/pkg", True), ("github:org/pkg", True), ("git@github.com:org/pkg.git", True),
+    ("https://digit.example/pkg", False), ("https://example.org/github.com", False), ("", False),
+])
+def test_the_source_check_looks_at_the_host(url, has_source):
+    assert (deps._source([url]) is not None) is has_source

@@ -130,9 +130,11 @@ def _listen(provider: str, cfg: dict, servers: list[HTTPServer], state: str, ver
     received: dict = {}
 
     class Callback(BaseHTTPRequestHandler):
+        timeout = 5  # a connection that sends nothing cannot hold the port
+
         def do_GET(self):  # noqa: N802 (stdlib name)
             query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
-            if "code" not in query and "error" not in query:  # favicon and the like
+            if query.get("state") != state:  # not this sign-in's answer (favicon, another page): keep waiting
                 self.send_response(404)
                 self.end_headers()
                 return
@@ -165,8 +167,6 @@ def _listen(provider: str, cfg: dict, servers: list[HTTPServer], state: str, ver
 
     if not received:
         return finish(status="expired", error="no answer from the browser in time")
-    if received.get("state") != state:
-        return finish(status="failed", error="state mismatch")
     if "error" in received:
         return finish(status="failed", error=(received.get("error_description") or received["error"])[:300])
     try:
@@ -245,6 +245,9 @@ def session(provider: str) -> dict | None:
         try:
             tokens = _exchange(cfg, {"grant_type": "refresh_token", "refresh_token": record["refresh_token"]})
         except RuntimeError:  # the server refused it (expired or revoked): the user simply signs in again
+            latest = store.load(cfg["store_key"])
+            if latest and latest.get("refresh_token") != record["refresh_token"]:
+                return latest  # another connector process refreshed it in the meantime
             store.delete(cfg["store_key"])
             return None
         _save(cfg, tokens)

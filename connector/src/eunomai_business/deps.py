@@ -10,6 +10,7 @@ a vulnerability.
 import re
 import time
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from . import auth, settings
 from .support import Unreachable
@@ -18,7 +19,10 @@ MIN_AGE_DAYS = 14
 MAX_SILENCE_DAYS = 3 * 365
 _ECOSYSTEMS = {"pypi": "PyPI", "npm": "npm"}
 _PRERELEASE = re.compile(r"(a|b|rc|dev|alpha|beta|pre|preview)\d*|-", re.IGNORECASE)
-_OSV_CHECKS = 10  # versions checked for vulnerabilities, newest first
+_OSV_CHECKS = 10  # mature versions checked for vulnerabilities before giving up on finding a clean one
+_MAX_OSV_CHECKS = 40  # all versions checked at most, newest first
+_SOURCE_HOST = re.compile(r"(^|\.)(github\.com|gitlab\.com|codeberg\.org|bitbucket\.org|sr\.ht)$|^git\.")
+_SOURCE_SHORT = re.compile(r"^(github|gitlab|bitbucket):[\w.-]+/[\w.-]+$|^git@[\w.-]+:[\w.-]+/")
 
 
 def _get(url: str) -> dict | None:
@@ -52,6 +56,17 @@ def _order(version: str) -> tuple:
     return tuple(int(part) for part in re.findall(r"\d+", version))
 
 
+def _source(urls: list) -> str | None:
+    """The first address that points to a source repository host (checked on the host name, not the text)."""
+    for url in urls:
+        if not isinstance(url, str) or not url:
+            continue
+        host = urlsplit(url.removeprefix("git+")).hostname
+        if (host and _SOURCE_HOST.search(host)) or _SOURCE_SHORT.match(url):
+            return url
+    return None
+
+
 def _pypi(name: str) -> dict | None:
     data = _get(f"https://pypi.org/pypi/{name}/json")
     if data is None:
@@ -67,8 +82,7 @@ def _pypi(name: str) -> dict | None:
             "unusable": "yanked" if all(f.get("yanked") for f in files) else None,
             "requires": next((f.get("requires_python") for f in files if f.get("requires_python")), None)}
     inactive = "Development Status :: 7 - Inactive" in (info.get("classifiers") or [])
-    return {"source": next((u for u in urls if re.search(r"github|gitlab|codeberg|bitbucket|sr\.ht|git\.", u or "")),
-                           None),
+    return {"source": _source(urls),
             "license": info.get("license_expression") or info.get("license"), "inactive": inactive,
             "releases": releases}
 
@@ -86,7 +100,7 @@ def _npm(name: str) -> dict | None:
         releases[version] = {"age_days": _days_ago(times[version]),
                              "unusable": "deprecated" if meta.get("deprecated") else None,
                              "requires": (meta.get("engines") or {}).get("node")}
-    return {"source": repository.get("url") if isinstance(repository, dict) else repository,
+    return {"source": _source([repository.get("url") if isinstance(repository, dict) else repository]),
             "license": data.get("license") if isinstance(data.get("license"), str) else None,
             "inactive": False, "releases": releases}
 
@@ -116,13 +130,23 @@ def check(ecosystem: str, name: str, version: str = "") -> dict:
     if not any(package["releases"][v]["age_days"] >= MIN_AGE_DAYS for v in candidates):
         return {**result, "verdict": "blocked", "source": package["source"],
                 "reasons": ["the package has no release older than two weeks"]}
-    checked = {v: _vulnerabilities(ecosystem, name, v) for v in candidates[:_OSV_CHECKS]}  # newest first
+    def is_mature(v: str) -> bool:
+        return package["releases"][v]["age_days"] >= MIN_AGE_DAYS
+
+    # Newest first, until the first clean mature version, or until enough mature ones were found vulnerable.
+    checked: dict[str, list[str]] = {}
+    for candidate in candidates[:_MAX_OSV_CHECKS]:
+        checked[candidate] = _vulnerabilities(ecosystem, name, candidate)
+        mature_checked = [v for v in checked if is_mature(v)]
+        if (is_mature(candidate) and not checked[candidate]) or len(mature_checked) >= _OSV_CHECKS:
+            break
     clean = [v for v in checked if not checked[v]]
-    mature = [v for v in clean if package["releases"][v]["age_days"] >= MIN_AGE_DAYS]
+    mature_clean = [v for v in clean if is_mature(v)]
+    mature_checked = [v for v in checked if is_mature(v)]
     recommended, note = None, None
-    if mature:  # the newest version that is clean and at least two weeks old
-        recommended = mature[0]
-    elif clean:  # every older version checked is vulnerable: the fix outweighs the risk of a fresh release
+    if mature_clean:  # the newest version that is clean and at least two weeks old
+        recommended = mature_clean[0]
+    elif mature_checked and clean:  # every mature version checked is vulnerable: the fix outweighs the risk
         recommended = max(clean, key=lambda v: package["releases"][v]["age_days"])
         note = "newer than two weeks, chosen because every older version checked has a known vulnerability"
 

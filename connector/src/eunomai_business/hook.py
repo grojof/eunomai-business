@@ -102,6 +102,7 @@ def main() -> None:
 
 
 def read_log(lines: int = 20) -> list[dict]:
+    lines = max(1, min(int(lines), 200))
     path = data_dir() / LOG_NAME
     if not path.exists():
         return []

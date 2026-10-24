@@ -19,7 +19,8 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_SRC = ROOT / "plugin"
 CONNECTOR_SRC = ROOT / "connector"
-IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache")
+IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache",
+                                ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov")
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies", "projects",
                    "dependency_exceptions"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",

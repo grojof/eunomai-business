@@ -7,6 +7,7 @@ it stops, keeps the user's work, and returns three things: a sentence the user u
 
 import os
 import platform
+import re
 import time
 from importlib.metadata import PackageNotFoundError, version
 from urllib.parse import quote
@@ -33,9 +34,14 @@ def _connector_version() -> str:
         return "unknown"
 
 
+def clean(text: object, limit: int = 500) -> str:
+    """Text from servers or the system, made safe to show and to mail: no control characters, bounded length."""
+    return re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", " ", str(text))[:limit]
+
+
 def report(error: NeedsIT) -> dict:
     lines = [f"Problem: {error.problem}", ""]
-    lines += [f"{key}: {value}" for key, value in error.details.items()]
+    lines += [f"{key}: {clean(value)}" for key, value in error.details.items()]
     lines += ["", f"Connector: eunomai-business {_connector_version()}", f"Computer: {platform.platform()}",
               f"Time: {time.strftime('%Y-%m-%d %H:%M:%S %z')}"]
     text = "\n".join(lines)
