@@ -20,6 +20,7 @@ import truststore
 import urllib3
 from dulwich import porcelain
 from dulwich.client import get_transport_and_path
+from dulwich.diff_tree import tree_changes
 from dulwich.graph import can_fast_forward, find_merge_base
 from dulwich.merge import recursive_merge
 from dulwich.object_store import iter_tree_contents
@@ -439,6 +440,27 @@ def _would_overwrite(repo: Repo, target_tree: bytes) -> list[str]:
                   if entry.path not in tracked and (folder / entry.path.decode()).exists())
 
 
+def _changed_on_both_sides(repo: Repo, bases: list, ours: bytes, theirs: bytes) -> list[str]:
+    """Files both sides changed since their common ancestor, unless they ended identical. With no single common
+    ancestor every file counts as shared: nothing is combined automatically then."""
+    if len(bases) != 1:
+        return ["(no single common ancestor)"]
+    base_tree = repo[bases[0]].tree
+
+    def changed(commit: bytes) -> dict[bytes, bytes | None]:
+        """Each changed path and its new content (None: deleted)."""
+        found = {}
+        for change in tree_changes(repo.object_store, base_tree, repo[commit].tree):
+            if change.old is not None and change.old.path is not None:
+                found[change.old.path] = None
+            if change.new is not None and change.new.path is not None:
+                found[change.new.path] = change.new.sha
+        return found
+
+    mine, theirs_ = changed(ours), changed(theirs)
+    return _text(path for path in mine.keys() & theirs_.keys() if mine[path] != theirs_[path])
+
+
 def _move(repo: Repo, branch_name: str, target: bytes, workspace: str) -> None:
     """Point a branch at target, make it current and update the files. Only on a clean workspace."""
     blocked = _would_overwrite(repo, repo[target].tree)
@@ -525,13 +547,20 @@ def update(workspace: str) -> dict:
             return {**result, "status": "up_to_date", "branch": name,
                     "user_message": " ".join(notes + ["Everything is up to date."])}
 
-        # 4c. the main branch moved on: combine it into the version, only if it combines cleanly
+        # 4c. the main branch moved on: combine it into the version, only when no file was changed on both sides.
+        # Lines of the same file are never merged automatically: two edits that do not collide as text can still
+        # break each other, and that is not a call to make on the user's behalf.
         bases = find_merge_base(repo, [version_head, remote_main])
+        shared = _changed_on_both_sides(repo, bases, version_head, remote_main)
+        if shared:
+            raise NeedsIT("The latest changes of the project touch the same files as your version, so they are not "
+                          "combined automatically. Your work is safe; IT can combine them.",
+                          "the version and the main branch changed the same files",
+                          _facts(repo, workspace, files=shared))
         tree, conflicts = recursive_merge(repo.object_store, bases, repo[version_head], repo[remote_main])
-        if conflicts:
-            raise NeedsIT("The latest changes of the project touch the same parts as your version, so they cannot "
-                          "be combined automatically. Your work is safe; IT can combine them.",
-                          "merge conflict between the version and the main branch",
+        if conflicts:  # cannot happen when no file changed on both sides; kept as a second safety net
+            raise NeedsIT("The latest changes of the project could not be combined with your version. Your work is "
+                          "safe; IT can combine them.", "merge conflict between the version and the main branch",
                           _facts(repo, workspace, conflicts=_text(conflicts)))
         repo.object_store.add_object(tree)
         merge = Commit()

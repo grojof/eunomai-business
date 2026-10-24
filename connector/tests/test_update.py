@@ -115,10 +115,34 @@ def test_a_conflict_stops_without_touching_anything(signed_in, workspaces, monke
     assert result["status"] == "needs_it" and "Your work is safe" in result["user_message"]
     assert "README.md" in result["it_report"] and "token-" not in result["it_report"]
     assert result["email_link"].startswith("mailto:it@example.test?subject=")
-    assert "merge conflict" in unquote(result["email_link"])
+    assert "changed the same files" in unquote(result["email_link"])
     assert (ws / "README.md").read_bytes() == b"# Sandbox\n\nMy notes.\n"
     with gitops._open(str(ws)) as repo:
         assert repo.head() == before
+
+
+def test_edits_to_different_lines_of_the_same_file_are_not_combined(signed_in, workspaces):
+    """No textual conflict, yet the same file: two edits can still break each other, so it goes to IT."""
+    ws = joined(signed_in, "same-file")
+    signed_in.server_commit("same-file", "main", {"list.md": b"one\ntwo\nthree\nfour\nfive\n"})
+    gitops.update("same-file")
+    gitops.branch("same-file", "ana/top")
+    (ws / "list.md").write_bytes(b"ONE\ntwo\nthree\nfour\nfive\n")
+    gitops.save("same-file", "Top line")
+    signed_in.server_commit("same-file", "main", {"list.md": b"one\ntwo\nthree\nfour\nFIVE\n"})
+    with pytest.raises(NeedsIT, match="changed the same files"):
+        gitops.update("same-file")
+    assert (ws / "list.md").read_bytes() == b"ONE\ntwo\nthree\nfour\nfive\n"
+
+
+def test_identical_changes_on_both_sides_combine(signed_in, workspaces):
+    ws = joined(signed_in, "identical")
+    gitops.branch("identical", "ana/same")
+    (ws / "shared.md").write_bytes(b"same text\n")
+    gitops.save("identical", "Same file")
+    signed_in.server_commit("identical", "main", {"shared.md": b"same text\n", "other.md": b"other\n"})
+    assert gitops.update("identical")["status"] == "updated"
+    assert (ws / "other.md").exists() and (ws / "shared.md").read_bytes() == b"same text\n"
 
 
 def test_a_version_changed_elsewhere_stops(signed_in, workspaces):

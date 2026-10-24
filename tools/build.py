@@ -133,6 +133,8 @@ def build(cfg: dict, out_dir: Path) -> Path:
         # all of them; a quoted one breaks PowerShell, so quotes are only for a path with spaces.
         "UVX_COMMAND": f'"{uvx}"' if " " in uvx else uvx,
         "CONNECTOR": connector,
+        # every package at the exact version tested: uvx would otherwise resolve the newest ones
+        "CONSTRAINTS": f"{connector}/constraints.txt",
         "PROVIDERS": json.dumps({k: v for k, v in cfg["providers"].items() if not k.startswith("_")},
                                 separators=(",", ":")),
         "WORKSPACES_ROOT": cfg.get("workspaces_root") or "~/eunomai-business-workspaces",
