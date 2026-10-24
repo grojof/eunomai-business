@@ -70,7 +70,7 @@ uv run --group dev pytest                    # the whole suite against a fake gi
 |---|---|
 | **Deploy it** (IT) | [Configuration](docs/configuration.md) · [Run the validation](docs/validation/run-the-validation.md) · [Validation checks](docs/validation/hypotheses.md) |
 | **Trust it** (IT, security, data protection) | [Barriers](docs/barriers.md) · [Data on computers and servers](docs/data-on-computers.md) |
-| **Understand it** (IT, developers) | [Architecture](docs/architecture.md) · [Decisions](docs/decisions.md) |
+| **Understand it** (IT, developers) | [Architecture](docs/architecture.md) · [Decisions](docs/decisions.md) · [Guided flows](docs/guided-flows.md) (design) |
 | **Run a project repository** (repository owners) | [Good practices for project repositories](docs/project-practices.md) |
 | **Build on it** (organizations) | [Extensions](docs/extensions.md) |
 | **Follow it** | [Changelog](CHANGELOG.md) |
