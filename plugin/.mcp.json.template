@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "eunomai-business": {
+      "command": "{{UVX}}",
+      "args": ["--from", "{{CONNECTOR}}", "eunomai-business"],
+      "env": {
+        "EUNOMAI_EXPANSION_PROBE": "${CLAUDE_PLUGIN_ROOT}",
+        "EUNOMAI_PROVIDERS": "{{PROVIDERS}}",
+        "EUNOMAI_WORKSPACES_ROOT": "{{WORKSPACES_ROOT}}",
+        "EUNOMAI_DIAGNOSTICS": "{{DIAGNOSTICS}}"
+      }
+    }
+  }
+}

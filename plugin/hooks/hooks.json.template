@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"{{UVX}}\" --from \"{{CONNECTOR}}\" eunomai-business-hook", "timeout": 60 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "\"{{UVX}}\" --from \"{{CONNECTOR}}\" eunomai-business-hook", "timeout": 30 }
+        ]
+      }
+    ]
+  }
+}
