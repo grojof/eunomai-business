@@ -8,6 +8,11 @@ import pytest
 from eunomai_business import deps, server as tools, settings
 
 
+@pytest.fixture(autouse=True)
+def source_repositories_exist(monkeypatch):
+    monkeypatch.setattr(deps, "_exists", lambda url: True)
+
+
 def configure(monkeypatch, **values):
     monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps(values))
 
@@ -157,3 +162,106 @@ def test_a_burst_of_fresh_releases_does_not_get_past_the_two_weeks(monkeypatch):
 ])
 def test_the_source_check_looks_at_the_host(url, has_source):
     assert (deps._source([url]) is not None) is has_source
+
+
+def test_a_source_labelled_by_the_package_counts_wherever_it_is_hosted(monkeypatch):
+    """openpyxl publishes its code on foss.heptapod.net: a known host is not required, an existing one is."""
+    pypi(monkeypatch, {"3.1.5": (800, False)}, source="https://foss.heptapod.net/openpyxl/openpyxl")
+    assert deps.check("pypi", "openpyxl")["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("exists, expected", [(False, "does not exist"), (None, "could not be reached")])
+def test_a_source_repository_that_does_not_answer_blocks(monkeypatch, exists, expected):
+    pypi(monkeypatch, {"1.0.0": (100, False)})
+    monkeypatch.setattr(deps, "_exists", lambda url: exists)
+    result = deps.check("pypi", "pkg")
+    assert result["verdict"] == "blocked" and expected in result["reasons"][0]
+
+
+@pytest.mark.parametrize("url, web", [
+    ("git+https://github.com/o/p.git", "https://github.com/o/p"), ("git@gitlab.com:o/p.git", "https://gitlab.com/o/p"),
+    ("github:o/p", "https://github.com/o/p"), ("git://code.example.org/p", "https://code.example.org/p"),
+    ("http://insecure.example/p", None),
+])
+def test_repository_addresses_are_turned_into_web_addresses(url, web):
+    assert deps._web_address(url) == web
+
+
+# --- the whole pinned tree -----------------------------------------------------------------------------------
+
+def registry(monkeypatch, packages: dict, vulns: dict | None = None, requires: dict | None = None):
+    """packages: name -> {version: days ago}; requires: name -> requires_dist of every version."""
+    def get(url):
+        parts = url.rstrip("/").split("/")
+        if "pypi.org" in url and len(parts) == 7:  # https://pypi.org/pypi/<name>/<version>/json
+            return {"info": {"requires_dist": (requires or {}).get(parts[4], [])}}
+        name = url.rstrip("/").split("/")[-2] if "pypi.org" in url else url.split("registry.npmjs.org/")[1]
+        if name not in packages:
+            return None
+        if "pypi.org" in url:
+            return {"info": {"project_urls": {"Source": f"https://github.com/o/{name}"}, "license": "MIT"},
+                    "releases": {v: [{"upload_time_iso_8601": stamp(d), "yanked": False}]
+                                 for v, d in packages[name].items()}}
+        return {"time": {v: stamp(d) for v, d in packages[name].items()}, "repository": "github:o/" + name.split("/")[-1],
+                "versions": {v: {} for v in packages[name]}}
+
+    monkeypatch.setattr(deps, "_get", get)
+    monkeypatch.setattr(deps, "_vulnerable", lambda queries: {q: (vulns or {}).get(q[1:], []) for q in queries})
+    monkeypatch.setattr(deps, "_vulnerabilities", lambda eco, name, version: (vulns or {}).get((name, version), []))
+
+
+def test_the_audit_checks_every_pinned_package_direct_and_indirect(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}, "starlette": {"1.0.0": 100}, "h11": {"0.16.0": 100}},
+             vulns={("h11", "0.16.0"): ["GHSA-h11"]})
+    (tmp_path / "requirements.txt").write_text(
+        "fastapi==0.1.0 \\\n    --hash=sha256:aa\nstarlette==1.0.0 --hash=sha256:bb\nh11==0.16.0 --hash=sha256:cc\n")
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "requirements.txt").write_text("ignored\n")
+    result = deps.audit(tmp_path)
+    assert result["files"] == ["requirements.txt"] and result["packages"] == 3 and result["without_hashes"] == []
+    assert result["verdict"] == "blocked"
+    assert [(b["package"], b["reasons"][0]) for b in result["blocked"]] == [("h11", "known vulnerabilities: GHSA-h11")]
+
+
+def test_the_audit_refuses_loose_pins_and_notes_missing_hashes(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    (tmp_path / "requirements.txt").write_text("fastapi==0.1.0\nuvicorn>=0.30\n-r other.txt\n")
+    result = deps.audit(tmp_path)
+    assert result["not_pinned"] == ["requirements.txt: uvicorn>=0.30"] and result["verdict"] == "blocked"
+    assert result["without_hashes"] == ["requirements.txt"]
+
+
+def test_the_audit_reads_npm_lockfiles(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}, "@scope/tool": {"2.0.0": 5, "1.9.0": 100}})
+    (tmp_path / "package-lock.json").write_text(json.dumps({"lockfileVersion": 3, "packages": {
+        "": {"name": "app"},
+        "node_modules/left-pad": {"version": "1.3.0", "integrity": "sha512-x"},
+        "node_modules/@scope/tool": {"version": "2.0.0", "integrity": "sha512-y"}}}))
+    result = deps.audit(tmp_path)
+    assert result["packages"] == 2 and result["without_hashes"] == []
+    assert [b["package"] for b in result["blocked"]] == ["@scope/tool"]
+    assert "two weeks" in result["blocked"][0]["reasons"][0]
+
+
+def test_the_audit_without_pinned_files_is_blocked(tmp_path):
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "no pinned list" in result["reasons"][0]
+
+
+def test_settings_carry_the_organization_and_project_context(monkeypatch):
+    configure(monkeypatch, organization_context="We make power supplies.",
+              organization_skills=[{"skill": "brand:web", "use_for": "web pages"}])
+    result = tools._specialist_settings("")
+    assert result["organization"] == {"context": "We make power supplies.",
+                                      "skills": [{"skill": "brand:web", "use_for": "web pages"}]}
+
+
+def test_the_audit_finds_indirect_dependencies_left_out_of_the_list(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}, "starlette": {"1.0.0": 100}},
+             requires={"fastapi": ["starlette>=1", "pydantic>=2", "uvicorn; extra == 'standard'"],
+                       "starlette": ["anyio>=4", "colorama; sys_platform == 'win32'"]})
+    (tmp_path / "requirements.txt").write_text("fastapi==0.1.0\nstarlette==1.0.0\n")
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked"
+    assert result["not_pinned"] == ["missing from the pinned list: anyio (required by starlette 1.0.0)",
+                                    "missing from the pinned list: pydantic (required by fastapi 0.1.0)"]

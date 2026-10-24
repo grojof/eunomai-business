@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --native-tls --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-hook", "timeout": 60, "onFailure": "continue" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --native-tls --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-hook", "timeout": 30, "onFailure": "continue" }
+        ]
+      }
+    ]
+  }
+}

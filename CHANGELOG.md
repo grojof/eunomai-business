@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Lessons from the first business-user test:**
+  - nothing runs on the user's computer: the specialist never writes launchers or gives commands, and a save point
+    refuses files Windows runs on a double click; users try a clickable prototype instead of static mockups;
+  - a file guard hook in every build denies writing the project's context (`AGENTS.md`, `CLAUDE.md`), Claude's
+    configuration and executables, and `version_save` enforces it on the host;
+  - whose context counts: new settings `organization_context` and `organization_skills`, and the project's
+    context read from the main branch on the server, in `specialist_settings`;
+  - `dependency_audit` checks every pinned package, direct and indirect, and finds packages left out of the list;
+    a source repository is any existing https link the package labels as its code (openpyxl on heptapod);
+  - the specialist sizes the journey to the request, asks one question at a time, claims nothing without fresh
+    evidence, never bends a test to the code, saves per task, checks that its documents agree, and reports the
+    skills it used and their conflicts with its rules;
+  - new skill `review-skills`, for IT to review the skills and plugins users have alongside eunomai-business;
+  - notes VS Code adds to a branch in `.git/config` no longer stop the workspace;
+  - the connector's data folder under Claude Desktop installed as a Windows package is documented.
 - **Coherence fixes (independent review):** network errors narrowed (a local disk problem is not "check the
   network"); the proposal lookup pages through recent pull requests; IT reports name the build; the specialist
   handles a failed sign-in, an unknown proposal and the recommended version; the daily workflow runs upgraded

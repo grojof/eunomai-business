@@ -137,12 +137,12 @@ sequenceDiagram
 
 | Piece | What it is | Status |
 |---|---|---|
-| Plugin (`plugin/`) | What Claude Desktop installs: the connector's launch settings and the `specialist` skill, plus validation skills and hooks when diagnostics are on. Built per organization from its configuration | Built |
+| Plugin (`plugin/`) | What Claude Desktop installs: the connector's launch settings, the `specialist` and `review-skills` skills and the file guard hook, plus validation skills and measurement hooks when diagnostics are on. Built per organization from its configuration | Built |
 | Local connector (`connector/`) | A Python program started with `uv run --frozen` on the user's computer. Claude talks to it through MCP; it runs outside Claude's sandbox ([decision 1](decisions.md#1--a-local-connector-on-the-users-computer)) | Built |
 | Build tool | `tools/build.py`: organization configuration + source → `eunomai-business.zip`, after validating the configuration | Built |
 | Bill of materials | `tools/sbom.py` → `connector/sbom.cdx.json`, regenerated whenever `connector/uv.lock` changes | Built |
 | Maintenance | GitHub workflows: tests on every pull request (Linux, Windows); daily dependency update (`tools/update_dependencies.py`) | Built |
-| Tests | `connector/tests/`: sign-in, workspaces, versions, updates, barriers, the dependency check, the hook, the build and the tool list, against a fake git server (`uv run --frozen --group dev pytest` in `connector/`) | Built |
+| Tests | `connector/tests/`: sign-in, workspaces, versions, updates, barriers, the file guard, the dependency check and audit, the hooks, the build and the tool list, against a fake git server (`uv run --frozen --group dev pytest` in `connector/`) | Built |
 
 ## Connector modules
 
@@ -151,11 +151,12 @@ sequenceDiagram
 | `auth` | Sign-in with any OAuth 2.0 provider (authorization code + PKCE, loopback redirect), token refresh | Standard OAuth 2.0; nothing server-specific |
 | `store` | Keeps sign-in records encrypted per user | The operating system (DPAPI on Windows, keyring elsewhere) |
 | `gitops` | Workspaces, versions, save points, sending, pull requests | Standard git over HTTPS (dulwich), except two Gitea-specific parts below |
-| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`, `specialist_settings`, `dependency_check`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
+| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`, `specialist_settings`, `dependency_check`, `dependency_audit`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
 | `support` | The stop: the user's message, IT's report, the e-mail link | — |
-| `settings` | The specialist's settings: languages, where code may be written | — |
-| `deps` | `dependency_check`: which package version may be used | PyPI, npm and OSV public APIs |
-| `hook` | Entry point for the plugin's hooks; with diagnostics on, it logs and denies two guard-test markers | — |
+| `settings` | The specialist's settings: languages, the organization's context and skills, where code may be written | — |
+| `deps` | `dependency_check`: which package version may be used; `dependency_audit`: every package a workspace pins | PyPI, npm and OSV public APIs; the source repositories' web addresses |
+| `guard` | The file guard: the PreToolUse hook, and the rules `version_save` enforces | — |
+| `hook` | Measurement hook (diagnostics only): logs each tool call and denies two guard-test markers | — |
 | `probe` | Diagnostic measurements (`diag_environment`, `diag_reach`) | — |
 
 ## Facts the design relies on
@@ -165,7 +166,14 @@ sequenceDiagram
   Cowork. It keeps workspaces in its own folder and returns their path; in a local Cowork session on Windows,
   Claude's file tools and the connector see the same path.
 - **Per-user data lives in `%LOCALAPPDATA%\eunomai-business`**, not in `CLAUDE_PLUGIN_DATA`, which points inside
-  each task's folder and does not outlive the task.
+  each task's folder and does not outlive the task. Claude Desktop installed as a Windows package (MSIX) redirects
+  that folder for the processes it starts ([where](data-on-computers.md)).
+- **Where the session runs.** Since 2026-10-06, new Cowork tasks on Pro and Max plans run on Anthropic's servers;
+  Team and Enterprise owners decide it for their organization. Local connectors, this one included, still work, but
+  only through the open desktop app
+  ([Anthropic](https://support.claude.com/en/articles/15520349)). Claude's sandbox may therefore be in the cloud
+  while the connector, the hooks and the workspace folder stay on the user's computer (check H16 in
+  [validation](validation/hypotheses.md)).
 
 ## What is tied to a git hosting
 
@@ -182,34 +190,32 @@ organization's configuration. Only the hosting-specific rows above move into it.
 
 ## Hooks
 
-**Built:** hooks run on the user's computer in Cowork (SessionStart and PreToolUse), through Git Bash if
-installed. They ship only with diagnostics on: they log each tool call and deny two guard-test markers (H9).
+Hooks run on the user's computer, not in Cowork's sandbox, through Git Bash if installed and PowerShell otherwise.
+Each one sets `onFailure: "continue"`: a hook that cannot start never blocks Claude, since the barriers that hold are
+in the connector.
 
-**Planned: file guard.** A PreToolUse hook that stops Claude from reading or writing sensitive files on the
-user's behalf:
+**Built: file guard** (`eunomai-business-guard`, in every build). A PreToolUse hook on `Write`, `Edit` and the
+sandbox shell that denies, with a reason Claude can act on:
 
-- **Base rules shipped with the plugin**, in two kinds:
-  - *fixed*: protect eunomai-business itself, such as no writing inside `.git`, which backs the connector's
-    sandbox barriers ([barriers.md](barriers.md)); no configuration removes them;
-  - *defaults*: common sensitive files (`.env`, keys, certificates, credential files).
-- **Organization rules** added in the build configuration: more paths or patterns to deny or to ask about.
-  Organizations extend the defaults; they cannot remove the fixed rules.
+| Kind | Files | Why |
+|---|---|---|
+| Project context | `AGENTS.md`, `CLAUDE.md` | IT keeps them; the specialist reads the project's context from the main branch on the server |
+| Configuration | `.claude/`, `.mcp.json`, `.git/` | They configure Claude or the repository |
+| Executables | `.bat`, `.cmd`, `.ps1`, `.vbs`, `.lnk`, `.exe` and other files Windows runs on a double click | The workspace folder is on the user's computer: a double click would run what the sandbox wrote |
 
-Before it is built, validation must show (check H9 in
-[validation/hypotheses.md](validation/hypotheses.md)):
+`version_save` enforces the same rules on the host, where the sandbox cannot reach: context and configuration
+files go back to how the last save point has them, and an executable stops the save. The hook makes Claude learn
+at once; the save is what holds.
 
-- the hook receives the tool's input in Cowork (the file path, the shell command);
-- a *deny* answer really stops the tool;
-- the hook is quick enough to run on every tool call;
-- it works without Git on the computer.
+**Built: measurement hooks** (diagnostics only): they log each tool call and deny two guard-test markers (H9).
 
-**Measured:** see check H9 in [validation](validation/hypotheses.md); the guard will deny with a JSON answer,
-which shows the user only the reason.
+**Planned:** default rules for common sensitive files (`.env`, keys, certificates, credential files), and
+organization rules added in the build configuration; organizations extend the defaults and cannot remove the fixed
+rules above.
 
-**Limits, stated now:** a hook sees a shell command as text. Reading a file by path is easy to catch; a command
-built to hide it is not. The guard reduces mistakes and casual exposure; the real boundary for secrets is not
-putting them where Claude works. And if the hook cannot start (uv missing, for example), Claude Desktop
-treats it as an error and the tool call goes ahead. That limit has to be measured and documented, not assumed.
+**Limits:** a hook sees a shell command as text. A plain write to a protected name is caught; a command built to
+hide it is not, which is why `version_save` repeats the check. The guard reduces mistakes and casual exposure; the
+real boundary for secrets is not putting them where Claude works.
 
 ## Plugin per project
 

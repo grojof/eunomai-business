@@ -33,7 +33,7 @@ from dulwich.object_store import iter_tree_contents
 from dulwich.objects import Commit
 from dulwich.repo import Repo
 
-from . import auth, data_dir
+from . import auth, data_dir, guard
 from .support import NeedsIT, Unreachable
 
 # Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
@@ -51,7 +51,10 @@ _ALWAYS_PROTECTED = {"main", "master"}
 # nothing written there (filters, hooksPath, fsmonitor, includes...) can make this host process run a command.
 _SAFE_CORE = {b"repositoryformatversion", b"filemode", b"bare", b"logallrefupdates", b"ignorecase",
               b"symlinks", b"precomposeunicode", b"autocrlf"}
-_SAFE_SECTIONS = {b"remote": {b"url", b"fetch"}, b"branch": {b"remote", b"merge"}}
+# Inert notes editors add to a branch (VS Code's merge base, its pull request link, a description) are accepted.
+_SAFE_SECTIONS = {b"remote": {b"url", b"fetch"},
+                  b"branch": {b"remote", b"merge", b"description", b"vscode-merge-base", b"github-pr-owner-number"}}
+_CONTEXT_LIMIT = 20_000  # characters of the project's context handed to Claude
 
 
 def root() -> Path:
@@ -381,9 +384,22 @@ def workspaces() -> dict:
     return {"root": str(root()), "workspaces": found}
 
 
+def _status_of(repo: Repo, **options):
+    """porcelain.status, with a link to another folder inside the workspace turned into a stop: dulwich fails on it,
+    and the connector never follows it."""
+    try:
+        return porcelain.status(repo, **options)
+    except ValueError as exc:
+        if "subpath" not in str(exc):
+            raise
+        raise NeedsIT("This workspace contains a link to another folder, so the connector stopped to keep your work "
+                      "safe.", "a link to another folder inside the workspace",
+                      {"Folder": repo.path, "Detail": str(exc)}) from exc
+
+
 def status(workspace: str) -> dict:
     with _repo(workspace) as repo:
-        st = porcelain.status(repo, untracked_files="all")
+        st = _status_of(repo, untracked_files="all")
         staged = {kind: _text(paths) for kind, paths in st.staged.items() if paths}
         changed = _text(st.unstaged) + _text(st.untracked)
         return {"workspace": workspace, "branch": _branch(repo), "head": _head(repo), "staged": staged,
@@ -423,16 +439,59 @@ def save(workspace: str, message: str) -> dict:
         if _branch(repo) is None or _branch(repo) in _protected(repo):
             raise PermissionError("create a version first: save points never go straight to the main branch")
         before = status(workspace)
+        changed = sorted({*before["untracked"], *before["unstaged"], *sum(before["staged"].values(), [])})
+        executables = [path for path in changed if guard.kind(path) == "executable"]
+        if executables:
+            raise PermissionError(f"not saved: {', '.join(executables)} would run on the user's computer with a "
+                                  "double click; remove them, the work is tried inside the sandbox")
+        restored = _restore(repo, [path for path in changed if guard.kind(path) in ("context", "config")])
         porcelain.add(repo)  # no paths: new and modified files from the repository root
-        st = porcelain.status(repo)
+        st = _status_of(repo)
         if not any(st.staged.values()) and not st.unstaged:
-            return {"workspace": workspace, "saved": False, "reason": "nothing changed"}
+            return {"workspace": workspace, "saved": False, "reason": "nothing changed",
+                    **({"restored": restored} if restored else {})}
         # all=True also takes modified and deleted tracked files, like `git commit -a`
         sha = porcelain.commit(repo, message=message.strip().encode(), author=_author(current),
                                committer=_author(current), all=True, no_verify=True)
         return {"workspace": workspace, "saved": True, "branch": _branch(repo), "commit": sha.decode()[:12],
-                "files": sorted({*before["untracked"], *before["unstaged"], *sum(before["staged"].values(), [])}),
+                "files": [path for path in changed if path not in restored],
+                **({"restored": restored} if restored else {}),
                 "crlf_in_changed_files": before["crlf_in_changed_files"]}
+
+
+def _restore(repo: Repo, paths: list[str]) -> list[str]:
+    """Put files only IT changes back as the last save point has them (removed if it did not have them), and take
+    new ones out of the index, so a save never carries them."""
+    if not paths:
+        return []
+    head = _ref(repo, b"HEAD")
+    tree = repo[repo[head].tree] if head else None
+    index = repo.open_index()
+    top = Path(repo.path)
+    for path in paths:
+        file = top / path
+        # The sandbox can plant links: a folder on the way that leads elsewhere would make this host process write
+        # or delete outside the workspace. A link at the file itself is removed as a link, never followed.
+        folders = [top.joinpath(*Path(path).parts[:n]) for n in range(1, len(Path(path).parts))]
+        if any(f.is_symlink() or f.is_junction() for f in folders):
+            raise NeedsIT("This workspace has a link to another folder where only IT's files belong, so nothing was "
+                          "saved. Your work is safe on this computer.", "a link on the path of a protected file",
+                          {"Folder": repo.path, "Path": path})
+        if file.is_symlink():
+            file.unlink()
+        try:
+            _, sha = tree.lookup_path(repo.object_store.__getitem__, path.encode()) if tree else (None, None)
+        except KeyError:
+            sha = None
+        if sha:
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(repo[sha].data)
+        else:
+            file.unlink(missing_ok=True)
+            if path.encode() in index:
+                del index[path.encode()]
+    index.write()
+    return paths
 
 
 @_one_at_a_time
@@ -533,7 +592,7 @@ def _ref(repo: Repo, ref: bytes) -> bytes | None:
 
 
 def _dirty(repo: Repo) -> bool:
-    st = porcelain.status(repo, untracked_files="all")
+    st = _status_of(repo, untracked_files="all")
     return bool(any(st.staged.values()) or st.unstaged or st.untracked)
 
 
@@ -734,10 +793,36 @@ def update(workspace: str) -> dict:
                                                   "your work is kept."])}
 
 
+def folder(workspace: str) -> Path:
+    """A registered workspace's folder."""
+    with _repo(workspace) as repo:
+        return Path(repo.path)
+
+
 def origin(workspace: str) -> str | None:
     """The repository a workspace was cloned from."""
     with _repo(workspace) as repo:
         return _origin(repo)
+
+
+def project_context(workspace: str) -> dict | None:
+    """The project's context as the main branch from the server has it (AGENTS.md, else CLAUDE.md): what IT wrote,
+    never a copy edited in the folder. None when the project has none."""
+    with _repo(workspace) as repo:
+        main = _main_branch(repo)
+        tip = main and (_ref(repo, f"refs/remotes/origin/{main}".encode()) or _ref(repo, f"refs/heads/{main}".encode()))
+        if not tip:
+            return None
+        tree = repo[repo[tip].tree]
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            try:
+                _, sha = tree.lookup_path(repo.object_store.__getitem__, name.encode())
+            except KeyError:
+                continue
+            text = repo[sha].data.decode("utf-8", errors="replace")
+            return {"file": name, "from": f"the {main} branch from the server", "text": text[:_CONTEXT_LIMIT],
+                    "truncated": len(text) > _CONTEXT_LIMIT}
+        return None
 
 
 def proposal_state(workspace: str) -> dict | None:

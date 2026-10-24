@@ -4,7 +4,7 @@ import json
 import os
 
 DEFAULTS = {"docs_language": "en", "code_language": "", "free_development": False, "allowed_technologies": [],
-            "projects": {}, "dependency_exceptions": []}
+            "projects": {}, "dependency_exceptions": [], "organization_context": "", "organization_skills": []}
 
 
 def load() -> dict:

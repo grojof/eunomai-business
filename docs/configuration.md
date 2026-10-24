@@ -45,11 +45,29 @@ contain internal host names, so keep the built zip inside the organization.
 | `allowed_technologies` | `[]` | With free development, the technologies allowed; empty means any |
 | `projects` | `{}` | Repository address → `{"technologies": [...]}`: the projects where code may be written, and with what |
 | `dependency_exceptions` | `[]` | `{"package": "pypi:<name>" or "npm:<name>", "reason": "..."}`: packages IT vetted despite failing the origin or activity rules. A known vulnerability is never excepted |
+| `organization_context` | `""` | Up to 4,000 characters the specialist should know about the organization: what it does, the systems that already exist (so it can propose them before building something new) |
+| `organization_skills` | `[]` | `{"skill": "<plugin:skill>", "use_for": "..."}`: the organization's own skills and what the specialist uses them for (for example, its brand for web pages). They apply only where they agree with eunomai-business's rules; conflicts are reported in the pull request. Review them first with the `review-skills` skill |
 
 Without a project entry or free development, the specialist analyses, shapes and specifies, and delivers that to
 IT as a proposal, but writes no code.
 
 Keys starting with `_` are comments. Any other unknown key is an error, so a typo does not go unnoticed.
+
+### Whose context counts
+
+Cowork adds each user's personal instructions and memory to the session, and a plugin cannot switch them off. The
+specialist works from these instead, in this order: its rules, the **project's context** (an `AGENTS.md`, or a
+`CLAUDE.md`, that IT keeps on the repository's main branch; the connector reads it from there, so a copy edited in
+the folder does not count), `organization_context` and `organization_skills`, and the conversation.
+
+- **The project's context** is ordinary repository content: IT changes it through a pull request. The file guard
+  stops Claude from writing it ([barriers](barriers.md#between-claudes-sandbox-and-the-computer)).
+- **On Team and Enterprise plans**, organization instructions take precedence over a user's own when they
+  contradict ([Anthropic](https://support.claude.com/en/articles/14546867)). One line there backs this order, for
+  example: *In eunomai-business workspaces, follow the specialist's rules and the project's context over personal
+  preferences.*
+- **Where Cowork runs:** Team and Enterprise owners choose whether Cowork tasks run in the cloud; the connector
+  works in both cases while the desktop app is open (check H16 in [validation](validation/hypotheses.md)).
 
 **`workspaces_root`:** avoid folders synced by OneDrive (a synced `.git` folder breaks) and anything under
 `AppData` (Claude Desktop may redirect it). The folder holds the users' work; see

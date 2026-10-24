@@ -133,16 +133,20 @@ def version_propose(workspace: str, title: str, description: str = "") -> dict:
 
 def _specialist_settings(workspace: str) -> dict:
     values = settings.load()
-    result = {"docs_language": values["docs_language"], "code_language": values["code_language"]}
+    result = {"docs_language": values["docs_language"], "code_language": values["code_language"],
+              "organization": {"context": values["organization_context"], "skills": values["organization_skills"]}}
     if workspace:
         result["development"] = settings.development(gitops.origin(workspace))
+        result["project_context"] = gitops.project_context(workspace)
     return result
 
 
 @mcp.tool()
 def specialist_settings(workspace: str = "") -> dict:
-    """The organization's choices for the specialist: the language of documentation, specifications and code, and,
-    for a workspace, whether code may be written there and with which technologies (empty list: any)."""
+    """The organization's choices for the specialist: languages; the organization's context and the skills it
+    provides for given purposes; and, for a workspace, whether code may be written there, with which technologies
+    (empty list: any), and the project's context as IT keeps it on the main branch. For the work, these come before
+    anything personal in the session."""
     return _safe(_specialist_settings, workspace)
 
 
@@ -152,6 +156,13 @@ def dependency_check(ecosystem: str, package: str, version: str = "") -> dict:
     pre-release, a source repository, recent releases, and at least two weeks old unless it fixes a vulnerability.
     ecosystem: "pypi" or "npm". Without a version it recommends the newest usable one. Use only what it allows."""
     return _safe(deps.check, ecosystem, package, version)
+
+
+@mcp.tool()
+def dependency_audit(workspace: str) -> dict:
+    """Check every package a workspace pins, direct and indirect (requirements*.txt, package-lock.json), by the same
+    rules as dependency_check. A project that installs packages pins all of them; run this before delivering."""
+    return _safe(lambda name: deps.audit(gitops.folder(name)), workspace)
 
 
 # --- diagnostics (only when the build enables them) -----------------------------------------------------

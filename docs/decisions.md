@@ -73,3 +73,27 @@ plain words, and hands IT a report with an e-mail link ready to send ([barriers]
   automatically "most of the time".
 - **Consequence:** the rules for projects and for the connector aim to make stops rare; every stop is a case for
   IT, never a dead end for the user.
+
+## 7 · Nothing runs on the user's computer
+
+What the specialist builds is tried in Claude's sandbox and, for real, wherever IT runs it. The user tries a
+clickable prototype in the browser before anything is built, and sees the application through screenshots and
+results from the sandbox. The specialist never writes a launcher, a script or an installer for the user, never
+gives them a command, and a save point never carries a file Windows would run on a double click.
+
+- **Rejected:** a launcher in the workspace so the user can try the application (it ran a package installation
+  from the internet on the user's computer, outside every barrier); asking the user to run commands, even to get
+  past a stop.
+- **Consequence:** trying the real application needs a place IT provides (a preview environment per proposal is
+  the natural next step); until then, the prototype and the sandbox's evidence carry the review.
+
+## 8 · The project's context belongs to IT
+
+The specialist's context comes from IT, not from each user's session: the organization's (build configuration)
+and the project's (an `AGENTS.md` on the main branch, read by the connector from there). Claude never writes it,
+and a save point never carries a change to it.
+
+- **Rejected:** relying on Cowork reading the folder's `CLAUDE.md` (not documented for Cowork) or on each user
+  setting up a Cowork project with instructions (unreliable for the least technical user).
+- **Consequence:** this complements decision 5: the plugin still manages no project rules; it only refuses to carry
+  changes to the files that steer Claude.
