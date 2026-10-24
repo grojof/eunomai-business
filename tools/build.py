@@ -86,8 +86,12 @@ def build(cfg: dict, out_dir: Path) -> Path:
     else:
         connector = Path(cfg["connector_path"]).resolve().as_posix()
 
+    uvx = str(cfg.get("uvx") or "uvx").replace("\\", "/")
     values = {
-        "UVX": str(cfg.get("uvx") or "uvx").replace("\\", "/"),  # also safe inside the hooks' shell command
+        "UVX": uvx,
+        # Hooks run through whatever shell Claude Desktop picks (Git Bash, cmd, PowerShell). A bare command works in
+        # all of them; a quoted one breaks PowerShell, so quotes are only for a path with spaces.
+        "UVX_COMMAND": f'"{uvx}"' if " " in uvx else uvx,
         "CONNECTOR": connector,
         "PROVIDERS": json.dumps({k: v for k, v in cfg["providers"].items() if not k.startswith("_")},
                                 separators=(",", ":")),

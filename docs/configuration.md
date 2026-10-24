@@ -27,7 +27,7 @@ contain internal host names, so keep the built zip inside the organization.
 
 | Key | Default | What it does |
 |---|---|---|
-| `uvx` | `uvx` | Command that starts the connector. Use the full path to `uvx.exe` if Claude Desktop cannot find it on `PATH`. |
+| `uvx` | `uvx` | Command that starts the connector. Keep the default when possible: hooks run through whichever shell Claude Desktop uses, and the bare command works in all of them. A full path to `uvx.exe` is a fallback; if it contains spaces it is quoted, which PowerShell does not accept. |
 | `connector_source` | `bundled` | `bundled`: the connector ships inside the zip. `path`: it runs from `connector_path` (development only). Any other value is an error. |
 | `connector_path` | — | Folder of the connector source; required when `connector_source` is `path`. |
 | `workspaces_root` | `~/eunomai-business-workspaces` | Where each user's workspaces (local clones) go. `~` is the user's profile; `%VAR%` is expanded. Must be absolute after expansion. |
