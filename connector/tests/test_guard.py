@@ -157,10 +157,19 @@ def test_a_link_planted_where_protected_files_go_is_never_followed(signed_in, wo
         (ws / ".claude").symlink_to(outside, target_is_directory=True)
     from eunomai_business.support import NeedsIT
 
-    with pytest.raises(NeedsIT, match="link"):
-        gitops.save(name, "Work")
-    with pytest.raises(NeedsIT, match="link"):
-        gitops.status(name)
+    (ws / "notes.md").write_bytes(b"x")
+    try:  # Windows reports the junction and stops; dulwich on Linux leaves the link out altogether
+        saved = gitops.save(name, "Work")
+    except NeedsIT as stop:
+        assert "link" in str(stop)
+    else:
+        assert saved["files"] == ["notes.md"]
+        from dulwich.object_store import iter_tree_contents
+        from dulwich.repo import Repo
+
+        with Repo(str(ws)) as repo:
+            paths = [e.path for e in iter_tree_contents(repo.object_store, repo[repo.head()].tree)]
+        assert not any(p.startswith(b".claude") for p in paths)
     assert (outside / "settings.json").read_bytes() == b"precious"
 
 
