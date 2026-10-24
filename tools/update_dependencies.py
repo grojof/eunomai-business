@@ -46,6 +46,9 @@ def overrides() -> dict[str, str]:
 
 
 def write_overrides(values: dict[str, str]) -> None:
+    """Rewrite the overrides line only when its values change, so that a run without changes changes nothing."""
+    if values == overrides():
+        return
     body = ", ".join(f'{name} = "{date}"' for name, date in sorted(values.items()))
     line = f"exclude-newer-package = {{ {body} }}" if body else "exclude-newer-package = {}"
     text = PYPROJECT.read_text(encoding="utf-8")
