@@ -13,7 +13,7 @@ the result receives work that is refined and ready to review, not a first draft.
 | Part | What it does | Status |
 |---|---|---|
 | **Base plugin** (this repository), for every business user | A local connector that signs in through the organization and handles workspaces, versions, save points and pull requests on the organization's git server, without Git installed; and the barriers around it | Built |
-| **Configuration by each organization's IT** | Sign-in providers, workspaces folder, diagnostics, set once when building the plugin. Users install and sign in; nothing else | Built |
+| **Configuration by each organization's IT** | Sign-in providers, workspaces folder, support address, the specialist's languages and where code may be written, diagnostics; set once when building the plugin. Users install and sign in; nothing else | Built |
 | **Guided flows** | The specialist's way of working: strict, defined flows that help users say what they want, so the repository ends up with clear specifications, living docs and tested code, and the pull request shows a reviewer what was not specified or not validated | First version |
 | **Project plugins**, one per project | The project's knowledge, its repository and its guard rules, on top of the base plugin | Planned |
 
@@ -21,7 +21,7 @@ It is the counterpart of [eunomai](https://github.com/grojof/eunomai): eunomai i
 Claude Code; eunomai-business is deliberately strict, for business users in Cowork.
 
 **Status:** in development (0.1.0). The base is built, tested against a fake git server and validated on a real
-installation; two checks are partly pending ([validation](docs/validation/hypotheses.md)).
+installation; some checks are still partial or pending ([validation](docs/validation/hypotheses.md)).
 
 ## How it works
 
@@ -65,8 +65,9 @@ uv run --group dev pytest                    # the whole suite against a fake gi
 ```
 
 Dependencies are maintained by a daily workflow (`.github/workflows/dependencies.yml`, `tools/update_dependencies.py`):
-it proposes the newest versions the project's own rules allow as one pull request, and opens an issue when a known
-vulnerability has no allowed fix. Tests run on every pull request, on Linux and Windows.
+it proposes the newest versions the project's own rules allow as one pull request, and keeps an issue open for
+anything no allowed version solves. Tests run on every pull request, on Linux and Windows, and on the workflow's
+own pull requests.
 
 After changing dependencies by hand (`connector/uv.lock`), refresh the bill of materials:
 

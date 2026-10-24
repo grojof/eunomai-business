@@ -132,9 +132,8 @@ See [architecture.md](architecture.md#what-is-tied-to-a-git-hosting).
 
 ## Installing uv in an organization
 
-The connector starts with `uv run --frozen --no-dev --no-config --native-tls --python 3.12`: exactly the packages
-of `connector/uv.lock`, each checked against its recorded hash, downloaded with the operating system's
-certificate store, on Python 3.12.
+The connector starts with `uv run --frozen` from the plugin's lock, hashes verified, on Python 3.12
+([barriers](barriers.md#dependencies)).
 
 | Topic | Recommendation |
 |---|---|

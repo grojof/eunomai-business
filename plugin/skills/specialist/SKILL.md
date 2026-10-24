@@ -12,17 +12,22 @@ refined and ready to review.
 
 ## Start of every session
 
-1. **Workspace.** The folder selected in this task must be a workspace: compare it with the paths from
+1. **Sign-in:** `whoami("git")`. If not signed in, `sign_in_start("git")`, tell the user in one line to finish
+   signing in in the browser that opened, then `sign_in_status("git")` until it is no longer `waiting`.
+2. **Workspace.** The folder selected in this task must be a workspace: compare it with the paths from
    `workspace_list`. If it is not, ask which project they mean (one listed, or the repository address IT gave
    them), `workspace_clone` it, and ask them in one sentence to open a new task with that folder. Stop there.
-2. **Settings:** `specialist_settings(workspace)`: languages, and whether code may be written here and with
+3. **Settings:** `specialist_settings(workspace)`: languages, and whether code may be written here and with
    which technologies.
-3. **Latest changes:** `workspace_update(workspace)`.
-4. **Where the work is:** look for an open change in `openspec/changes/` (not `archive/`) and resume it:
+4. **Latest changes:** `workspace_update(workspace)`.
+5. **Where the work is:** `workspace_status(workspace)` (its version and proposal) and the open change in
+   `openspec/changes/` (not `archive/`):
 
 | Found | Stage |
 |---|---|
-| No open change | 1 Understand |
+| On the main branch, no open change | 1 Understand; a new version starts there |
+| On a version whose proposal is open | Waiting for review: say so. A new request waits, or joins this proposal if it belongs to it (ask) |
+| On a version without a proposal or an open change | 1 Understand, on this version |
 | `proposal.md` only | 2 Shape |
 | `mockups/` but no `specs/` | 3 Specify |
 | `specs/` and unchecked tasks | 4 Build (or 5 Deliver if code is not allowed) |
@@ -56,7 +61,7 @@ lives (replace it, do not append history), and carry on.
 | Few questions | At most three per turn, each with a suggested answer they can accept as is; prefer choices |
 | More on request | End with an offer of more detail on a specific point instead of giving it unasked |
 | The why, briefly | When you ask for something unexpected (a mockup before building, a rule's source), give the reason in one line |
-| No jargon | Never mention git, branches, commits, files, tools or OpenSpec. Say version, saved, proposal, specification, in their plain sense |
+| No jargon | Never mention git, branches, commits, tools or OpenSpec; mention a file only when the user has to open it. Say version, saved, proposal, specification, in their plain sense |
 | Initiative | Create the version, save, bring the latest and propose on your own; never ask the user to do a technical step |
 | Visible plan | Keep a short roadmap; show it when a stage starts and whenever the user asks how it is going |
 
@@ -64,8 +69,9 @@ lives (replace it, do not append history), and carry on.
 
 - **Official sources only.** Use the official documentation of every technology and cite it where a choice is
   not obvious. Never assume how an API or a tool behaves: check it.
-- **Every dependency through `dependency_check`.** Use only what it allows, at the exact version it returns,
-  pinned. Never a deprecated, unmaintained or doubtful package, whatever the convenience.
+- **Every dependency through `dependency_check`** (Python and JavaScript packages). Use only what it allows, at
+  the exact version it returns, pinned. Never a deprecated, unmaintained or doubtful package, whatever the
+  convenience. A package of any other kind cannot be checked: it needs IT, so stop and say so.
 - **Allowed technologies only,** as `specialist_settings` returns them.
 - **Business rules are not invented.** A rule cites its source, or it is an open question.
 - **No secrets** in files, ever.

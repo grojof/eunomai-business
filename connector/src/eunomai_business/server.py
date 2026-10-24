@@ -2,7 +2,10 @@
 organization's build enables them (EUNOMAI_DIAGNOSTICS=1)."""
 
 import os
+import socket
 
+import httpx
+import urllib3
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
@@ -15,8 +18,10 @@ mcp = MCPServer("eunomai-business", instructions=(
     "written; show `it_report` only if the user asks for details. When `status` is \"unreachable\", ask the user to "
     "check the network or VPN and try again. Never try to work around a stop with other tools or the shell."))
 
-# Mistakes in how a tool was called: Claude fixes the call. Anything else unexpected goes to IT, never to the user.
+# Mistakes in how a tool was called: Claude fixes the call. A server that cannot be reached is the user's network.
+# Anything else unexpected goes to IT, never to the user.
 _FOR_CLAUDE = (ValueError, FileExistsError, FileNotFoundError, PermissionError)
+_NETWORK = (httpx.TransportError, urllib3.exceptions.HTTPError, ConnectionError, TimeoutError, socket.gaierror)
 
 
 def _safe(call, *args):
@@ -28,6 +33,8 @@ def _safe(call, *args):
         return support.unreachable()
     except _FOR_CLAUDE as exc:
         return {"error": f"{type(exc).__name__}: {exc}"[:300]}
+    except _NETWORK:
+        return support.unreachable()
     except Exception as exc:
         return support.report(support.NeedsIT(
             "Something unexpected happened. Your work is safe on this computer.", "unexpected error in the connector",
@@ -76,10 +83,15 @@ def workspace_list() -> dict:
     return _safe(gitops.workspaces)
 
 
+def _status(workspace: str) -> dict:
+    return {**gitops.status(workspace), "proposal": gitops.proposal_state(workspace)}
+
+
 @mcp.tool()
 def workspace_status(workspace: str) -> dict:
-    """Current version (branch) and the files changed since the last save point, as this computer sees them."""
-    return _safe(gitops.status, workspace)
+    """Current version (branch), the files changed since the last save point, and the version's proposal (pull
+    request) if there is one: number, state ("open" or "closed") and whether it was merged."""
+    return _safe(_status, workspace)
 
 
 @mcp.tool()
@@ -92,7 +104,8 @@ def workspace_update(workspace: str) -> dict:
 
 @mcp.tool()
 def version_create(workspace: str, name: str) -> dict:
-    """Create a version (branch) from the current one and switch to it. Changed files are kept."""
+    """Create a version (branch) from the main branch and switch to it. Changed files are kept. Refused when the
+    workspace is already on a version: keep working on that one."""
     return _safe(gitops.branch, workspace, name)
 
 
@@ -118,8 +131,7 @@ def version_propose(workspace: str, title: str, description: str = "") -> dict:
 
 def _specialist_settings(workspace: str) -> dict:
     values = settings.load()
-    result = {"docs_language": values["docs_language"], "code_language": values["code_language"],
-              "support_email_configured": bool(os.environ.get("EUNOMAI_SUPPORT_EMAIL", "").strip())}
+    result = {"docs_language": values["docs_language"], "code_language": values["code_language"]}
     if workspace:
         result["development"] = settings.development(gitops.origin(workspace))
     return result
@@ -146,7 +158,10 @@ async def diag_environment(ctx: Context) -> dict:
     """Where this connector runs (host, OS, user, Python), whether ${CLAUDE_PLUGIN_ROOT} was expanded, the
     configured sign-in providers, and the folders the client shares as roots."""
     report = probe.environment()
-    report["providers"] = sorted(_safe(auth.providers) or {})
+    try:
+        report["providers"] = sorted(auth.providers())
+    except RuntimeError as exc:
+        report["providers"] = f"invalid: {exc}"[:200]
     try:
         roots = await ctx.session.list_roots()
         report["client_roots"] = [str(root.uri) for root in roots.roots]

@@ -29,8 +29,9 @@ user's own words, before proposing anything.
 
 ## When the user confirms
 
-1. `version_create(workspace, <name>)`: a short name from the goal, lowercase ASCII with hyphens, in
-   `docs_language` (for example `alta-de-pedidos`).
+1. On the main branch, `version_create(workspace, <name>)`: a short name from the goal, lowercase ASCII with
+   hyphens, in `docs_language` (for example `alta-de-pedidos`). Already on a version (one saved automatically, for
+   example): keep working on it.
 2. Create the change: `openspec/changes/<name>/.openspec.yaml` with `schema: spec-driven` and
    `created: <YYYY-MM-DD>`, and `openspec/changes/<name>/proposal.md` with `## Why`, `## What Changes` and
    `## Impact` (headings in English, content in `docs_language`). It fits on one screen. Add

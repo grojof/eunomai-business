@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Audit fixes:** a network outage asks the user to check the network instead of going to IT; a refused token
+  refresh means signing in again; a version with nothing saved simply moves to the latest main branch; versions
+  always start from the main branch; a version changed on the server is never overwritten when sending;
+  `workspace_status` shows the version's proposal; the specialist signs in first and recognizes a proposal waiting
+  for review.
 - **`workspace_update`:** brings the project's latest changes on its own: saves unsaved work first, backs up
   before moving anything, returns to the main branch when the user's proposal was accepted (also after a squash
   merge), and adds new main-branch changes to an open version only when no file was changed on both sides.

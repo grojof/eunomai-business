@@ -271,7 +271,7 @@ def status(workspace: str) -> dict:
 
 
 def branch(workspace: str, name: str) -> dict:
-    """Create a version (branch) from the current one and switch to it; local changes are kept."""
+    """Create a version (branch) from the main branch and switch to it; local changes are kept."""
     _check_branch_name(name)
     with _repo(workspace) as repo:
         ref = f"refs/heads/{name}".encode()
@@ -283,6 +283,9 @@ def branch(workspace: str, name: str) -> dict:
         if _main_branch(repo) is None or _head(repo) is None:
             raise PermissionError("the repository has no main branch yet: whoever manages it must initialize it "
                                   "(for example with a README) before versions can be created")
+        if previous not in _protected(repo):  # a version never stacks on another, possibly unaccepted, one
+            raise PermissionError(f"versions start from the main branch; the workspace is on version {previous!r}: "
+                                  "keep working on it, or bring the latest changes once it is accepted")
         repo.refs[ref] = repo.head()
         repo.refs.set_symbolic_ref(b"HEAD", ref)  # same commit, so the working tree stays as it is
         return {"workspace": workspace, "branch": name, "from": previous, "head": _head(repo)}
@@ -319,8 +322,14 @@ def push(workspace: str) -> dict:
         origin = _origin(repo)
         _check_host(origin, current)
         out = io.BytesIO()
-        result = _network(lambda: porcelain.push(repo, origin, f"refs/heads/{name}:refs/heads/{name}".encode(),
-                                                 outstream=out, errstream=out, **_remote(current)))
+        try:
+            result = _network(lambda: porcelain.push(repo, origin, f"refs/heads/{name}:refs/heads/{name}".encode(),
+                                                     outstream=out, errstream=out, **_remote(current)))
+        except porcelain.DivergedBranches as exc:  # never forced: the server keeps what it has
+            raise NeedsIT("This version was changed on the server from somewhere else, so it was not sent. Your work "
+                          "is safe on this computer; IT can combine both.",
+                          "the version on the server has changes this computer does not have",
+                          _facts(repo, workspace)) from exc
         errors = {ref.decode(): str(err) for ref, err in (result.ref_status or {}).items() if err}
         if errors:
             raise NeedsIT("The server did not accept this version. Your work is safe on this computer.",
@@ -525,6 +534,16 @@ def update(workspace: str) -> dict:
                     "user_message": " ".join(notes + ["The latest changes of the project are here."])}
 
         version_head = repo.refs[f"refs/heads/{name}".encode()]
+        local_main = _ref(repo, f"refs/heads/{main}".encode())  # fetching does not move it
+        if local_main is not None and can_fast_forward(repo, version_head, local_main):
+            # nothing saved in the version yet: it is not a proposal, it just moves to the latest main branch
+            if version_head == remote_main:
+                return {**result, "status": "up_to_date", "branch": name,
+                        "user_message": " ".join(notes + ["Everything is up to date."])}
+            result["backup"] = _backup(repo, name)
+            _move(repo, name, remote_main, workspace)
+            return {**result, "status": "updated", "branch": name, "head": _head(repo),
+                    "user_message": " ".join(notes + ["The latest changes of the project are here."])}
         on_server = _ref(repo, f"refs/remotes/origin/{name}".encode())
         proposal = _proposal_for(origin, current, name)
         merged = can_fast_forward(repo, version_head, remote_main) or bool(
@@ -581,3 +600,16 @@ def origin(workspace: str) -> str | None:
     """The repository a workspace was cloned from."""
     with _repo(workspace) as repo:
         return _origin(repo)
+
+
+def proposal_state(workspace: str) -> dict | None:
+    """The pull request of the current version, if the hosting can tell: number, state, merged. Best effort."""
+    try:
+        current = _git_session()
+        with _repo(workspace) as repo:
+            name, origin_url = _branch(repo), _origin(repo)
+            if name is None or name in _protected(repo) or origin_url is None:
+                return None
+        return _proposal_for(origin_url, current, name)
+    except Exception:
+        return None

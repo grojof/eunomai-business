@@ -22,7 +22,8 @@ Each line holds, or goes into the summary under *Not settled* or *Skipped*:
 
 ## Propose
 
-`version_send(workspace)`, then `version_propose(workspace, <title>, <summary>)`. The summary, in
+`version_send(workspace)`, then `version_propose(workspace, <title>, <summary>)`. If it answers `created: false`,
+the proposal was already open and the version just sent updates it. The summary, in
 `docs_language`, has these sections, each short:
 
 | Section | Content |
