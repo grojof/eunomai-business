@@ -71,7 +71,8 @@ def kind(path: str, in_workspace: bool = True) -> str | None:
         return None
     if name in CONTEXT_FILES:
         return "context"
-    if name in CONFIG_FILES or any(p in CONFIG_FOLDERS for p in parts[:-1]):
+    # the folder itself counts too: on Linux a link named .claude is a single entry, not a folder
+    if name in CONFIG_FILES or any(p in CONFIG_FOLDERS for p in parts[:-1] + [name]):
         return "config"
     if any(_SHORT_NAME.match(p) for p in parts):
         return "config"
