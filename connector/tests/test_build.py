@@ -29,13 +29,20 @@ def test_without_diagnostics_no_hooks_and_no_validation_skills(tmp_path):
     assert mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_DIAGNOSTICS"] == "0"
 
 
-def test_diagnostics_build_quotes_the_uvx_path(tmp_path):
-    cfg = dict(EXAMPLE, diagnostics=True, uvx=r"C:\Users\Some One\.local\bin\uvx.exe")
+def hook_command(cfg: dict, tmp_path) -> str:
     build.build(cfg, tmp_path)
     hooks = json.loads((tmp_path / "eunomai-business" / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-    command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    assert command.startswith('"C:/Users/Some One/.local/bin/uvx.exe" --from ')
+    return hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+
+def test_hook_command_is_bare_so_every_shell_runs_it(tmp_path):
+    assert hook_command(dict(EXAMPLE, diagnostics=True), tmp_path).startswith("uvx --from ")
     assert (tmp_path / "eunomai-business" / "skills" / "validate-setup" / "SKILL.md").exists()
+
+
+def test_a_uvx_path_with_spaces_is_quoted(tmp_path):
+    cfg = dict(EXAMPLE, diagnostics=True, uvx=r"C:\Users\Some One\.local\bin\uvx.exe")
+    assert hook_command(cfg, tmp_path).startswith('"C:/Users/Some One/.local/bin/uvx.exe" --from ')
 
 
 def test_built_text_files_use_lf(tmp_path):
