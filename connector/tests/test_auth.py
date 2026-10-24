@@ -18,19 +18,21 @@ def test_sign_in_is_stored_encrypted_and_reused(signed_in):
             assert b"token-" not in record.read_bytes()  # encrypted, not plain JSON
 
 
-def test_forged_callback_is_rejected(server, monkeypatch):
+def test_a_forged_callback_is_ignored_and_the_real_one_completes(server, monkeypatch):
     import httpx
     from urllib.parse import parse_qs, urlsplit
 
     monkeypatch.setenv("EUNOMAI_PROVIDERS", json.dumps({"forged": server.provider("forged-client")}))
     started = auth.start("forged", open_browser=False)
     redirect = parse_qs(urlsplit(started["url"]).query)["redirect_uri"][0]
-    httpx.get(redirect, params={"code": "code-1", "state": "not-the-one-we-sent"})
+    answer = httpx.get(redirect, params={"code": "code-1", "state": "not-the-one-we-sent"})
+    assert answer.status_code == 404 and auth.status("forged")["status"] == "waiting"
+    httpx.get(started["url"], follow_redirects=True)  # the real browser answer
     for _ in range(50):
         if auth.status("forged")["status"] != "waiting":
             break
         time.sleep(0.1)
-    assert auth.status("forged") == {"provider": "forged", "status": "failed", "error": "state mismatch"}
+    assert auth.status("forged")["status"] == "signed_in"
     assert "code_challenge_method=S256" in started["url"]
 
 

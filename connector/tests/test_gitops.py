@@ -97,13 +97,16 @@ def test_protection_does_not_depend_on_anything_inside_git(signed_in, workspaces
         gitops.save("tamper", "straight to develop")
 
 
-def test_workspace_list_survives_a_workspace_without_origin(signed_in, workspaces):
-    initialize(signed_in, "no-origin")
-    ws = Path(gitops.clone(f"{signed_in.url}/me/no-origin.git")["path"])
+def test_the_repository_address_comes_from_the_connector_not_from_git(signed_in, workspaces):
+    """The sandbox rewrites the origin to send the user's work elsewhere on the same server: nothing goes there."""
+    initialize(signed_in, "redirected")
+    ws = Path(gitops.clone(f"{signed_in.url}/me/redirected.git")["path"])
     config = (ws / ".git" / "config").read_text(encoding="utf-8")
-    (ws / ".git" / "config").write_text(config.split('[remote "origin"]')[0], encoding="utf-8")
+    (ws / ".git" / "config").write_text(config.replace("/me/redirected.git", "/me/attacker.git"), encoding="utf-8")
     listed = {w["workspace"]: w for w in gitops.workspaces()["workspaces"]}
-    assert listed["no-origin"]["origin"] is None
+    assert listed["redirected"]["origin"].endswith("/me/redirected.git")
+    with pytest.raises(NeedsIT, match="address in .git/config changed"):
+        gitops.status("redirected")
 
 
 def test_token_goes_only_to_the_git_server(signed_in, workspaces):
@@ -159,3 +162,84 @@ def test_unexpected_git_config_stops_every_operation(signed_in, workspaces, entr
         config.write(entry)
     with pytest.raises(NeedsIT, match="unexpected entry in .git/config"):
         gitops.status(name)
+
+
+def test_config_written_during_an_operation_never_runs_a_command(signed_in, workspaces, monkeypatch, tmp_path):
+    """The sandbox writes a filter into .git/config after the connector checked it: the filter must not run."""
+    import sys
+
+    initialize(signed_in, "race")
+    ws = Path(gitops.clone(f"{signed_in.url}/me/race.git")["path"])
+    gitops.branch("race", "draft/race")
+    marker = tmp_path / "filter-ran"
+    script = tmp_path / "evil.py"
+    script.write_text(f"import sys\nopen(r'{marker}', 'w').write('ran')\nsys.stdout.write(sys.stdin.read())\n")
+    original_status = gitops.status
+
+    def status_then_attack(workspace):
+        result = original_status(workspace)
+        with open(ws / ".git" / "config", "a", encoding="utf-8") as config:
+            config.write(f'[filter "x"]\n\tclean = "{Path(sys.executable).as_posix()}" "{script.as_posix()}"\n')
+        (ws / ".gitattributes").write_text("*.txt filter=x\n")
+        return result
+
+    monkeypatch.setattr(gitops, "status", status_then_attack)
+    (ws / "note.txt").write_bytes(b"hello\n")
+    gitops.save("race", "With a planted filter")
+    assert not marker.exists(), "a filter written after the check ran on the host"
+
+
+@pytest.mark.parametrize("name", ["Main", "MASTER"])
+def test_version_names_differing_only_in_case_from_main_are_refused(signed_in, workspaces, name):
+    repo = f"case-{uuid.uuid4().hex[:8]}"
+    initialize(signed_in, repo)
+    gitops.clone(f"{signed_in.url}/me/{repo}.git")
+    with pytest.raises(PermissionError, match="main branch"):
+        gitops.branch(repo, name)
+
+
+@pytest.mark.parametrize("planted", ["commondir", "objects/info/alternates"])
+def test_a_repository_pointing_elsewhere_is_refused(signed_in, workspaces, planted):
+    repo = f"elsewhere-{uuid.uuid4().hex[:8]}"
+    initialize(signed_in, repo)
+    ws = Path(gitops.clone(f"{signed_in.url}/me/{repo}.git")["path"])
+    target = ws / ".git" / planted
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(str(workspaces), encoding="utf-8")
+    with pytest.raises(NeedsIT, match="another folder"):
+        gitops.status(repo)
+
+
+@pytest.mark.parametrize("name", ["con", "NUL", "com1", "lpt9.txt"])
+def test_windows_reserved_names_are_not_workspaces(workspaces, name):
+    with pytest.raises(ValueError):
+        gitops._folder(name)
+
+
+def test_empty_credentials_in_the_address_are_refused(signed_in, workspaces):
+    with pytest.raises(ValueError, match="credentials"):
+        gitops.clone(signed_in.url.replace("http://", "http://:token@") + "/me/x.git")
+
+
+def test_one_operation_at_a_time_per_workspace(signed_in, workspaces, monkeypatch):
+    initialize(signed_in, "busy")
+    gitops.clone(f"{signed_in.url}/me/busy.git")
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+
+    def hold():
+        with gitops._exclusive("workspace:busy"):
+            started.set()
+            release.wait(5)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    started.wait(5)
+    try:
+        with pytest.raises(PermissionError, match="still running"):
+            with gitops._exclusive("workspace:busy", wait=0.3):
+                pass
+    finally:
+        release.set()
+        holder.join()

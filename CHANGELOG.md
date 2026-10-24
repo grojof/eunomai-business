@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Security hardening (independent review):** the workspace configuration is pinned once checked, so a filter
+  written into `.git/config` during an operation can no longer run on the computer; content is never filtered;
+  the repository address comes from the connector's registry, not from `.git/config`; one operation at a time
+  per workspace; edits made during an update are never overwritten; repositories pointing to other folders,
+  empty credentials in addresses, Windows reserved names and case variants of the main branch are refused; a
+  burst of fresh releases no longer gets past the two-week rule; forged sign-in answers are ignored.
 - **Audit fixes:** a network outage asks the user to check the network instead of going to IT; a refused token
   refresh means signing in again; a version with nothing saved simply moves to the latest main branch; versions
   always start from the main branch; a version changed on the server is never overwritten when sending;

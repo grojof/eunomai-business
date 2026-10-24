@@ -58,6 +58,8 @@ def write_overrides(values: dict[str, str]) -> None:
 def uploaded(name: str, version: str) -> datetime:
     with urllib.request.urlopen(f"https://pypi.org/pypi/{name}/{version}/json", timeout=30) as response:
         files = json.load(response)["urls"]
+    if not files:
+        raise RuntimeError(f"{name} {version}: PyPI lists no files")
     return min(datetime.fromisoformat(f["upload_time_iso_8601"].replace("Z", "+00:00")) for f in files)
 
 
