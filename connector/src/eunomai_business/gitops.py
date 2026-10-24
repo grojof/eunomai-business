@@ -546,3 +546,9 @@ def update(workspace: str) -> dict:
         return {**result, "status": "updated", "branch": name, "head": _head(repo),
                 "user_message": " ".join(notes + ["The latest changes of the project were added to your version; "
                                                   "your work is kept."])}
+
+
+def origin(workspace: str) -> str | None:
+    """The repository a workspace was cloned from."""
+    with _repo(workspace) as repo:
+        return _origin(repo)

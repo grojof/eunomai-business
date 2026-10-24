@@ -14,7 +14,7 @@ the result receives work that is refined and ready to review, not a first draft.
 |---|---|---|
 | **Base plugin** (this repository), for every business user | A local connector that signs in through the organization and handles workspaces, versions, save points and pull requests on the organization's git server, without Git installed; and the barriers around it | Built |
 | **Configuration by each organization's IT** | Sign-in providers, workspaces folder, diagnostics, set once when building the plugin. Users install and sign in; nothing else | Built |
-| **Guided flows** | The specialist's way of working: strict, defined flows that help users say what they want, so the repository ends up with clear specifications, living docs and tested code, and the pull request shows a reviewer what was not specified or not validated | Planned |
+| **Guided flows** | The specialist's way of working: strict, defined flows that help users say what they want, so the repository ends up with clear specifications, living docs and tested code, and the pull request shows a reviewer what was not specified or not validated | First version |
 | **Project plugins**, one per project | The project's knowledge, its repository and its guard rules, on top of the base plugin | Planned |
 
 It is the counterpart of [eunomai](https://github.com/grojof/eunomai): eunomai is flexible, for developers in
@@ -70,7 +70,7 @@ uv run --group dev pytest                    # the whole suite against a fake gi
 |---|---|
 | **Deploy it** (IT) | [Configuration](docs/configuration.md) · [Run the validation](docs/validation/run-the-validation.md) · [Validation checks](docs/validation/hypotheses.md) |
 | **Trust it** (IT, security, data protection) | [Barriers](docs/barriers.md) · [Data on computers and servers](docs/data-on-computers.md) |
-| **Understand it** (IT, developers) | [Architecture](docs/architecture.md) · [Decisions](docs/decisions.md) · [Guided flows](docs/guided-flows.md) (design) |
+| **Understand it** (IT, developers) | [Architecture](docs/architecture.md) · [Decisions](docs/decisions.md) · [Guided flows](docs/guided-flows.md) |
 | **Run a project repository** (repository owners) | [Good practices for project repositories](docs/project-practices.md) |
 | **Build on it** (organizations) | [Extensions](docs/extensions.md) |
 | **Follow it** | [Changelog](CHANGELOG.md) |

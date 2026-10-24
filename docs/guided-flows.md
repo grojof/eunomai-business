@@ -9,7 +9,8 @@ related: [architecture.md, decisions.md]
 
 # Guided flows
 
-**Status:** design, not built.
+**Status:** first version built as the `specialist` skill; its behaviour in Cowork is still to be validated
+(checks H11–H14 in [validation](validation/hypotheses.md)).
 
 The specialist is developer, analyst and consultant at the business user's side. Business users often start
 from a vague idea, or from a clear idea that is not the right one; building straight away turns the application
@@ -87,19 +88,22 @@ The reviewer can take any "Not settled" line straight back to the user.
 | `specialist` | Any request to build or change something in a workspace, however vague | Runs the journey, keeps track of the stage, applies the conversation rules |
 | One reference per stage | Loaded by `specialist` when a stage starts | The method for that stage, kept out of the conversation until needed |
 
-A single entry point means the user never has to know a skill's name.
+A single entry point means the user never has to know a skill's name. The specialist resumes where the work was
+left by reading the open change in the repository, so a new task picks up the same work.
 
-## To check before building
+## What the organization decides
 
-| # | Must hold |
-|---|---|
-| H11 | The `specialist` skill takes over on vague requests in Cowork and keeps the conversation on the journey |
-| H12 | Visuals reach the user in Cowork: tables and Mermaid diagrams render, and a mockup (an HTML page in the workspace) opens |
-| H13 | OpenSpec works without its command-line tool on the user's computer: artifacts written in its format, and either the sandbox can run the tool to validate and archive, or the connector does those checks |
-| H14 | Code and tests run in Cowork's sandbox for the technologies the organization allows |
+Set by IT when building the plugin ([configuration](configuration.md#the-specialist)):
 
-## Open questions
+- **Languages:** documentation and specifications, and code; technical terms always stay in English.
+- **Where code may be written:** in the projects IT lists, each with its technologies; anywhere only if free
+  development is on (off by default). Without permission, the specialist still analyses, shapes and specifies,
+  and delivers that to IT as a proposal.
+- **Dependency exceptions:** packages IT vetted despite failing the origin or activity rules; never a known
+  vulnerability.
 
-- **Which technologies a project may use,** and who sets them (the organization's configuration, or each project
-  plugin). Fewer choices make the result more robust and the review easier.
-- **The language of specifications:** the user's language, or the organization's.
+## To validate
+
+H11 to H14 in [validation](validation/hypotheses.md): the skill takes over on vague requests, visuals reach the
+user, OpenSpec files are written correctly without its command-line tool, and code and tests run in Cowork's
+sandbox.

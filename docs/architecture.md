@@ -147,8 +147,10 @@ sequenceDiagram
 | `auth` | Sign-in with any OAuth 2.0 provider (authorization code + PKCE, loopback redirect), token refresh | Standard OAuth 2.0; nothing server-specific |
 | `store` | Keeps sign-in records encrypted per user | The operating system (DPAPI on Windows, keyring elsewhere) |
 | `gitops` | Workspaces, versions, save points, sending, pull requests | Standard git over HTTPS (dulwich), except two Gitea-specific parts below |
-| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
+| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`, `specialist_settings`, `dependency_check`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
 | `support` | The stop: the user's message, IT's report, the e-mail link | — |
+| `settings` | The specialist's settings: languages, where code may be written | — |
+| `deps` | `dependency_check`: which package version may be used | PyPI, npm and OSV public APIs |
 | `hook` | Entry point for the plugin's hooks; today it only logs, with diagnostics on | — |
 | `probe` | Diagnostic measurements (`diag_environment`, `diag_reach`) | — |
 
