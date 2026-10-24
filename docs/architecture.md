@@ -97,7 +97,7 @@ flowchart TD
     ff -- no --> stop
     where -- no --> accepted{"Version accepted?<br/>in main, or its PR merged"}
     accepted -- yes --> retire["Back up, back to the main<br/>branch, retire the version"]
-    accepted -- no --> clean{"Combines without<br/>conflicts?"}
+    accepted -- no --> clean{"No file changed<br/>on both sides?"}
     clean -- yes --> combine["Back up, add the latest<br/>main changes to the version"]
     clean -- no --> stop["Stop: nothing changes<br/>user message + report for IT"]
 
@@ -138,7 +138,7 @@ sequenceDiagram
 | Plugin (`plugin/`) | What Claude Desktop installs: the connector's launch settings, plus validation skills and hooks when diagnostics are on. Built per organization from its configuration | Built |
 | Local connector (`connector/`) | A Python program started with `uvx` on the user's computer. Claude talks to it through MCP; it runs outside Claude's sandbox ([decision 1](decisions.md#1--a-local-connector-on-the-users-computer)) | Built |
 | Build tool | `tools/build.py`: organization configuration + source → `eunomai-business.zip`, after validating the configuration | Built |
-| Tests | `connector/tests/`: sign-in, workspaces, versions, barriers, build and tool list against a fake git server (`uv run --group dev pytest` in `connector/`) | Built |
+| Tests | `connector/tests/`: sign-in, workspaces, versions, barriers, build, tool list and the dependency pins, against a fake git server (`uv run --group dev pytest` in `connector/`) | Built |
 
 ## Connector modules
 

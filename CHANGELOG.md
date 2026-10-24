@@ -4,10 +4,13 @@
 
 - **`workspace_update`:** brings the project's latest changes on its own: saves unsaved work first, backs up
   before moving anything, returns to the main branch when the user's proposal was accepted (also after a squash
-  merge), and adds new main-branch changes to an open version only when they combine without conflicts.
+  merge), and adds new main-branch changes to an open version only when no file was changed on both sides.
 - **Stops go to IT, not to the user:** when the connector is not certain, or an unexpected error happens, the user
   gets one plain sentence and IT a report, with an e-mail link when `support_email` is set.
-- **New setting `support_email`;** new dependency `merge3` (needed by dulwich to combine file contents).
+- **New setting `support_email`.**
+- **Dependencies follow the project's own rules:** the whole tree locked with nothing younger than two weeks
+  unless it fixes a vulnerability (certifi 2026.10.19), truststore back to 0.10.4, and users' computers install
+  exactly that tree through `constraints.txt`.
 - **The specialist (first version):** the `specialist` skill guides a business user from a vague idea to a pull
   request (understand, shape, specify, build, deliver), writing OpenSpec files without its command-line tool.
 - **Settings for the specialist:** `docs_language`, `code_language`, `free_development` (off by default),

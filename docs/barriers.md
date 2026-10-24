@@ -50,8 +50,8 @@ project and its git server. See [project-practices.md](project-practices.md).
 | 1 · Keep | Unsaved changes are saved first; on the main branch they go to a new version (`work/<date>`) |
 | 2 · Fetch | The server's branches are read; nothing local moves yet |
 | 3 · Back up | Before anything moves, the branch's position is kept as `refs/eunomai/backup/<time>/<branch>` |
-| 4 · Decide | Accepted version (in the main branch, or its pull request merged): back to the main branch, the version retired. Open version behind the main branch: combined only if it combines without conflicts, computed before touching any file. On the main branch: fast-forward only |
-| Stop | Conflicts, a version changed elsewhere, a main branch that diverged, files in the way: nothing changes, and IT is told |
+| 4 · Decide | Accepted version (in the main branch, or its pull request merged): back to the main branch, the version retired. Open version behind the main branch: combined only if no file was changed on both sides, checked before touching any file; lines of the same file are never merged automatically. On the main branch: fast-forward only |
+| Stop | The same file changed on both sides, a version changed elsewhere, a main branch that diverged, files in the way: nothing changes, and IT is told |
 
 ## Dependencies
 
@@ -68,6 +68,11 @@ project and its git server. See [project-practices.md](project-practices.md).
 
 The newest version that passes is recommended, with its runtime requirements. The specialist uses only what the
 check allows.
+
+eunomai-business follows the same rules itself. Its whole dependency tree is locked (`connector/uv.lock`, nothing
+younger than two weeks unless it fixes a vulnerability) and users' computers install exactly that tree
+(`connector/constraints.txt`, passed to `uvx`). Outside that tree: a test tool used only on developers' computers,
+and a package installed only in web browsers.
 
 ## When the connector stops
 
