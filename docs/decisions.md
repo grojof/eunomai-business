@@ -21,10 +21,10 @@ and browser; hence the [barriers](barriers.md).
   would have to be published to the internet.
 - **Requires:** the desktop app open, Cowork tasks on the user's computer until check H16 shows the cloud works
   too, and `uv` installed once per user.
-- **To reconsider before 1.0:** a Claude Desktop extension (MCPB) runs on the Node.js that ships with Claude
-  Desktop ([Anthropic](https://claude.com/docs/connectors/building/mcpb)), which would remove uv and Python from
-  users' computers. It means rewriting the connector (git in JavaScript instead of dulwich), and whether a plugin's
-  local server can use that runtime is not verified.
+- **Considered: a Node.js connector** (2026-10-25), to remove uv and Python from users' computers. Not now: a
+  plugin's local server gets no Node from Claude Desktop (only MCPB extensions do), and the JavaScript git library's
+  package tree fails this project's dependency rules
+  ([research](../research/node-connector/README.md)). To look at again if plugins get Desktop's runtime.
 
 ## 2 · Public sign-in clients, tokens encrypted per user
 

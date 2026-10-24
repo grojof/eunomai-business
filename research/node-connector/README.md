@@ -1,5 +1,11 @@
 # Research: a Node.js connector
 
+**Conclusion (2026-10-25): not now.** N1 and N7 fail: a plugin's server gets no Node from Claude Desktop, so
+users would still need a runtime installed, and isomorphic-git's package tree breaks the project's own dependency
+rules. Only an MCPB extension gets Desktop's Node, which would split the product into a plugin and a separately
+installed extension, and still leave N7. The Python connector stays. What carries over: N4, a guard served by
+the connector through an `mcp_tool` hook; and N5, isomorphic-git runs no commands at all.
+
 **Question.** Should eunomai-business's connector move from Python (started with `uv run`) to Node.js, running on
 the Node that ships with Claude Desktop, so that business users' computers need neither uv nor Python?
 
@@ -11,7 +17,7 @@ own branch, with its tests, and merged as one squashed pull request that replace
 
 | # | Must hold | How | Status |
 |---|---|---|---|
-| N1 | A plugin's local server with `"command": "node"` starts in Cowork on Claude Desktop's own Node, on a computer without Node installed | Spike plugin, `spike_runtime`: `electron` is set and `exec_path` is inside the Claude package | Cowork 2026-10-25, Node on PATH: the plugin ran on the installed Node (nvm4w, v22.21.0), not on Desktop's. Pending without Node on PATH (`nvm off`, restart Desktop). Claude Desktop 3.6556.2.0 (MSIX) ships no `node.exe`; its Node would be Electron's |
+| N1 | A plugin's local server with `"command": "node"` starts in Cowork on Claude Desktop's own Node, on a computer without Node installed | Spike plugin, `spike_runtime`: `electron` is set and `exec_path` is inside the Claude package | **Fails** · Cowork 2026-10-25: with Node on PATH the plugin ran on the installed Node (nvm4w, v22.21.0); with it off (`nvm off`, Desktop restarted) the same plugin's server did not start (`CONNECTION_CLOSED`). Claude Desktop 3.6556.2.0 lends its Node to MCPB extensions, not to a plugin's servers |
 | N2 | It reaches internal HTTPS hosts trusting the organization's CA (Windows certificate store) | `spike_reach` on the git server | Cowork 2026-10-25, installed Node 22.21: system store 200 in 27 ms (284 certificates), bundled store `SELF_SIGNED_CERT_IN_CHAIN`. Pending on Desktop's Node |
 | N3 | Sign-in records encrypted per user with DPAPI, without native modules | `spike_protect` (PowerShell `ProtectedData`) | Cowork 2026-10-25: round trip works, 450–500 ms per call (PowerShell start-up), FullLanguage mode; tokens would be kept in memory. Pending under policies (Constrained Language Mode would block it) |
 | N4 | The file guard without Python: a PreToolUse hook of type `mcp_tool` calls the plugin's own server and its answer denies the tool | Spike hook on `Write`, `Edit` and the shell; ask Claude to write `eunomai-spike-guard.txt` | **Pass** · Cowork 2026-10-25: the `mcp_tool` hook called the plugin's own server and its deny stopped a `Write`. Behaviour when the server is down still to note (the docs say an error is non-blocking, so it fails open) |
