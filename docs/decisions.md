@@ -13,7 +13,7 @@ Why eunomai-business is built this way, and what was rejected.
 
 ## 1 · A local connector on the user's computer
 
-The plugin ships an MCP server that Claude Desktop starts on the user's computer for each session (stdio, `uvx`,
+The plugin ships an MCP server that Claude Desktop starts on the user's computer for each session (stdio, `uv run`,
 per user, no administrator rights). It runs outside Claude's sandbox, with the user's network, certificate store
 and browser; hence the [barriers](barriers.md).
 

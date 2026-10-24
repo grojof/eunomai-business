@@ -29,8 +29,9 @@ def test_without_diagnostics_no_hooks_and_no_validation_skills(tmp_path):
     mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
     assert mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_DIAGNOSTICS"] == "0"
     args = mcp["mcpServers"]["eunomai-business"]["args"]
-    assert args[args.index("-c") + 1] == "${CLAUDE_PLUGIN_ROOT}/connector/constraints.txt"
-    assert "connector/constraints.txt" in names and "connector/sbom.cdx.json" in names
+    assert args[:2] == ["run", "--frozen"] and "--no-config" in args and "--native-tls" in args
+    assert args[args.index("--project") + 1] == "${CLAUDE_PLUGIN_ROOT}/connector"
+    assert "connector/uv.lock" in names and "connector/sbom.cdx.json" in names
 
 
 def hook_command(cfg: dict, tmp_path) -> str:
@@ -40,13 +41,13 @@ def hook_command(cfg: dict, tmp_path) -> str:
 
 
 def test_hook_command_is_bare_so_every_shell_runs_it(tmp_path):
-    assert hook_command(dict(EXAMPLE, diagnostics=True), tmp_path).startswith("uvx --from ")
+    assert hook_command(dict(EXAMPLE, diagnostics=True), tmp_path).startswith("uv run --frozen ")
     assert (tmp_path / "eunomai-business" / "skills" / "validate-setup" / "SKILL.md").exists()
 
 
-def test_a_uvx_path_with_spaces_is_quoted(tmp_path):
-    cfg = dict(EXAMPLE, diagnostics=True, uvx=r"C:\Users\Some One\.local\bin\uvx.exe")
-    assert hook_command(cfg, tmp_path).startswith('"C:/Users/Some One/.local/bin/uvx.exe" --from ')
+def test_a_uv_path_with_spaces_is_quoted(tmp_path):
+    cfg = dict(EXAMPLE, diagnostics=True, uv=r"C:\Users\Some One\.local\bin\uv.exe")
+    assert hook_command(cfg, tmp_path).startswith('"C:/Users/Some One/.local/bin/uv.exe" run --frozen ')
 
 
 def test_built_text_files_use_lf(tmp_path):

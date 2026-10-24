@@ -4,7 +4,7 @@
 
 uv exports the locked tree (versions, hashes, dependency graph); this adds each package's license from PyPI.
 The result is deterministic (no timestamp, no serial number), so it only changes when the tree does. Run it
-whenever connector/uv.lock changes; a test checks it matches connector/constraints.txt.
+whenever connector/uv.lock changes; a test checks it matches the locked runtime tree.
 """
 
 import json
