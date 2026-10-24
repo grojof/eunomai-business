@@ -8,6 +8,8 @@
 - **Stops go to IT, not to the user:** when the connector is not certain, or an unexpected error happens, the user
   gets one plain sentence and IT a report, with an e-mail link when `support_email` is set.
 - **New setting `support_email`;** new dependency `merge3` (needed by dulwich to combine file contents).
+- **Guard probe (diagnostics):** the diagnostic hook denies two test markers, as a JSON answer and as exit code 2,
+  and logs input field names and timings, to validate the planned file guard (H9).
 
 ## 0.1.0 · 2026-10-24
 

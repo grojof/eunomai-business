@@ -197,6 +197,10 @@ Before it is built, validation must show (check H9 in
 - the hook is quick enough to run on every tool call;
 - it works without Git on the computer.
 
+**Measured (H9):** both ways of denying stop the tool, for file tools and for the sandbox's shell alike; the
+hook runs on the user's computer in both cases. Launching it takes about 150 ms per tool call. The guard will deny
+with a JSON answer, which shows the user only the reason (exit code 2 also shows the hook's command line).
+
 **Limits, stated now:** a hook sees a shell command as text. Reading a file by path is easy to catch; a command
 built to hide it is not. The guard reduces mistakes and casual exposure; the real boundary for secrets is not
 putting them where Claude works. And if the hook cannot start (uv missing, for example), Claude Desktop
