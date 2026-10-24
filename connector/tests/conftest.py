@@ -71,6 +71,7 @@ class FakeServer:
         self.default_branch: dict[str, str] = {}
         self.tokens: dict[str, float] = {}
         self.token_lifetime = 3600
+        self.reject_refresh = False
         self.pulls: list[dict] = []
         self.git_auth: list[tuple[str, bool]] = []
         self.backend = DictBackend({})
@@ -172,7 +173,10 @@ class FakeServer:
             start("302 Found", [("Location", target)])
             return [b""]
         if path == "/login/oauth/access_token":
-            env["wsgi.input"].read(int(env.get("CONTENT_LENGTH") or 0))  # unread data makes Windows reset the socket
+            # read the whole body: unread data makes Windows reset the socket
+            form = parse_qs(env["wsgi.input"].read(int(env.get("CONTENT_LENGTH") or 0)).decode())
+            if form.get("grant_type") == ["refresh_token"] and self.reject_refresh:
+                return reply("400 Bad Request", {"error": "invalid_grant"})
             access = f"token-{len(self.tokens)}"
             self.tokens[access] = time.time() + self.token_lifetime
             return reply("200 OK", {"access_token": access, "refresh_token": "refresh-1",

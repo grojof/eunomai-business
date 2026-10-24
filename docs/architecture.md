@@ -135,7 +135,7 @@ sequenceDiagram
 
 | Piece | What it is | Status |
 |---|---|---|
-| Plugin (`plugin/`) | What Claude Desktop installs: the connector's launch settings, plus validation skills and hooks when diagnostics are on. Built per organization from its configuration | Built |
+| Plugin (`plugin/`) | What Claude Desktop installs: the connector's launch settings and the `specialist` skill, plus validation skills and hooks when diagnostics are on. Built per organization from its configuration | Built |
 | Local connector (`connector/`) | A Python program started with `uv run --frozen` on the user's computer. Claude talks to it through MCP; it runs outside Claude's sandbox ([decision 1](decisions.md#1--a-local-connector-on-the-users-computer)) | Built |
 | Build tool | `tools/build.py`: organization configuration + source → `eunomai-business.zip`, after validating the configuration | Built |
 | Bill of materials | `tools/sbom.py` → `connector/sbom.cdx.json`, regenerated whenever `connector/uv.lock` changes | Built |
@@ -153,7 +153,7 @@ sequenceDiagram
 | `support` | The stop: the user's message, IT's report, the e-mail link | — |
 | `settings` | The specialist's settings: languages, where code may be written | — |
 | `deps` | `dependency_check`: which package version may be used | PyPI, npm and OSV public APIs |
-| `hook` | Entry point for the plugin's hooks; today it only logs, with diagnostics on | — |
+| `hook` | Entry point for the plugin's hooks; with diagnostics on, it logs and denies two guard-test markers | — |
 | `probe` | Diagnostic measurements (`diag_environment`, `diag_reach`) | — |
 
 ## Facts the design relies on
@@ -181,7 +181,7 @@ organization's configuration. Only the hosting-specific rows above move into it.
 ## Hooks
 
 **Built:** hooks run on the user's computer in Cowork (SessionStart and PreToolUse), through Git Bash if
-installed. Today they only log, for measurement, and ship only with diagnostics on.
+installed. They ship only with diagnostics on: they log each tool call and deny two guard-test markers (H9).
 
 **Planned: file guard.** A PreToolUse hook that stops Claude from reading or writing sensitive files on the
 user's behalf:

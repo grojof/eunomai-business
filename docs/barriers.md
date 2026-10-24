@@ -63,7 +63,8 @@ project and its git server. See [project-practices.md](project-practices.md).
 | Yanked, deprecated or a pre-release | Blocked |
 | No source repository published | Blocked, unless IT made an exception |
 | No release in three years, or marked inactive | Blocked, unless IT made an exception |
-| Released less than two weeks ago | Blocked, unless every older version is vulnerable: then the fix wins |
+| Released less than two weeks ago | Blocked, unless every older version checked (the ten newest) is vulnerable: then the fix wins |
+| No release older than two weeks at all | Blocked: the package is too new to trust |
 | No answer from the registry or from OSV | Not allowed |
 
 The newest version that passes is recommended, with its runtime requirements. The specialist uses only what the
@@ -97,7 +98,7 @@ computer itself. These barriers keep that from becoming a way to run commands on
 | Only known `.git/config` entries are accepted: `core` (format, file mode, bare, ref logs, case, symlinks, Unicode, `autocrlf`), `remote.<name>.url/fetch`, `branch.<name>.remote/merge`. Anything else stops the operation | Filters, `hooksPath`, `fsmonitor`, includes and submodules can run commands or fetch code |
 | The computer's Git configuration (system and user) is ignored | Same behaviour with or without Git installed; a global filter cannot apply ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)) |
 | Each clone gets `core.autocrlf=false` | A Git on the computer, if any, sees the files exactly as the connector does |
-| Clones never fetch submodules | A submodule could bring code from another server |
+| Clones never fetch submodules (dulwich's default, not exposed as an option) | A submodule could bring code from another server |
 
 ## What eunomai-business does not protect
 

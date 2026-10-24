@@ -52,7 +52,7 @@ def check_url(url: str) -> None:
 def _config(provider: str) -> dict:
     configured = providers()
     if provider not in configured:
-        raise RuntimeError(f"unknown provider {provider!r}; configured: {', '.join(configured) or 'none'}")
+        raise ValueError(f"unknown provider {provider!r}; configured: {', '.join(configured) or 'none'}")
     cfg = {"scopes": "", "login_field": "login", **configured[provider]}
     missing = [k for k in _REQUIRED if not cfg.get(k)]
     if missing:
@@ -60,7 +60,7 @@ def _config(provider: str) -> dict:
     for key in ("authorize_url", "token_url", "userinfo_url"):
         check_url(cfg[key])
     redirect = urlsplit(cfg["redirect_uri"])
-    if redirect.scheme != "http" or redirect.hostname not in ("127.0.0.1", "localhost") or not redirect.port:
+    if redirect.scheme != "http" or redirect.hostname not in _LOOPBACK or not redirect.port:
         raise RuntimeError("redirect_uri must be http://127.0.0.1:<port>/... or http://localhost:<port>/...")
     cfg["port"] = redirect.port
     cfg["store_key"] = f"{provider}:{cfg['client_id']}"  # one record per provider
@@ -241,18 +241,27 @@ def session(provider: str) -> dict | None:
         return None
     refreshed = False
 
-    def refresh() -> dict:
-        _save(cfg, _exchange(cfg, {"grant_type": "refresh_token", "refresh_token": record["refresh_token"]}))
+    def refresh() -> dict | None:
+        try:
+            tokens = _exchange(cfg, {"grant_type": "refresh_token", "refresh_token": record["refresh_token"]})
+        except RuntimeError:  # the server refused it (expired or revoked): the user simply signs in again
+            store.delete(cfg["store_key"])
+            return None
+        _save(cfg, tokens)
         return store.load(cfg["store_key"])
 
     if record["expires_at"] < time.time() + 60 and record.get("refresh_token"):
         record, refreshed = refresh(), True
+        if record is None:
+            return None
     try:
         user = _userinfo(cfg, record["access_token"])
     except PermissionError:
         if not record.get("refresh_token") or refreshed:
             return None
         record, refreshed = refresh(), True
+        if record is None:
+            return None
         user = _userinfo(cfg, record["access_token"])
     return {"cfg": cfg, "record": record, "refreshed": refreshed, "user": user}
 

@@ -57,6 +57,8 @@ def main() -> None:
         payload = json.load(sys.stdin) if not sys.stdin.isatty() else {}
     except Exception:
         payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
     event = payload.get("hook_event_name", "unknown")
     tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
     guard = None

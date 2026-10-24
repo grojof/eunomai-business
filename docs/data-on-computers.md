@@ -33,7 +33,8 @@ Nothing is written to the registry or outside the user's profile, and nothing ne
 ## Reports for IT
 
 When the connector stops, the report the user can send to IT contains the workspace's folder and repository,
-the version, the files involved, the connector version, the computer's OS and the time. It never contains
+the version, its last save point and the main branch, the files involved, the error text for unexpected errors,
+the connector version, the computer's OS and the time. It never contains
 tokens. It travels only if the user sends the e-mail.
 
 ## Calls to public services
