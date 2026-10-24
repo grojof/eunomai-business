@@ -26,8 +26,8 @@ Terms as in the EU General Data Protection Regulation (GDPR).
 
 | Topic | eunomai-business | Evidence |
 |---|---|---|
-| Data handled | Sign-in tokens; the user's name and e-mail in save points; whatever users write in their workspaces; the Windows user name in paths of the diagnostics log | [Data on computers](data-on-computers.md) |
-| Minimization | Tokens never reach Claude; the diagnostics log records field names, not values; reports to IT carry no tokens; the dependency check sends package names only | [Barriers](barriers.md), [Data](data-on-computers.md) |
+| Data handled | Sign-in tokens; the user's name and e-mail in save points; whatever users write in their workspaces; the Windows user name in paths of the diagnostics log and of reports for IT | [Data on computers](data-on-computers.md) |
+| Minimization | Tokens never reach Claude; the diagnostics log records field names, not values; reports to IT carry no tokens and travel only if the user sends the e-mail; the dependency check sends package names and versions only | [Barriers](barriers.md), [Data](data-on-computers.md) |
 | Location | The user's computer and the organization's servers | [Data](data-on-computers.md) |
 | Security of processing | Tokens encrypted per user, TLS verified with the operating system's store, public sign-in clients with PKCE | [Barriers](barriers.md#sign-in-and-tokens) |
 | Erasure | Uninstalling and revoking, step by step; repository history follows the organization's own policy | [Uninstalling](data-on-computers.md#uninstalling) |
@@ -51,7 +51,7 @@ Grouped by the control themes of an information-security management system (such
 - **Dependencies:** the whole tree is locked and checked by the project's own rules; users' computers install
   exactly that tree, with every package's hash verified ([barriers](barriers.md#dependencies)). A daily workflow
   re-checks it, proposes updates and opens an issue for any vulnerability without an allowed fix.
-- **Licenses of the 42 runtime packages:** permissive (MIT, BSD, Apache-2.0, PSF) except two, both compatible
+- **Licenses of the locked runtime tree** (42 packages, some installed only on Windows, Linux or web browsers): permissive (MIT, BSD, Apache-2.0, PSF) except two, both compatible
   with use as a dependency:
 
   | Package | License | Use |

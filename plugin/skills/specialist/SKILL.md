@@ -13,7 +13,8 @@ refined and ready to review.
 ## Start of every session
 
 1. **Sign-in:** `whoami("git")`. If not signed in, `sign_in_start("git")`, tell the user in one line to finish
-   signing in in the browser that opened, then `sign_in_status("git")` until it is no longer `waiting`.
+   signing in in the browser that opened, then `sign_in_status("git")` until it is no longer `waiting`. If it ends
+   `failed` or `expired`, say so in one line and offer to try again.
 2. **Workspace.** The folder selected in this task must be a workspace: compare it with the paths from
    `workspace_list`. If it is not, ask which project they mean (one listed, or the repository address IT gave
    them), `workspace_clone` it, and ask them in one sentence to open a new task with that folder. Stop there.
@@ -27,6 +28,7 @@ refined and ready to review.
 |---|---|
 | On the main branch, no open change | 1 Understand; a new version starts there |
 | On a version whose proposal is open | Waiting for review: say so. A new request waits, or joins this proposal if it belongs to it (ask) |
+| On a version already sent, `proposal` unknown (null) | Ask the user whether it is waiting for review |
 | On a version without a proposal or an open change | 1 Understand, on this version |
 | `proposal.md` only | 2 Shape |
 | `mockups/` but no `specs/` | 3 Specify |
@@ -75,5 +77,5 @@ lives (replace it, do not append history), and carry on.
 - **Allowed technologies only,** as `specialist_settings` returns them.
 - **Business rules are not invented.** A rule cites its source, or it is an open question.
 - **No secrets** in files, ever.
-- **Stops go to IT.** When a tool stops, show its message and offer the e-mail link; never work around it with
-  other tools or the shell.
+- **Stops go to IT.** When a tool stops, show its message, and its e-mail link when there is one; never work
+  around it with other tools or the shell. A result with `error` is a mistake in the call: fix it, do not show it.

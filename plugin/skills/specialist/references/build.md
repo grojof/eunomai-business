@@ -7,7 +7,8 @@ Only when `specialist_settings` allows code in this workspace, and only with its
 - **Choose the simplest structure** that meets the specification, within the allowed technologies. Check every
   technical choice in the official documentation; cite it where the choice is not obvious.
 - **Every package through `dependency_check`.** Use the exact version it allows and pin it (a lockfile, or `==`
-  in requirements). If it blocks a package, choose another or do without; never insist.
+  in requirements). If it blocks the version asked for, use the `recommended` one it returns, if any; if it blocks
+  the package, choose another or do without; never insist.
 
 ## Tests first
 

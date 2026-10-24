@@ -50,8 +50,8 @@ project and its git server. See [project-practices.md](project-practices.md).
 | 1 · Keep | Unsaved changes are saved first; on the main branch they go to a new version (`work/<date>`) |
 | 2 · Fetch | The server's branches are read; nothing local moves yet |
 | 3 · Back up | Before anything moves, the branch's position is kept as `refs/eunomai/backup/<time>/<branch>`; files changed during the update stop it instead of being replaced |
-| 4 · Decide | Accepted version (in the main branch, or its pull request merged): back to the main branch, the version retired. Open version behind the main branch: combined only if no file was changed on both sides, checked before touching any file; lines of the same file are never merged automatically. On the main branch: fast-forward only |
-| Stop | The same file changed on both sides, a version changed elsewhere, a main branch that diverged, files in the way: nothing changes, and IT is told |
+| 4 · Decide | A version with nothing saved: moves to the latest main branch. Accepted version (in the main branch, or its pull request merged): back to the main branch, the version retired. A proposal closed without merging: noted, the version kept. Open version behind the main branch: combined only if no file was changed on both sides, checked before touching any file; lines of the same file are never merged automatically. On the main branch: fast-forward only |
+| Stop | The same file changed on both sides, a version changed elsewhere, a main branch that diverged or missing, files in the way: nothing changes, and IT is told |
 
 ## Dependencies
 
@@ -74,8 +74,8 @@ eunomai-business follows the same rules itself. Its whole dependency tree is loc
 younger than two weeks unless it fixes a vulnerability). Users' computers install exactly that tree with
 `uv run --frozen`, which checks every package against the hash recorded in the lock and refuses a mismatch,
 downloads with the operating system's certificate store, and ignores uv's configuration files on the computer.
-Outside that tree: a test tool used only on developers' computers, and a package installed only in web
-browsers. Every day, a workflow applies these rules to the tree and proposes the result as a pull request.
+Outside what a computer installs: a test tool used only on developers' computers, and a package installed only
+in web browsers. Every day, a workflow applies these rules to the tree and proposes the result as a pull request.
 
 ## When the connector stops
 
@@ -85,7 +85,9 @@ Whenever a situation is not certain, the connector does not guess ([decision 6](
 - IT gets a report (workspace, repository, version, files involved, connector version; never tokens) and, when
   `support_email` is set, the user gets an e-mail link with that report already written;
 - an unexpected error is handled the same way: the user never sees a technical error;
-- an unreachable server is not a case for IT: the user is asked to check the network or VPN.
+- an unreachable server is not a case for IT: the user is asked to check the network or VPN;
+- a mistake in how Claude called a tool (not signed in yet, a name that is not allowed) comes back as `error`, for
+  Claude to correct; it is never shown to the user.
 
 ## Between Claude's sandbox and the computer
 

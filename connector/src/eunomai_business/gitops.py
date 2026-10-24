@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import ssl
 import threading
 import time
@@ -25,6 +26,7 @@ from dulwich import porcelain
 from dulwich.client import get_transport_and_path
 from dulwich.config import ConfigFile, StackedConfig
 from dulwich.diff_tree import tree_changes
+from dulwich.errors import HangupException
 from dulwich.graph import can_fast_forward, find_merge_base
 from dulwich.merge import recursive_merge
 from dulwich.object_store import iter_tree_contents
@@ -475,12 +477,18 @@ def _proposal_for(origin: str, current: dict, version: str) -> dict | None:
     """The latest pull request of a version: number, whether it was merged, and the commit it proposed.
     None when the hosting cannot tell; the caller then relies on the history alone."""
     api, headers = _api(origin, current)
+    mine = []
     try:
-        with auth.http_client() as client:
-            response = client.get(f"{api}/pulls", headers=headers, params={"state": "all", "limit": 50})
-        if response.status_code != 200:
-            return None
-        mine = [p for p in response.json() if (p.get("head") or {}).get("ref") == version]
+        with auth.http_client() as client:  # most recently updated first; a version's proposal is recent
+            for page in range(1, 6):
+                response = client.get(f"{api}/pulls", headers=headers,
+                                      params={"state": "all", "sort": "recentupdate", "limit": 50, "page": page})
+                if response.status_code != 200:
+                    return None
+                batch = response.json()
+                mine += [p for p in batch if (p.get("head") or {}).get("ref") == version]
+                if mine or len(batch) < 50:
+                    break
     except Exception:
         return None
     if not mine:
@@ -539,8 +547,8 @@ def _network(call):
     """Run a server call; an unreachable server is the user's network, not a problem for IT."""
     try:
         return call()
-    except (OSError, urllib3.exceptions.HTTPError) as exc:
-        raise Unreachable() from exc
+    except (ConnectionError, TimeoutError, socket.gaierror, urllib3.exceptions.HTTPError, HangupException) as exc:
+        raise Unreachable() from exc  # not every OSError: a local disk problem is not the network
 
 
 def _backup(repo: Repo, *branches: str) -> str:

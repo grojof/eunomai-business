@@ -54,7 +54,7 @@ python tools\build.py                        # -> dist\eunomai-business.zip (dia
 2. *Customize → Plugins → Upload plugin* → `dist\eunomai-business.zip`.
 3. Make sure Cowork tasks run **on this computer**, not in the cloud.
 
-## 6 · Validate the setup (H1–H4, H6)
+## 6 · Validate the setup (H1–H4, H6, H9)
 
 New Cowork task:
 

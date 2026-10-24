@@ -33,7 +33,7 @@ language the user writes in; keep tool names, hypothesis numbers and error texts
 |---|---|---|
 | H1 | The plugin's local connector runs on the host computer, not in a sandbox VM | step 1: host and OS |
 | H2 | It reaches internal HTTPS hosts and trusts the internal CA through the OS certificate store | step 2 |
-| H3 | It starts with no per-user setup: `uv` found, `${CLAUDE_PLUGIN_ROOT}` expanded | the tools exist; `expansion_ok` |
+| H3 | It starts with no per-user setup: `uv` found, `${CLAUDE_PLUGIN_ROOT}` expanded, the locked packages installed | the tools exist; `expansion_ok` |
 | H4 | Sign-in works with every provider: browser, loopback redirect, no secret, tokens stored in the per-user store | step 3 ends `signed_in` for each provider |
 | H5 | The stored sign-in is reused (new task, Desktop restart, refresh after expiry) | step 4 and later runs |
 | H6 | Plugin hooks run in Cowork, on the host, and with which shell | step 5 |
