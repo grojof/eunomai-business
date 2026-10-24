@@ -28,12 +28,13 @@ from dulwich.config import ConfigFile, StackedConfig
 from dulwich.diff_tree import tree_changes
 from dulwich.errors import HangupException
 from dulwich.graph import can_fast_forward, find_merge_base
+from dulwich.index import validate_path, validate_path_element_default, validate_path_element_ntfs
 from dulwich.merge import recursive_merge
 from dulwich.object_store import iter_tree_contents
 from dulwich.objects import Commit
 from dulwich.repo import Repo
 
-from . import auth, data_dir
+from . import auth, data_dir, guard
 from .support import NeedsIT, Unreachable
 
 # Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
@@ -51,7 +52,13 @@ _ALWAYS_PROTECTED = {"main", "master"}
 # nothing written there (filters, hooksPath, fsmonitor, includes...) can make this host process run a command.
 _SAFE_CORE = {b"repositoryformatversion", b"filemode", b"bare", b"logallrefupdates", b"ignorecase",
               b"symlinks", b"precomposeunicode", b"autocrlf"}
-_SAFE_SECTIONS = {b"remote": {b"url", b"fetch"}, b"branch": {b"remote", b"merge"}}
+# Inert notes editors add to a branch (VS Code's merge base, its pull request link, a description) are accepted.
+_SAFE_SECTIONS = {b"remote": {b"url", b"fetch"},
+                  b"branch": {b"remote", b"merge", b"description", b"vscode-merge-base", b"github-pr-owner-number"}}
+_CONTEXT_LIMIT = 20_000  # characters of the project's context handed to Claude
+# A prototype opens in the user's browser: it must say, itself, that it loads nothing from other sites.
+_PROTOTYPE = re.compile(r"(^|/)openspec/changes/.+/prototype/[^/]+\.html?$", re.IGNORECASE)
+_CSP = re.compile(r"<meta[^>]+http-equiv=[\"']?content-security-policy[\"']?[^>]*default-src\s+'none'", re.IGNORECASE)
 
 
 def root() -> Path:
@@ -64,6 +71,8 @@ def root() -> Path:
 
 
 _WINDOWS_RESERVED = re.compile(r"^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$", re.IGNORECASE)
+# Characters Windows does not allow in names, and names it silently trims (a trailing dot or space).
+_WINDOWS_BAD = re.compile(r'[<>:"|?*\\\x00-\x1f]|[. ]$')
 
 
 def _folder(workspace: str) -> Path:
@@ -381,9 +390,22 @@ def workspaces() -> dict:
     return {"root": str(root()), "workspaces": found}
 
 
+def _status_of(repo: Repo, **options):
+    """porcelain.status, with a link to another folder inside the workspace turned into a stop: dulwich fails on it,
+    and the connector never follows it."""
+    try:
+        return porcelain.status(repo, **options)
+    except ValueError as exc:
+        if "subpath" not in str(exc):
+            raise
+        raise NeedsIT("This workspace contains a link to another folder, so the connector stopped to keep your work "
+                      "safe.", "a link to another folder inside the workspace",
+                      {"Folder": repo.path, "Detail": str(exc)}) from exc
+
+
 def status(workspace: str) -> dict:
     with _repo(workspace) as repo:
-        st = porcelain.status(repo, untracked_files="all")
+        st = _status_of(repo, untracked_files="all")
         staged = {kind: _text(paths) for kind, paths in st.staged.items() if paths}
         changed = _text(st.unstaged) + _text(st.untracked)
         return {"workspace": workspace, "branch": _branch(repo), "head": _head(repo), "staged": staged,
@@ -415,24 +437,133 @@ def branch(workspace: str, name: str) -> dict:
 
 @_one_at_a_time
 def save(workspace: str, message: str) -> dict:
-    """Save point: stage every change (new, modified, deleted) and commit as the signed-in git user."""
+    """Save point: stage every change (new, modified, deleted) and commit as the signed-in git user. Never carries
+    the project's context, the repository's configuration or a file Windows would run (guard.py): the first two are
+    put back as they were, the last stops the save, and the tree actually committed is checked again."""
     if not (message or "").strip():
         raise ValueError("a save point needs a message")
     current = _git_session()
     with _repo(workspace) as repo:
         if _branch(repo) is None or _branch(repo) in _protected(repo):
             raise PermissionError("create a version first: save points never go straight to the main branch")
+        parent = _ref(repo, b"HEAD")
         before = status(workspace)
+        changed = sorted({*before["untracked"], *before["unstaged"], *sum(before["staged"].values(), [])})
+        _check_paths(repo, changed)
+        top = Path(repo.path)
+        executables = [path for path in changed if guard.kind(path) == "executable" and (top / path).exists()]
+        if executables:  # removing one is fine
+            raise PermissionError(f"not saved: {', '.join(executables)} would run on the user's computer with a "
+                                  "double click; remove them, the work is tried inside the sandbox")
+        unsealed = [path for path in changed if _PROTOTYPE.search(path) and (top / path).is_file()
+                    and not (top / path).is_symlink()
+                    and not _CSP.search((top / path).read_text(encoding="utf-8", errors="replace"))]
+        if unsealed:
+            raise PermissionError(f"not saved: {', '.join(unsealed)} needs, in its <head>, <meta http-equiv="
+                                  "\"Content-Security-Policy\" content=\"default-src 'none'; style-src "
+                                  "'unsafe-inline'; script-src 'unsafe-inline'; img-src data:\">, so the prototype "
+                                  "loads nothing from other sites")
+        restored = _restore(repo, [path for path in changed if guard.kind(path) in ("context", "config")])
         porcelain.add(repo)  # no paths: new and modified files from the repository root
-        st = porcelain.status(repo)
+        st = _status_of(repo)
         if not any(st.staged.values()) and not st.unstaged:
-            return {"workspace": workspace, "saved": False, "reason": "nothing changed"}
+            return {"workspace": workspace, "saved": False, "reason": "nothing changed",
+                    **({"restored": restored} if restored else {})}
         # all=True also takes modified and deleted tracked files, like `git commit -a`
         sha = porcelain.commit(repo, message=message.strip().encode(), author=_author(current),
                                committer=_author(current), all=True, no_verify=True)
+        _check_saved(repo, parent, sha)
         return {"workspace": workspace, "saved": True, "branch": _branch(repo), "commit": sha.decode()[:12],
-                "files": sorted({*before["untracked"], *before["unstaged"], *sum(before["staged"].values(), [])}),
+                "files": [path for path in changed if path not in restored],
+                **({"restored": restored} if restored else {}),
                 "crlf_in_changed_files": before["crlf_in_changed_files"]}
+
+
+def _valid(path: str) -> bool:
+    """A repository path that stays inside the workspace on any file system: no "..", no drive or absolute path,
+    no name Windows forbids or trims (streams, trailing dots or spaces, device names, short names of .git)."""
+    raw = path.encode()
+    names_ok = all(part and not _WINDOWS_BAD.search(part) and not _WINDOWS_RESERVED.match(part)
+                   for part in path.split("/"))
+    return bool(path) and not path.startswith("/") and names_ok \
+        and validate_path(raw, validate_path_element_default) and validate_path(raw, validate_path_element_ntfs)
+
+
+def _check_paths(repo: Repo, changed: list[str]) -> None:
+    """Every path in the change and in the index must be valid: the sandbox can write the index too."""
+    invalid = sorted(p for p in {*changed, *(e.decode("utf-8", "replace") for e in repo.open_index())}
+                     if not _valid(p))
+    if invalid:
+        raise NeedsIT("This workspace has a file name the connector does not accept, so nothing was saved. Your work "
+                      "is safe on this computer.", "a path that leaves the workspace or is not valid on Windows",
+                      {"Folder": repo.path, "Paths": ", ".join(invalid[:20])})
+
+
+def _check_saved(repo: Repo, parent: bytes | None, saved: bytes) -> None:
+    """The tree actually committed, against the guard: anything that slipped in between the checks and the commit
+    (a file written meanwhile) undoes the save point."""
+    found = set()
+    old_tree = repo[parent].tree if parent else None
+    for change in tree_changes(repo.object_store, old_tree, repo[saved].tree):
+        for entry, is_new in ((change.old, False), (change.new, True)):
+            if entry is None or entry.path is None:
+                continue
+            path = entry.path.decode("utf-8", "replace")
+            kind = guard.kind(path)
+            if not _valid(path) or kind in ("context", "config") or (kind == "executable" and is_new):
+                found.add(path)
+    if found:
+        name = _branch(repo)
+        repo.refs[f"refs/heads/{name}".encode()] = parent
+        porcelain.reset(repo, "mixed", parent)  # the files stay on disk; only the save point is undone
+        raise NeedsIT("A file changed while saving, so nothing was saved. Your work is safe on this computer.",
+                      "a protected or executable file reached the save point", {"Folder": repo.path,
+                                                                               "Paths": ", ".join(sorted(found))})
+
+
+def _restore(repo: Repo, paths: list[str]) -> list[str]:
+    """Put files only IT changes back as the last save point has them (removed if it did not have them), and take
+    the others out of the index, so a save never carries them. Matched without regard to case, as Windows does."""
+    if not paths:
+        return []
+    head = _ref(repo, b"HEAD")
+    kept = {}
+    if head:
+        for entry in iter_tree_contents(repo.object_store, repo[head].tree):
+            path = entry.path.decode("utf-8", "replace")
+            if guard.kind(path) in ("context", "config"):
+                kept[path.lower()] = (path, entry.sha)
+    index = repo.open_index()
+    top = Path(repo.path)
+    for path in paths:
+        original = kept.get(path.lower())
+        target = original[0] if original else path
+        _check_no_links(repo, target)
+        file = top / target
+        if file.is_symlink():
+            file.unlink()  # a link is removed as a link, never followed
+        if original:
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(repo[original[1]].data)
+        else:
+            file.unlink(missing_ok=True)
+        if path.encode() in index and (not original or path != target):
+            del index[path.encode()]
+    index.write()
+    return paths
+
+
+def _check_no_links(repo: Repo, path: str) -> None:
+    """The sandbox can plant links: a folder on the way that leads elsewhere would make this host process write or
+    delete outside the workspace."""
+    top = Path(repo.path)
+    parts = Path(path).parts
+    folders = [top.joinpath(*parts[:n]) for n in range(1, len(parts))]
+    outside = not (top / path).resolve().is_relative_to(top.resolve())
+    if outside or any(f.is_symlink() or f.is_junction() for f in folders):
+        raise NeedsIT("This workspace has a link to another folder where only IT's files belong, so nothing was "
+                      "saved. Your work is safe on this computer.", "a link on the path of a protected file",
+                      {"Folder": repo.path, "Path": path})
 
 
 @_one_at_a_time
@@ -516,8 +647,15 @@ def pull_request(workspace: str, title: str, description: str = "") -> dict:
         base = info.json().get("default_branch") or "main"
         response = client.post(f"{api}/pulls", headers=headers,
                                json={"head": name, "base": base, "title": title.strip(), "body": description})
-    if response.status_code == 409:
-        return {"workspace": workspace, "created": False, "head": name, "base": base,
+    if response.status_code == 409:  # already open: the version just sent updates it; bring its text up to date
+        existing = _proposal_for(origin, current, name)
+        updated = False
+        if existing and existing.get("state") == "open" and existing.get("number"):
+            with auth.http_client() as client:
+                patched = client.patch(f"{api}/pulls/{existing['number']}", headers=headers,
+                                       json={"title": title.strip(), "body": description})
+            updated = patched.status_code in (200, 201)
+        return {"workspace": workspace, "created": False, "updated": updated, "head": name, "base": base,
                 "reason": "a pull request for this version is already open"}
     if response.status_code != 201:
         raise RuntimeError(f"git server answered {response.status_code}: {response.text[:300]}")
@@ -533,7 +671,7 @@ def _ref(repo: Repo, ref: bytes) -> bytes | None:
 
 
 def _dirty(repo: Repo) -> bool:
-    st = porcelain.status(repo, untracked_files="all")
+    st = _status_of(repo, untracked_files="all")
     return bool(any(st.staged.values()) or st.unstaged or st.untracked)
 
 
@@ -734,10 +872,45 @@ def update(workspace: str) -> dict:
                                                   "your work is kept."])}
 
 
+def folder(workspace: str) -> Path:
+    """A registered workspace's folder."""
+    with _repo(workspace) as repo:
+        return Path(repo.path)
+
+
 def origin(workspace: str) -> str | None:
     """The repository a workspace was cloned from."""
     with _repo(workspace) as repo:
         return _origin(repo)
+
+
+@_one_at_a_time
+def project_context(workspace: str) -> dict | None:
+    """The project's context as the main branch on the server has it now (AGENTS.md, else CLAUDE.md, at the
+    repository's root): what IT wrote, never a copy edited in the folder or a reference rewritten in .git. None when
+    the project has none."""
+    current = _git_session()
+    with _repo(workspace) as repo:
+        main = _main_branch(repo)
+        if not main:
+            return None
+        origin = _registered_origin(repo, workspace)
+        _check_host(origin, current)
+        client, path = get_transport_and_path(origin, **_remote(current))
+        fetched = _network(lambda: client.fetch(path.encode(), repo))  # the server says which commit is main
+        tip = fetched.refs.get(f"refs/heads/{main}".encode())
+        if not tip:
+            return None
+        tree = repo[repo[tip].tree]
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            try:
+                _, sha = tree.lookup_path(repo.object_store.__getitem__, name.encode())
+            except KeyError:
+                continue
+            text = repo[sha].data.decode("utf-8", errors="replace")
+            return {"file": name, "from": f"the {main} branch on the server", "text": text[:_CONTEXT_LIMIT],
+                    "truncated": len(text) > _CONTEXT_LIMIT}
+        return None
 
 
 def proposal_state(workspace: str) -> dict | None:

@@ -1,17 +1,15 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          { "type": "command", "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --native-tls --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-hook", "timeout": 60 }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
-        "matcher": "*",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__workspace__bash",
         "hooks": [
-          { "type": "command", "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --native-tls --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-hook", "timeout": 30 }
+          {
+            "type": "command",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --native-tls --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard",
+            "timeout": 60,
+            "onFailure": "block"
+          }
         ]
       }
     ]

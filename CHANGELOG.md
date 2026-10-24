@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **Lessons from the first business-user test:**
+  - nothing runs on the user's computer: the specialist never writes launchers or gives commands, and a save point
+    refuses files Windows runs on a double click; users try a clickable prototype instead of static mockups;
+  - a file guard hook in every build denies writing the project's context (`AGENTS.md`, `CLAUDE.md`), Claude's
+    configuration and executables, and `version_save` enforces it on the host;
+  - whose context counts: new settings `organization_context` and `organization_skills`, and the project's
+    context read from the main branch on the server, in `specialist_settings`;
+  - `dependency_audit` checks every pinned package, direct and indirect, and finds packages left out of the list;
+    a source repository is any existing https link the package labels as its code (openpyxl on heptapod);
+  - the specialist sizes the journey to the request, asks one question at a time, claims nothing without fresh
+    evidence, never bends a test to the code, saves per task, checks that its documents agree, and reports the
+    skills it used and their conflicts with its rules;
+  - new skill `review-skills`, for IT to review the skills and plugins users have alongside eunomai-business;
+  - notes VS Code adds to a branch in `.git/config` no longer stop the workspace;
+  - the connector's data folder under Claude Desktop installed as a Windows package is documented.
+- **Independent audit of those changes (security, skills, coherence, decisions):**
+  - a save can no longer write or delete outside the workspace through paths planted in the index or a crafted
+    tree, links, case variants or names Windows trims; the tree actually committed is checked again;
+  - the project's context is read from the server at the moment it is asked, not from references in `.git`;
+  - the guard blocks when it cannot run, covers configuration and continuous integration folders in the shell,
+    applies its context rules only inside workspaces, and refuses more Windows executables;
+  - the dependency audit refuses other indexes, local paths, unpinned includes, lockfiles version 1 and npm
+    entries from elsewhere; the source check never contacts private addresses or follows redirects;
+  - every pull request ends with the connector's own dependency audit; a pull request already open gets its
+    description updated;
+  - prototypes are saved only with a Content-Security-Policy that loads nothing from other sites;
+  - the specialist's description, start order, stage table and no-code path were corrected.
 - **Coherence fixes (independent review):** network errors narrowed (a local disk problem is not "check the
   network"); the proposal lookup pages through recent pull requests; IT reports name the build; the specialist
   handles a failed sign-in, an unknown proposal and the recommended version; the daily workflow runs upgraded
@@ -41,7 +68,7 @@
 - **Compliance page** for audits: data protection, information-security controls, supply chain and licenses,
   and what remains the organization's responsibility.
 - **Guard probe (diagnostics):** the diagnostic hook denies two test markers, as a JSON answer and as exit code 2,
-  and logs input field names and timings, to validate the planned file guard (H9).
+  and logs input field names and timings, to validate the file guard (H9).
 
 ## 0.1.0 · 2026-10-24
 

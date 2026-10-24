@@ -38,7 +38,7 @@ project and its git server. See [project-practices.md](project-practices.md).
 | The main branch is never sent; nothing is ever force-sent | The shared history cannot be overwritten from a computer |
 | Pull requests only from a version (branch) | Same rule, from the other side |
 | No versions until the repository has its main branch | A version must start from the shared history, not from nothing |
-| Workspace names are plain folder names, under `workspaces_root` only | No path tricks (`..`, absolute paths) |
+| Workspace names are plain folder names, under `workspaces_root` only, never a Windows device name (`con`, `nul`, `com1`...) | No path tricks (`..`, absolute paths) |
 | Version names: parts of letters, digits and `. _ -` separated by `/`, each starting with a letter or digit, none ending in `.` or `.lock`, no `..` | Only names git accepts |
 
 ## Bringing the latest changes
@@ -61,7 +61,7 @@ project and its git server. See [project-practices.md](project-practices.md).
 |---|---|
 | Known vulnerability (OSV) | Blocked, always; no exception lifts it |
 | Yanked, deprecated or a pre-release | Blocked |
-| No source repository published | Blocked, unless IT made an exception |
+| No source repository published, or the one published does not answer | Blocked, unless IT made an exception. A known code host (GitHub, GitLab, Codeberg, Bitbucket, sr.ht, `git.*`) or any https link the package labels as its code counts, if it exists |
 | No release in three years, or marked inactive | Blocked, unless IT made an exception |
 | Released less than two weeks ago | Blocked, unless every older version checked (the ten newest) is vulnerable: then the fix wins |
 | No release older than two weeks at all | Blocked: the package is too new to trust |
@@ -69,6 +69,26 @@ project and its git server. See [project-practices.md](project-practices.md).
 
 The newest version that passes is recommended, with its runtime requirements. The specialist uses only what the
 check allows.
+
+`dependency_audit` applies the same rules to every package a workspace pins, direct and indirect, in
+`requirements*.txt` or `package-lock.json` (version 2 or later), outside environments and archives and never
+through a link. It blocks:
+
+- a requirement that is not an exact pin from the public index: ranges, URLs, local paths, other indexes or
+  `--find-links`, and any `-r`/`-c` that does not name another pinned list in the same folder;
+- an npm entry not downloaded from the public registry under its own name;
+- a list that pins nothing, or leaves out a package a pinned one requires (Python; an npm lockfile is complete by
+  construction). What a package requires only on some platforms or Python versions is listed apart, not blocked;
+- declared packages (`pyproject.toml`, `package.json`...) without a pinned list.
+
+A project that installs no packages has nothing to check. Lists without hashes are noted. The specialist runs the
+audit before delivering, and the connector runs it again itself and appends the result to every pull request, so
+what IT reads there was not written by the model.
+
+The source check is a signal of origin, not proof: a link that answers says nothing about what the package
+contains. It never follows a redirect, never contacts an address that is not on the public internet, and never
+reads the page. IT's own continuous integration (for example OSV-Scanner on every pull request) is the
+complementary check on the server ([project practices](project-practices.md#checks-on-the-server)).
 
 eunomai-business follows the same rules itself. Its whole dependency tree is locked (`connector/uv.lock`, nothing
 younger than two weeks unless it fixes a vulnerability). Users' computers install exactly that tree with
@@ -97,15 +117,16 @@ computer itself. These barriers keep that from becoming a way to run commands on
 | Barrier | Why |
 |---|---|
 | All git hooks are disabled: the connector empties the repository's hook table before any operation | dulwich runs `post-commit` even when told not to verify; any hook written into `.git/hooks` would run outside the sandbox |
-| Only known `.git/config` entries are accepted: `core` (format, file mode, bare, ref logs, case, symlinks, Unicode, `autocrlf`), `remote.<name>.url/fetch`, `branch.<name>.remote/merge`. Anything else stops the operation | Filters, `hooksPath`, `fsmonitor`, includes and submodules can run commands or fetch code |
+| Only known `.git/config` entries are accepted: `core` (format, file mode, bare, ref logs, case, symlinks, Unicode, `autocrlf`), `remote.<name>.url/fetch`, `branch.<name>.remote/merge`, and the inert notes editors add to a branch (`description`, `vscode-merge-base`, `github-pr-owner-number`). Anything else stops the operation | Filters, `hooksPath`, `fsmonitor`, includes and submodules can run commands or fetch code |
 | The configuration is checked once per operation and then pinned: what is written to `.git/config` afterwards is not read | dulwich re-reads the configuration on every call; a filter written between the check and the use would run |
 | Content is never filtered: no filter driver, no line-ending conversion, no LFS, whatever `.gitattributes` says | A filter is a command; files go in and out exactly as they are |
 | The repository's address and main branch come from the connector's own registry, recorded at clone time; an address changed in `.git/config` stops the operation | Otherwise the sandbox could send the user's work to another repository |
 | A repository that points to another folder (`commondir`, `alternates`) is refused | Reads and writes must stay in the workspace |
-| One operation at a time per workspace, across connector processes | Two updates or saves at once could undo each other |
+| One operation at a time per workspace, across connector processes: creating a version, saving, sending, bringing the latest changes and reading the project's context | Two updates or saves at once could undo each other |
 | The computer's Git configuration (system and user) is ignored | Same behaviour with or without Git installed; a global filter cannot apply ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)) |
 | Each clone gets `core.autocrlf=false` | A Git on the computer, if any, sees the files exactly as the connector does |
 | Clones never fetch submodules (dulwich's default, not exposed as an option) | A submodule could bring code from another server |
+| A save point never carries the project's context (`AGENTS.md`, `CLAUDE.md`), Claude's configuration (`.claude/`, `.mcp.json`) or continuous integration (`.gitea/`, `.github/`...): they are put back as the last save point has them, regardless of case and never through a link. Adding or changing a file Windows runs on a double click (`.bat`, `.ps1`, `.lnk`...) stops the save; removing one is allowed. Every path must be valid on Windows and stay in the workspace, in the index too. The tree actually committed is checked again | The context steers Claude and only IT changes it; integration runs on IT's servers; the workspace folder is on the user's computer, where a double click would run what the sandbox wrote; the sandbox can write the index and race the save |
 
 ## What eunomai-business does not protect
 
@@ -116,9 +137,14 @@ Said plainly, so nobody relies on it for these:
   ([project-practices.md](project-practices.md)); the git server enforces them.
 - **Branch protection on the server.** The connector never sends the main branch, but only the server stops
   anyone else (another tool, a person with Git) from doing so. Protect it on the server.
-- **Claude's own file tools and shell.** They are governed by Cowork and its permissions, not by this plugin
-  (planned: file guard hooks, see [architecture.md](architecture.md#hooks)). Where code may be written, and that
-  dependencies go through `dependency_check`, is followed by the specialist; the planned guard will enforce it.
+- **Claude's own file tools and shell, beyond the file guard.** The guard hook denies writing executables, the
+  project's context and configuration ([architecture.md](architecture.md#hooks)), only best effort in the shell;
+  everything else is governed by Cowork and its permissions. Where code may be written is followed by the
+  specialist, not enforced.
+- **Script sources Windows can run.** A `.js` file opens in Windows Script Host on a double click, and a `.py`
+  file in Python where the launcher is installed; web applications need them, so they are not refused. Disable
+  Windows Script Host on business users' computers (a standard hardening policy), and keep application control
+  (AppLocker, WDAC) in place.
 - **A program running as the same Windows user.** DPAPI stops other users, not malware running as you.
 - **Sign-out on the server.** Signing out deletes the tokens from the computer; it does not revoke them on the
   server. See [data-on-computers.md](data-on-computers.md#uninstalling).

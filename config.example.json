@@ -23,6 +23,14 @@
     }
   },
   "dependency_exceptions": [],
+  "_organization": "What the specialist should know about the organization (what it does, systems that already exist), and which of its skills to use for what. These come before anything personal in a user's session. See docs/configuration.md",
+  "organization_context": "Example Corp makes industrial equipment. Existing systems: an ERP for orders and stock, and an HR system for people and absences.",
+  "organization_skills": [
+    {
+      "skill": "example-brand:web-pages",
+      "use_for": "the look of web pages and applications"
+    }
+  ],
   "providers": {
     "directory": {
       "authorize_url": "https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/authorize",

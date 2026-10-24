@@ -200,8 +200,14 @@ class FakeServer:
                     return reply("404 Not Found", {"message": "head not found"})
                 number = len(self.pulls) + 1
                 self.pulls.append({"repo": name, "number": number, "state": "open", "merged": False,
-                                   "head": {"ref": body["head"], "sha": head.decode()}, "base": body["base"]})
+                                   "head": {"ref": body["head"], "sha": head.decode()}, "base": body["base"],
+                                   "title": body["title"], "body": body.get("body", "")})
                 return reply("201 Created", {"number": number, "html_url": f"{self.url}/me/{name}/pulls/{number}"})
+            if "/pulls/" in path and method == "PATCH":
+                body = json.loads(env["wsgi.input"].read(int(env["CONTENT_LENGTH"])))
+                pull = next(p for p in self.pulls if p["repo"] == name and p["number"] == int(path.split("/")[-1]))
+                pull.update({k: body[k] for k in ("title", "body") if k in body})
+                return reply("201 Created", {"number": pull["number"]})
             if path.endswith("/pulls"):
                 return reply("200 OK", [{k: v for k, v in p.items() if k != "repo"} for p in self.pulls
                                         if p["repo"] == name])

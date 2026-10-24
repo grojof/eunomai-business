@@ -12,15 +12,20 @@ related: [barriers.md, configuration.md]
 Everything eunomai-business creates, where it lives, whether it is sensitive, and what is left after
 uninstalling. Paths are for Windows; *measured* means observed on a real computer on the date given.
 
+**`<data>`** below is the connector's folder. It is `%LOCALAPPDATA%\eunomai-business`, but Claude Desktop
+installed as a Windows package (MSIX, as from the Microsoft Store) redirects it for the processes it starts to
+`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\eunomai-business` (measured 2026-10-24,
+`Claude_pzs8sxrjxfjjc`). Folders outside `AppData`, such as the workspaces, are not redirected.
+
 ## On the user's computer
 
 | What | Where | Content | Sensitive | Left after uninstalling the plugin |
 |---|---|---|---|---|
-| The plugin | Managed by Claude Desktop (measured 2026-10-24: `%LOCALAPPDATA%\Claude-Data\claude_<id>\rpm\...\plugin_<id>`) | The zip's files: skills, connector source, and hooks when diagnostics are on | No | Claude Desktop's business; not yet measured |
-| Sign-in records | `%LOCALAPPDATA%\eunomai-business\signin-<hash>.dpapi`, one per provider (measured; the hash comes from the provider name and client ID) | Access token, refresh token, expiry times. Encrypted with DPAPI for that Windows user | **Yes** | **Yes**: delete them (below) |
-| Workspace registry | `%LOCALAPPDATA%\eunomai-business\workspaces.json` | Each workspace's folder, repository address and main branch, so the connector protects them | No | **Yes** |
-| Operation locks | `%LOCALAPPDATA%\eunomai-business\locks\` | Empty files that exist only while an operation runs | No | Normally empty |
-| Hook log (only with `diagnostics: true`) | `%LOCALAPPDATA%\eunomai-business\hooks.log`, and `hooks.log.1` after rotation (measured) | One JSON line per tool call: time, event, tool name, the names (not values) of its input fields, launch and run times, computer name, OS, shell, working folder, plugin folder, session ID. No file contents, no tokens | Low: paths include the Windows user name | **Yes**; rotated at 1 MB, so at most about 2 MB (a short session wrote 41 KB) |
+| The plugin | Managed by Claude Desktop (measured 2026-10-24: `%LOCALAPPDATA%\Claude-Data\claude_<id>\rpm\...\plugin_<id>`) | The zip's files: skills, connector source, the file guard hook, and measurement hooks when diagnostics are on | No | Claude Desktop's business; not yet measured |
+| Sign-in records | `<data>\signin-<hash>.dpapi`, one per provider (measured; the hash comes from the provider name and client ID) | Access token, refresh token, expiry times. Encrypted with DPAPI for that Windows user | **Yes** | **Yes**: delete them (below) |
+| Workspace registry | `<data>\workspaces.json` | Each workspace's folder, repository address and main branch, so the connector protects them | No | **Yes** |
+| Operation locks | `<data>\locks\` | Empty files that exist only while an operation runs | No | Normally empty |
+| Hook log (only with `diagnostics: true`) | `<data>\hooks.log`, and `hooks.log.1` after rotation (measured) | One JSON line per tool call: time, event, tool name, the names (not values) of its input fields, whether a guard-test marker matched, launch and run times, computer name, OS, shell, working folder, plugin folder, session ID. No file contents, no tokens | Low: paths include the Windows user name | **Yes**; rotated at 1 MB, so at most about 2 MB (a short session wrote 41 KB) |
 | Workspaces | `workspaces_root`, default `%USERPROFILE%\eunomai-business-workspaces\<name>` (measured) | Clones of the repositories: the user's work, versions not yet sent included | **As sensitive as the repositories** | **Yes, on purpose**: it is the user's work |
 | Backups before an update | Inside each workspace's `.git`, as `refs/eunomai/backup/<time>/<branch>` | Where each branch was before `workspace_update` moved it | As the workspace | With the workspace |
 | uv | `%USERPROFILE%\.local\bin\uv.exe`, `uvx.exe`, `uvw.exe`; `%LOCALAPPDATA%\uv\uv-receipt.json`; user `PATH` entry (measured) | The uv program, installed per user | No | Yes; it is a separate program |
@@ -35,13 +40,14 @@ Nothing is written to the registry or outside the user's profile, and nothing ne
 
 When the connector stops, the report the user can send to IT contains the workspace's folder and repository,
 the version, its last save point and the main branch, the files involved, the error text for unexpected errors,
-the connector version, the computer's OS and the time. It never contains
+the connector version and build, the computer's OS and the time. It never contains
 tokens. It travels only if the user sends the e-mail.
 
 ## Calls to public services
 
-`dependency_check` asks PyPI, npm and OSV (`api.osv.dev`) about packages. It sends package names and versions
-only; nothing about the user or the project.
+`dependency_check` and `dependency_audit` ask PyPI, npm and OSV (`api.osv.dev`) about packages, and open the
+web address of each package's source repository to check it exists. They send package names and versions only;
+nothing about the user or the project.
 
 ## On servers
 
@@ -61,8 +67,9 @@ To leave nothing behind, in this order:
 2. **Sign out:** ask Claude for `sign_out` for each provider. This deletes the local tokens only.
 3. **Revoke on the servers** (the table above) if the tokens must stop working now and not at expiry.
 4. **Uninstall the plugin** in Claude Desktop.
-5. **Delete** `%LOCALAPPDATA%\eunomai-business`. Some Claude Desktop versions redirect it to
-   `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\eunomai-business`; check there too.
+5. **Delete** the connector's folder, `<data>` above: `%LOCALAPPDATA%\eunomai-business` and, with Claude Desktop
+   installed as a Windows package, `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\eunomai-business`.
+   Check both.
 6. **Clean uv's cache** of the connector: `uv cache clean eunomai-business`. If uv is used for nothing else,
    remove uv itself following uv's uninstall guide.
 7. **Delete the workspaces** folder if the work is no longer needed.
