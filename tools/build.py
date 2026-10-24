@@ -23,7 +23,7 @@ CONNECTOR_SRC = ROOT / "connector"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache",
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov")
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies", "projects",
-                   "dependency_exceptions"}
+                   "dependency_exceptions", "organization_context", "organization_skills"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers"} | SPECIALIST_KEYS
 PROVIDER_KEYS = {"authorize_url", "token_url", "client_id", "scopes", "redirect_uri", "userinfo_url", "login_field"}
@@ -56,6 +56,14 @@ def validate_specialist(cfg: dict) -> list[str]:
                 errors.append(f"projects: {url!r} must be an https repository URL")
             if not isinstance(project, dict) or not _strings(project.get("technologies", [])):
                 errors.append(f"projects.{url}: technologies must be a list of names")
+    context = cfg.get("organization_context", "")
+    if not isinstance(context, str) or len(context) > 4000:
+        errors.append("organization_context must be text of at most 4000 characters")
+    skills = cfg.get("organization_skills", [])
+    if not isinstance(skills, list) or not all(
+            isinstance(s, dict) and set(s) == {"skill", "use_for"} and _strings([s["skill"], s["use_for"]])
+            for s in skills):
+        errors.append('organization_skills must be a list of {"skill": "<plugin:skill>", "use_for": "<purpose>"}')
     exceptions = cfg.get("dependency_exceptions", [])
     if not isinstance(exceptions, list):
         errors.append("dependency_exceptions must be a list")
@@ -126,14 +134,24 @@ def _json_text(value) -> str:
     return json.dumps(str(value))[1:-1]
 
 
+def _merge_hooks(folder: Path, diagnostics: bool) -> None:
+    """The file guard always; the measurement hooks only with diagnostics."""
+    extra = folder / "diagnostics.json"
+    if diagnostics:
+        hooks = json.loads((folder / "hooks.json").read_text(encoding="utf-8"))
+        for event, entries in json.loads(extra.read_text(encoding="utf-8"))["hooks"].items():
+            hooks["hooks"].setdefault(event, []).extend(entries)
+        (folder / "hooks.json").write_text(json.dumps(hooks, indent=2) + "\n", encoding="utf-8", newline="\n")
+    extra.unlink()
+
+
 def build(cfg: dict, out_dir: Path) -> Path:
     out, archive_path = out_dir / "eunomai-business", out_dir / "eunomai-business.zip"
     diagnostics = cfg.get("diagnostics", False)
     if out.exists():
         shutil.rmtree(out)
     shutil.copytree(PLUGIN_SRC, out, ignore=IGNORE)
-    if not diagnostics:  # measurement hooks and validation skills ship only when asked for
-        shutil.rmtree(out / "hooks", ignore_errors=True)
+    if not diagnostics:  # validation skills ship only when asked for
         for skill in (out / "skills").glob("validate-*"):
             shutil.rmtree(skill)
 
@@ -167,6 +185,7 @@ def build(cfg: dict, out_dir: Path) -> Path:
         template.with_suffix("").write_text(text, encoding="utf-8", newline="\n")  # LF on every OS
         template.unlink()
 
+    _merge_hooks(out / "hooks", diagnostics)
     archive_path.unlink(missing_ok=True)
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(out.rglob("*")):

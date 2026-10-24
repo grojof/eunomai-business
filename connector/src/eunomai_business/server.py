@@ -123,26 +123,51 @@ def version_send(workspace: str) -> dict:
     return _safe(gitops.push, workspace)
 
 
+def _checks(workspace: str) -> str:
+    """The connector's own checks, appended to every pull request: what IT reads there was not written by Claude."""
+    try:
+        result = deps.audit(gitops.folder(workspace))
+    except support.Unreachable:
+        lines = ["- Dependency audit: could not be run (a registry or OSV did not answer)"]
+    else:
+        listed = ", ".join(result["files"]) or "no pinned list"
+        lines = [f"- Dependency audit: **{result['verdict']}**, {result['packages']} pinned packages ({listed})"]
+        lines += [f"  - {b['package']} {b['version']}: {'; '.join(b['reasons'])}" for b in result["blocked"][:20]]
+        lines += [f"  - {item}" for item in result["not_pinned"][:20]]
+        if result["without_hashes"]:
+            lines.append(f"  - without hashes: {', '.join(result['without_hashes'])}")
+    return "\n\n---\n**Checks by the connector** (not written by the assistant)\n\n" + "\n".join(lines) + "\n"
+
+
 @mcp.tool()
 def version_propose(workspace: str, title: str, description: str = "") -> dict:
-    """Open a pull request that proposes the current version for the main branch. Send it first (version_send)."""
-    return _safe(gitops.pull_request, workspace, title, description)
+    """Open a pull request that proposes the current version for the main branch, or update the description of the
+    one already open. Send it first (version_send). The connector appends its own checks to the description."""
+    return _safe(lambda name, head, body: gitops.pull_request(name, head, body + _checks(name)),
+                 workspace, title, description)
 
 
 # --- the specialist ---------------------------------------------------------------------------------------
 
 def _specialist_settings(workspace: str) -> dict:
     values = settings.load()
-    result = {"docs_language": values["docs_language"], "code_language": values["code_language"]}
+    result = {"docs_language": values["docs_language"], "code_language": values["code_language"],
+              "organization": {"context": values["organization_context"], "skills": values["organization_skills"]}}
     if workspace:
         result["development"] = settings.development(gitops.origin(workspace))
+        try:
+            result["project_context"] = gitops.project_context(workspace)
+        except support.Unreachable:
+            result["project_context"] = {"unavailable": "the server could not be reached; ask again later"}
     return result
 
 
 @mcp.tool()
 def specialist_settings(workspace: str = "") -> dict:
-    """The organization's choices for the specialist: the language of documentation, specifications and code, and,
-    for a workspace, whether code may be written there and with which technologies (empty list: any)."""
+    """The organization's choices for the specialist: languages; the organization's context and the skills it
+    provides for given purposes; and, for a workspace, whether code may be written there, with which technologies
+    (empty list: any), and the project's context as IT keeps it on the main branch. For the work, these come before
+    anything personal in the session."""
     return _safe(_specialist_settings, workspace)
 
 
@@ -152,6 +177,13 @@ def dependency_check(ecosystem: str, package: str, version: str = "") -> dict:
     pre-release, a source repository, recent releases, and at least two weeks old unless it fixes a vulnerability.
     ecosystem: "pypi" or "npm". Without a version it recommends the newest usable one. Use only what it allows."""
     return _safe(deps.check, ecosystem, package, version)
+
+
+@mcp.tool()
+def dependency_audit(workspace: str) -> dict:
+    """Check every package a workspace pins, direct and indirect (requirements*.txt, package-lock.json), by the same
+    rules as dependency_check. A project that installs packages pins all of them; run this before delivering."""
+    return _safe(lambda name: deps.audit(gitops.folder(name)), workspace)
 
 
 # --- diagnostics (only when the build enables them) -----------------------------------------------------

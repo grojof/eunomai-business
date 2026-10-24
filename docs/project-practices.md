@@ -9,8 +9,8 @@ related: [barriers.md]
 
 # Good practices for project repositories
 
-eunomai-business does not write or manage any file in a project. These are recommendations for whoever creates
-and runs a repository that business users work on. They apply to any git hosting (Gitea, GitHub, GitHub
+eunomai-business writes no rule into a project; it only refuses to save the files listed below. These are
+recommendations for whoever creates and runs a repository that business users work on. They apply to any git hosting (Gitea, GitHub, GitHub
 Enterprise, GitLab).
 
 ## Before users join
@@ -72,8 +72,28 @@ Real permissions live on the git server, not on the user's computer:
 - **Changing:** with `main` protected, nothing reaches it without a pull request. To require a specific team's
   review for some folders, use the hosting's code-owner rules (GitHub and GitHub Enterprise: `CODEOWNERS`;
   Gitea: check what your version offers).
-- **Guard rules in Claude** (planned, see [architecture.md](architecture.md#hooks)) help users not to touch what
-  they should not, by mistake. They do not replace the two points above.
+- **The file guard** ([architecture.md](architecture.md#hooks)) keeps business users' work from changing the
+  project's context (`AGENTS.md`, `CLAUDE.md`), Claude's configuration (`.claude/`, `.mcp.json`), continuous
+  integration (`.gitea/`, `.github/`...) and files Windows runs (`.bat`, `.ps1`...): IT changes those through its
+  own pull requests. It prevents mistakes; it does not replace the two points above.
+
+## The project's context
+
+Put an `AGENTS.md` at the root of `main`: what the project is for, who uses it, the domain's words, the systems it
+touches, rules with their source, and what is out of bounds. The specialist reads it from the server at the start
+of every session, before anything personal in the user's session. Keep it short (it is cut at 20,000 characters);
+when the specialist proposes lines for it in a pull request, IT decides.
+
+## Checks on the server
+
+What runs in a user's session is advisory for IT; what runs on the server is not:
+
+- **Continuous integration on every pull request:** the tests, and a vulnerability scan of the pinned dependencies
+  (for example OSV-Scanner).
+- **Workflows from pull requests:** require approval before they run, so a version cannot change what runs on
+  IT's runners with access to secrets.
+- **Protected files:** where the hosting offers it, require IT's review for `AGENTS.md`, `.claude/`, workflow
+  folders and lockfiles (code owners or protected file patterns).
 
 ## Content
 

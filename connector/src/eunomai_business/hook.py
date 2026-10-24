@@ -4,7 +4,7 @@ Only built into the plugin when diagnostics are enabled. On SessionStart it prin
 as context, so the session itself can tell where the hook ran. The log is rotated at 1 MB (one previous file is
 kept); it records the names of a tool's input fields, never their values.
 
-Validation of the planned file guard (H9): a tool whose input mentions a test marker is denied, with a JSON answer
+Validation of the file guard (H9): a tool whose input mentions a test marker is denied, with a JSON answer
 or with exit code 2, the two ways a hook can stop a tool. Nothing else is ever blocked.
 """
 
