@@ -138,6 +138,7 @@ sequenceDiagram
 | Plugin (`plugin/`) | What Claude Desktop installs: the connector's launch settings, plus validation skills and hooks when diagnostics are on. Built per organization from its configuration | Built |
 | Local connector (`connector/`) | A Python program started with `uvx` on the user's computer. Claude talks to it through MCP; it runs outside Claude's sandbox ([decision 1](decisions.md#1--a-local-connector-on-the-users-computer)) | Built |
 | Build tool | `tools/build.py`: organization configuration + source → `eunomai-business.zip`, after validating the configuration | Built |
+| Bill of materials | `tools/sbom.py` → `connector/sbom.cdx.json`, regenerated whenever `connector/uv.lock` changes | Built |
 | Tests | `connector/tests/`: sign-in, workspaces, versions, barriers, build, tool list and the dependency pins, against a fake git server (`uv run --group dev pytest` in `connector/`) | Built |
 
 ## Connector modules

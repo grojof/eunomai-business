@@ -17,6 +17,8 @@
   `allowed_technologies`, `projects`, `dependency_exceptions`; tool `specialist_settings`.
 - **`dependency_check`:** which package version may be used, decided by rules (vulnerabilities, yanked,
   deprecated, origin, activity, age), deny by default.
+- **Software bill of materials:** `connector/sbom.cdx.json` (CycloneDX 1.5) with versions, hashes, licenses and
+  dependencies of every runtime package, shipped inside the plugin; `tools/sbom.py` regenerates it.
 - **Compliance page** for audits: data protection, information-security controls, supply chain and licenses,
   and what remains the organization's responsibility.
 - **Guard probe (diagnostics):** the diagnostic hook denies two test markers, as a JSON answer and as exit code 2,

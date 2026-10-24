@@ -30,7 +30,7 @@ def test_without_diagnostics_no_hooks_and_no_validation_skills(tmp_path):
     assert mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_DIAGNOSTICS"] == "0"
     args = mcp["mcpServers"]["eunomai-business"]["args"]
     assert args[args.index("-c") + 1] == "${CLAUDE_PLUGIN_ROOT}/connector/constraints.txt"
-    assert "connector/constraints.txt" in names
+    assert "connector/constraints.txt" in names and "connector/sbom.cdx.json" in names
 
 
 def hook_command(cfg: dict, tmp_path) -> str:
