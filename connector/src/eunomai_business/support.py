@@ -42,7 +42,9 @@ def clean(text: object, limit: int = 500) -> str:
 def report(error: NeedsIT) -> dict:
     lines = [f"Problem: {error.problem}", ""]
     lines += [f"{key}: {clean(value)}" for key, value in error.details.items()]
-    lines += ["", f"Connector: eunomai-business {_connector_version()}", f"Computer: {platform.platform()}",
+    build = os.environ.get("EUNOMAI_BUILD", "").strip()
+    lines += ["", f"Connector: eunomai-business {_connector_version()}" + (f" (build {build})" if build else ""),
+              f"Computer: {platform.platform()}",
               f"Time: {time.strftime('%Y-%m-%d %H:%M:%S %z')}"]
     text = "\n".join(lines)
     result = {"status": "needs_it", "user_message": error.user_message, "it_report": text}

@@ -16,7 +16,7 @@ uninstalling. Paths are for Windows; *measured* means observed on a real compute
 
 | What | Where | Content | Sensitive | Left after uninstalling the plugin |
 |---|---|---|---|---|
-| The plugin | Managed by Claude Desktop (measured 2026-10-24: `%LOCALAPPDATA%\Claude-Data\claude_<id>\rpm\...\plugin_<id>`) | The zip's files: skills, hooks, connector source | No | Claude Desktop's business; not yet measured |
+| The plugin | Managed by Claude Desktop (measured 2026-10-24: `%LOCALAPPDATA%\Claude-Data\claude_<id>\rpm\...\plugin_<id>`) | The zip's files: skills, connector source, and hooks when diagnostics are on | No | Claude Desktop's business; not yet measured |
 | Sign-in records | `%LOCALAPPDATA%\eunomai-business\signin-<hash>.dpapi`, one per provider (measured; the hash comes from the provider name and client ID) | Access token, refresh token, expiry times. Encrypted with DPAPI for that Windows user | **Yes** | **Yes**: delete them (below) |
 | Workspace registry | `%LOCALAPPDATA%\eunomai-business\workspaces.json` | Each workspace's folder, repository address and main branch, so the connector protects them | No | **Yes** |
 | Operation locks | `%LOCALAPPDATA%\eunomai-business\locks\` | Empty files that exist only while an operation runs | No | Normally empty |

@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -108,6 +109,18 @@ def validate(cfg: dict) -> list[str]:
     return errors
 
 
+def _build_id() -> str:
+    """The source commit (with "+changes" when built from uncommitted files), so IT reports name their build."""
+    try:
+        commit = subprocess.run(["git", "rev-parse", "--short=12", "HEAD"], cwd=ROOT, capture_output=True, text=True,
+                                check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT,
+                               capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return commit + ("+changes" if dirty else "")
+
+
 def _json_text(value) -> str:
     """Value escaped to sit inside a JSON string literal."""
     return json.dumps(str(value))[1:-1]
@@ -141,6 +154,7 @@ def build(cfg: dict, out_dir: Path) -> Path:
                                 separators=(",", ":")),
         "WORKSPACES_ROOT": cfg.get("workspaces_root") or "~/eunomai-business-workspaces",
         "DIAGNOSTICS": "1" if diagnostics else "0",
+        "BUILD": _build_id(),
         "SPECIALIST": json.dumps({k: cfg[k] for k in sorted(SPECIALIST_KEYS) if k in cfg}, separators=(",", ":"),
                                  ensure_ascii=False),
         "SUPPORT_EMAIL": cfg.get("support_email") or "",

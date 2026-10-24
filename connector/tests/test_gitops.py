@@ -33,7 +33,7 @@ def test_user_joins_saves_sends_and_proposes(signed_in, workspaces):
     assert b"\r\n" not in (ws / "README.md").read_bytes()
     assert "autocrlf = false" in (ws / ".git" / "config").read_text()
 
-    gitops.branch("joined", "ana/first")
+    gitops.branch("joined", "draft/first")
     with open(ws / "README.md", "ab") as readme:
         readme.write("Línea añadida: canción, pingüino.\n".encode())
     (ws / "notes").mkdir()
@@ -52,10 +52,10 @@ def test_user_joins_saves_sends_and_proposes(signed_in, workspaces):
     assert sent["pushed"]
 
     proposal = gitops.pull_request("joined", "Proposal", "Made in Cowork")
-    assert proposal["created"] and proposal["base"] == "main" and proposal["head"] == "ana/first"
+    assert proposal["created"] and proposal["base"] == "main" and proposal["head"] == "draft/first"
     assert gitops.pull_request("joined", "Proposal")["created"] is False
 
-    head = bare[bare.refs[b"refs/heads/ana/first"]]
+    head = bare[bare.refs[b"refs/heads/draft/first"]]
     _, sha = tree_lookup_path(bare.__getitem__, head.tree, b"README.md")
     assert "canción, pingüino" in bare[sha].data.decode("utf-8")
     assert head.parents == [bare.refs[b"refs/heads/main"]]

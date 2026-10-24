@@ -81,17 +81,10 @@ left by reading the open change in the repository, so a new task picks up the sa
 
 ## What the organization decides
 
-Set by IT when building the plugin ([configuration](configuration.md#the-specialist)):
-
-- **Languages:** documentation and specifications, and code; technical terms always stay in English.
-- **Where code may be written:** in the projects IT lists, each with its technologies; anywhere only if free
-  development is on (off by default). Without permission, the specialist still analyses, shapes and specifies,
-  and delivers that to IT as a proposal.
-- **Dependency exceptions:** packages IT vetted despite failing the origin or activity rules; never a known
-  vulnerability.
+Languages, where code may be written and with which technologies, and dependency exceptions are set by IT
+when building the plugin ([configuration](configuration.md#the-specialist)). Without permission to write
+code, the specialist still analyses, shapes and specifies, and delivers that to IT as a proposal.
 
 ## To validate
 
-H11 to H14 in [validation](validation/hypotheses.md): the skill takes over on vague requests, visuals reach the
-user, OpenSpec files are written correctly without its command-line tool, and code and tests run in Cowork's
-sandbox.
+Checks H11 to H14 in [validation](validation/hypotheses.md).
