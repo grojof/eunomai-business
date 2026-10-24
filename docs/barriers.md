@@ -53,6 +53,22 @@ project and its git server. See [project-practices.md](project-practices.md).
 | 4 · Decide | Accepted version (in the main branch, or its pull request merged): back to the main branch, the version retired. Open version behind the main branch: combined only if it combines without conflicts, computed before touching any file. On the main branch: fast-forward only |
 | Stop | Conflicts, a version changed elsewhere, a main branch that diverged, files in the way: nothing changes, and IT is told |
 
+## Dependencies
+
+`dependency_check` decides which version of a package may be used, by rules, not by the model. Deny by default:
+
+| Rule | Decision |
+|---|---|
+| Known vulnerability (OSV) | Blocked, always; no exception lifts it |
+| Yanked, deprecated or a pre-release | Blocked |
+| No source repository published | Blocked, unless IT made an exception |
+| No release in three years, or marked inactive | Blocked, unless IT made an exception |
+| Released less than two weeks ago | Blocked, unless every older version is vulnerable: then the fix wins |
+| No answer from the registry or from OSV | Not allowed |
+
+The newest version that passes is recommended, with its runtime requirements. The specialist uses only what the
+check allows.
+
 ## When the connector stops
 
 Whenever a situation is not certain, the connector does not guess ([decision 6](decisions.md#6--the-user-never-resolves-a-technical-problem)):
@@ -86,7 +102,8 @@ Said plainly, so nobody relies on it for these:
 - **Branch protection on the server.** The connector never sends the main branch, but only the server stops
   anyone else (another tool, a person with Git) from doing so. Protect it on the server.
 - **Claude's own file tools and shell.** They are governed by Cowork and its permissions, not by this plugin
-  (planned: file guard hooks, see [architecture.md](architecture.md#hooks)).
+  (planned: file guard hooks, see [architecture.md](architecture.md#hooks)). Where code may be written, and that
+  dependencies go through `dependency_check`, is followed by the specialist; the planned guard will enforce it.
 - **A program running as the same Windows user.** DPAPI stops other users, not malware running as you.
 - **Sign-out on the server.** Signing out deletes the tokens from the computer; it does not revoke them on the
   server. See [data-on-computers.md](data-on-computers.md#uninstalling).

@@ -24,6 +24,7 @@ def test_without_diagnostics_no_hooks_and_no_validation_skills(tmp_path):
     names = zipfile.ZipFile(archive).namelist()
     assert not any(n.startswith("hooks/") for n in names)
     assert not any(n.startswith("skills/validate-") for n in names)
+    assert "skills/specialist/SKILL.md" in names and "skills/specialist/references/specify.md" in names
     assert not any("/tests/" in n for n in names)
     mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
     assert mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_DIAGNOSTICS"] == "0"
@@ -62,6 +63,11 @@ def test_built_text_files_use_lf(tmp_path):
     (lambda c: c["providers"]["git"].update(redirect_uri=c["providers"]["directory"]["redirect_uri"]),
      "same port"),
     (lambda c: c["providers"]["git"].pop("client_id"), "missing client_id"),
+    (lambda c: c.update(docs_language="Spanish"), "docs_language must be a language code"),
+    (lambda c: c.update(free_development="no"), "free_development must be true or false"),
+    (lambda c: c.update(allowed_technologies="Python"), "allowed_technologies must be a list"),
+    (lambda c: c.update(projects={"http://git.example.test/a": {"technologies": []}}), "must be an https"),
+    (lambda c: c.update(dependency_exceptions=[{"package": "pypi:six"}]), 'needs "package"'),
 ])
 def test_configuration_errors_are_reported(change, message):
     cfg = copy.deepcopy(EXAMPLE)

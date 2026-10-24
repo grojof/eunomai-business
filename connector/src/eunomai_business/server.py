@@ -6,7 +6,7 @@ import os
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
-from . import auth, gitops, hook, probe, support
+from . import auth, deps, gitops, hook, probe, settings, support
 
 mcp = MCPServer("eunomai-business", instructions=(
     "The user is not technical. When a tool result has a `user_message`, show that message, in the user's "
@@ -112,6 +112,32 @@ def version_send(workspace: str) -> dict:
 def version_propose(workspace: str, title: str, description: str = "") -> dict:
     """Open a pull request that proposes the current version for the main branch. Send it first (version_send)."""
     return _safe(gitops.pull_request, workspace, title, description)
+
+
+# --- the specialist ---------------------------------------------------------------------------------------
+
+def _specialist_settings(workspace: str) -> dict:
+    values = settings.load()
+    result = {"docs_language": values["docs_language"], "code_language": values["code_language"],
+              "support_email_configured": bool(os.environ.get("EUNOMAI_SUPPORT_EMAIL", "").strip())}
+    if workspace:
+        result["development"] = settings.development(gitops.origin(workspace))
+    return result
+
+
+@mcp.tool()
+def specialist_settings(workspace: str = "") -> dict:
+    """The organization's choices for the specialist: the language of documentation, specifications and code, and,
+    for a workspace, whether code may be written there and with which technologies (empty list: any)."""
+    return _safe(_specialist_settings, workspace)
+
+
+@mcp.tool()
+def dependency_check(ecosystem: str, package: str, version: str = "") -> dict:
+    """Decide whether a package may be used, by rules: no known vulnerability, not yanked, deprecated or a
+    pre-release, a source repository, recent releases, and at least two weeks old unless it fixes a vulnerability.
+    ecosystem: "pypi" or "npm". Without a version it recommends the newest usable one. Use only what it allows."""
+    return _safe(deps.check, ecosystem, package, version)
 
 
 # --- diagnostics (only when the build enables them) -----------------------------------------------------

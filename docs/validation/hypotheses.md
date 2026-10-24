@@ -31,6 +31,11 @@ internet.
 | H8 | Workspaces end to end, as a user joining a repository in use: **a** the connector sees exactly Claude's edits; **b** version, save point and send without Git; **c** text intact on the server (UTF-8, LF); **d** Claude's sandbox and the connector share `.git` without trouble; **e** the version is proposed with a pull request; **f** after the pull request is merged, `workspace_update` brings the user back to the updated main branch on its own | `validate-git` | **a, b, d, e** pass · 2026-10-24: clone of `main`, version, an existing file edited and a new one with accents, no CRLF, save, send and pull request with the connector only; the sandbox shell's `git log` sees the connector's commit and a clean tree. **c** pass: accents and author correct in the pull request, merged. **f** pass: after the merge, `workspace_update` returned to the updated main branch, retired the version and kept a backup |
 | H9 | A PreToolUse hook receives the tool's input (file path, shell command) and a *deny* answer stops the tool, as a JSON answer and as exit code 2; fast enough for every call; works without Git | `validate-setup`, step 6 | Partial · 2026-10-24: both denials stop the tool (file reads and the sandbox shell alike; the hook runs on the host), the control passes, input field names arrive; launch about 150 ms per call. Exit code 2 shows the hook's command line, so the guard will answer in JSON. A computer without Git pending |
 
+| H11 | The `specialist` skill takes over on vague requests in Cowork and keeps the conversation on the journey | A business-user test project | Pending |
+| H12 | Visuals reach the user in Cowork: tables and Mermaid diagrams render, and a mockup (an HTML page in the workspace) opens | Same test | Pending |
+| H13 | OpenSpec files written without its command-line tool follow its format: changes, specs, tasks, archive | Same test; the files read by the OpenSpec tool on a developer's computer | Pending |
+| H14 | Code and tests run in Cowork's sandbox for the allowed technologies, and `dependency_check` decides every package | Same test | Pending |
+
 ## Planned
 
 | # | Must hold | For |
