@@ -85,6 +85,9 @@ def validate(cfg: dict) -> list[str]:
     for name, provider in providers.items():
         if name.startswith("_"):
             continue
+        if not isinstance(provider, dict):
+            errors.append(f"providers.{name} must be an object")
+            continue
         errors += [f"providers.{name}: unknown field {key!r}" for key in provider if not key.startswith("_")
                    and key not in PROVIDER_KEYS]
         errors += [f"providers.{name}: missing {key}" for key in sorted(PROVIDER_REQUIRED - provider.keys())]

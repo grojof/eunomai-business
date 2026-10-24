@@ -71,3 +71,35 @@ def test_provider_with_http_endpoint_is_refused(server, monkeypatch):
     monkeypatch.setenv("EUNOMAI_PROVIDERS", json.dumps({"git": provider}))
     with pytest.raises(ValueError, match="not HTTPS"):
         auth.start("git", open_browser=False)
+
+
+def test_a_refused_refresh_means_signing_in_again(signed_in):
+    cfg = auth._config("git")
+    record = store.load(cfg["store_key"])
+    record["expires_at"] = time.time() - 1
+    store.save(cfg["store_key"], record)
+    signed_in.reject_refresh = True
+    try:
+        assert auth.whoami("git") == {"provider": "git", "signed_in": False}
+        assert store.load(cfg["store_key"]) is None
+    finally:
+        signed_in.reject_refresh = False
+
+
+def test_an_unknown_provider_is_a_mistake_in_the_call(server, monkeypatch):
+    from eunomai_business import server as tools
+
+    monkeypatch.setenv("EUNOMAI_PROVIDERS", json.dumps({"git": server.provider()}))
+    assert "unknown provider" in tools._safe(auth.whoami, "nope")["error"]
+
+
+def test_a_network_outage_asks_the_user_to_check_the_network(signed_in, monkeypatch):
+    import httpx
+
+    from eunomai_business import server as tools
+
+    def down():
+        raise httpx.ConnectError("no route to host")
+
+    monkeypatch.setattr(auth, "http_client", down)
+    assert tools._safe(auth.whoami, "git")["status"] == "unreachable"

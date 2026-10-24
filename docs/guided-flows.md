@@ -19,15 +19,10 @@ then builds, so that the reviewer receives work that is specified, tested and do
 
 ## How the specialist talks
 
-| Rule | In practice |
-|---|---|
-| **One step at a time** | At most three questions per turn, each with a suggested answer the user can accept |
-| **Short** | A sentence, a table, a diagram or a mockup; "more detail?" is offered, never dumped |
-| **Assumptions in the open** | What it assumes is listed and confirmed by the user; nothing is built on a silent guess |
-| **Visual before building** | A mockup or a diagram to agree on first, with one line on why it saves time |
-| **Plain words** | No git, branches or file names; technical detail only when asked |
-| **Initiative** | It creates versions, saves, brings the latest changes and proposes, without being asked |
-| **Stops go to IT** | When it is not certain, it stops and hands IT a report ([decision 6](decisions.md#6--the-user-never-resolves-a-technical-problem)) |
+One step at a time, short answers (a sentence, a table, a diagram or a mockup), assumptions in the open, something
+visible before anything is built, plain words, and initiative: it handles versions and proposals on its own. The
+rules it follows are in the skill itself ([`SKILL.md`](../plugin/skills/specialist/SKILL.md)); when it is not
+certain, it stops and hands IT a report ([decision 6](decisions.md#6--the-user-never-resolves-a-technical-problem)).
 
 ## The journey
 
@@ -61,18 +56,11 @@ After the review, the specialist brings the accepted work back on its own and su
 
 ## What the reviewer receives
 
-Every pull request opens with the same short summary, so that gaps are visible instead of hidden:
-
-| Section | Content |
-|---|---|
-| Goal | What the user wanted, in two lines |
-| Built | What changed, mapped to the requirements |
-| Evidence | The test for each scenario, and its result |
-| Not settled | Assumptions not confirmed, business rules without a source, open questions |
-| Skipped | Anything not built or not validated, and why |
-| Course changes | Only those that matter to the reviewer, one line each |
-
-The reviewer can take any "Not settled" line straight back to the user.
+Every pull request opens with the same short summary: the goal, what was built mapped to the requirements, the
+test of each scenario, what is **not settled** (unconfirmed assumptions, rules without a source, open questions),
+what was skipped, and course changes that matter. Gaps are visible instead of hidden, and the reviewer can take
+any of them straight back to the user. The template is in
+[`deliver.md`](../plugin/skills/specialist/references/deliver.md).
 
 ## Keeping it clean
 

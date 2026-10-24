@@ -188,3 +188,35 @@ def test_an_unexpected_error_reaches_it_not_the_user(monkeypatch):
     result = tools._safe(broken)
     assert result["status"] == "needs_it" and "Traceback" not in result["user_message"]
     assert "RuntimeError: something odd" in result["it_report"]
+
+
+def test_a_version_with_nothing_saved_just_moves_to_the_latest(signed_in, workspaces):
+    ws = joined(signed_in, "empty-version")
+    gitops.branch("empty-version", "ana/idea")
+    signed_in.server_commit("empty-version", "main", {"news.md": b"news\n"})
+    result = gitops.update("empty-version")
+    assert result["status"] == "updated" and result["branch"] == "ana/idea" and "retired_version" not in result
+    assert (ws / "news.md").exists() and "accepted" not in result["user_message"]
+
+
+def test_versions_never_stack_on_another_version(signed_in, workspaces):
+    joined(signed_in, "stack")
+    gitops.branch("stack", "ana/one")
+    with pytest.raises(PermissionError, match="start from the main branch"):
+        gitops.branch("stack", "ana/two")
+
+
+def test_the_status_shows_the_versions_proposal(signed_in, workspaces):
+    proposed(signed_in, "with-proposal", "ana/x", {"x.md": b"x\n"})
+    status = tools._safe(tools._status, "with-proposal")
+    assert status["proposal"]["state"] == "open" and status["proposal"]["merged"] is False
+
+
+def test_sending_never_overwrites_the_server(signed_in, workspaces):
+    ws = proposed(signed_in, "no-force", "ana/v", {"a.md": b"a\n"})
+    elsewhere = signed_in.server_commit("no-force", "ana/v", {"b.md": b"from another computer\n"})
+    (ws / "c.md").write_bytes(b"c\n")
+    gitops.save("no-force", "Local change")
+    result = tools._safe(gitops.push, "no-force")
+    assert result["status"] == "needs_it" and "changes this computer does not have" in result["it_report"]
+    assert signed_in.repos["no-force"].refs[b"refs/heads/ana/v"] == elsewhere

@@ -50,7 +50,7 @@ def reach(url: str) -> dict:
     if parts.scheme not in ("http", "https") or not parts.hostname:
         return {"error": "url must be http(s)://host/..."}
     try:
-        addresses = sorted({info[4][0] for info in socket.getaddrinfo(parts.hostname, parts.port or 443)})
+        addresses = sorted({info[4][0] for info in socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80))})
     except OSError as exc:
         addresses = f"DNS failed: {exc}"
     return {

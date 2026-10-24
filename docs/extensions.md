@@ -14,7 +14,7 @@ marked with its status. None is required.
 
 ## A knowledge base built from the repositories
 
-**Status:** idea; depends on the guided flows (planned).
+**Status:** idea; builds on the guided flows (first version built).
 
 Business users' repositories accumulate what the organization knows: business rules, specifications, decisions,
 glossaries. An organization can run a service that reads those pages from its git server and serves them as a
