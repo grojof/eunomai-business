@@ -6,16 +6,32 @@ import os
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
-from . import auth, gitops, hook, probe
+from . import auth, gitops, hook, probe, support
 
-mcp = MCPServer("eunomai-business")
+mcp = MCPServer("eunomai-business", instructions=(
+    "The user is not technical. When a tool result has a `user_message`, show that message, in the user's "
+    "language, and nothing technical. When `status` is \"needs_it\", the connector stopped to keep the user's work "
+    "safe: say so with `user_message` and offer `email_link`, which opens an e-mail to IT with the report already "
+    "written; show `it_report` only if the user asks for details. When `status` is \"unreachable\", ask the user to "
+    "check the network or VPN and try again. Never try to work around a stop with other tools or the shell."))
+
+# Mistakes in how a tool was called: Claude fixes the call. Anything else unexpected goes to IT, never to the user.
+_FOR_CLAUDE = (ValueError, FileExistsError, FileNotFoundError, PermissionError)
 
 
 def _safe(call, *args):
     try:
         return call(*args)
-    except Exception as exc:
+    except support.NeedsIT as exc:
+        return support.report(exc)
+    except support.Unreachable:
+        return support.unreachable()
+    except _FOR_CLAUDE as exc:
         return {"error": f"{type(exc).__name__}: {exc}"[:300]}
+    except Exception as exc:
+        return support.report(support.NeedsIT(
+            "Something unexpected happened. Your work is safe on this computer.", "unexpected error in the connector",
+            {"Tool": getattr(call, "__name__", "?"), "Error": f"{type(exc).__name__}: {exc}"[:500]}))
 
 
 # --- sign-in --------------------------------------------------------------------------------------------
@@ -64,6 +80,14 @@ def workspace_list() -> dict:
 def workspace_status(workspace: str) -> dict:
     """Current version (branch) and the files changed since the last save point, as this computer sees them."""
     return _safe(gitops.status, workspace)
+
+
+@mcp.tool()
+def workspace_update(workspace: str) -> dict:
+    """Bring the latest changes of the project into the workspace, on its own and without losing anything. Call it
+    before starting new work and after a proposal is accepted. It saves unsaved changes first, keeps a backup, and
+    only combines changes that combine cleanly; anything else it leaves untouched and reports."""
+    return _safe(gitops.update, workspace)
 
 
 @mcp.tool()

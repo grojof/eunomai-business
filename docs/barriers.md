@@ -41,6 +41,28 @@ project and its git server. See [project-practices.md](project-practices.md).
 | Workspace names are plain folder names, under `workspaces_root` only | No path tricks (`..`, absolute paths) |
 | Version names: parts of letters, digits and `. _ -` separated by `/`, each starting with a letter or digit, none ending in `.` or `.lock`, no `..` | Only names git accepts |
 
+## Bringing the latest changes
+
+`workspace_update` brings the project's latest changes on its own, in this order, and never loses work:
+
+| Step | Rule |
+|---|---|
+| 1 · Keep | Unsaved changes are saved first; on the main branch they go to a new version (`work/<date>`) |
+| 2 · Fetch | The server's branches are read; nothing local moves yet |
+| 3 · Back up | Before anything moves, the branch's position is kept as `refs/eunomai/backup/<time>/<branch>` |
+| 4 · Decide | Accepted version (in the main branch, or its pull request merged): back to the main branch, the version retired. Open version behind the main branch: combined only if it combines without conflicts, computed before touching any file. On the main branch: fast-forward only |
+| Stop | Conflicts, a version changed elsewhere, a main branch that diverged, files in the way: nothing changes, and IT is told |
+
+## When the connector stops
+
+Whenever a situation is not certain, the connector does not guess ([decision 6](decisions.md#6--the-user-never-resolves-a-technical-problem)):
+
+- the user gets one plain sentence and the assurance that their work is safe;
+- IT gets a report (workspace, repository, version, files involved, connector version; never tokens) and, when
+  `support_email` is set, the user gets an e-mail link with that report already written;
+- an unexpected error is handled the same way: the user never sees a technical error;
+- an unreachable server is not a case for IT: the user is asked to check the network or VPN.
+
 ## Between Claude's sandbox and the computer
 
 Claude can write in the workspace folder, `.git` included, and the connector acts on that folder from the

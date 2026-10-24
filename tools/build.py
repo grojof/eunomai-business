@@ -9,6 +9,7 @@ dist/ are git-ignored. Standard library only, so IT needs nothing but Python to 
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import zipfile
@@ -19,10 +20,11 @@ ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_SRC = ROOT / "plugin"
 CONNECTOR_SRC = ROOT / "connector"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache")
-KEYS = {"uvx", "connector_source", "connector_path", "workspaces_root", "diagnostics", "providers"}
+KEYS = {"uvx", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email", "providers"}
 PROVIDER_KEYS = {"authorize_url", "token_url", "client_id", "scopes", "redirect_uri", "userinfo_url", "login_field"}
 PROVIDER_REQUIRED = {"authorize_url", "token_url", "client_id", "redirect_uri", "userinfo_url"}
 LOOPBACK = {"127.0.0.1", "localhost"}
+EMAIL = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
 
 
 def validate(cfg: dict) -> list[str]:
@@ -34,6 +36,8 @@ def validate(cfg: dict) -> list[str]:
         errors.append('connector_source "path" needs connector_path')
     if not isinstance(cfg.get("diagnostics", False), bool):
         errors.append("diagnostics must be true or false")
+    if cfg.get("support_email") and not EMAIL.match(str(cfg["support_email"])):
+        errors.append("support_email must be one e-mail address")
     providers = cfg.get("providers")
     if not isinstance(providers, dict) or "git" not in providers:
         return errors + ['providers must be an object with at least a "git" provider']
@@ -89,6 +93,7 @@ def build(cfg: dict, out_dir: Path) -> Path:
                                 separators=(",", ":")),
         "WORKSPACES_ROOT": cfg.get("workspaces_root") or "~/eunomai-business-workspaces",
         "DIAGNOSTICS": "1" if diagnostics else "0",
+        "SUPPORT_EMAIL": cfg.get("support_email") or "",
     }
     for template in out.rglob("*.template"):
         text = template.read_text(encoding="utf-8")
