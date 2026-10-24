@@ -1,0 +1,30 @@
+{
+  "_comment": "Copy to config.local.json (git-ignored), fill in, then run: python tools/build.py. Nothing here is secret: every client is public. Reference: docs/configuration.md",
+  "uvx": "uvx",
+  "connector_source": "bundled",
+  "connector_path": "",
+  "_workspaces_root": "Where each user's workspaces (local clones) go. ~ is the user's profile folder; %VAR% works too. Avoid folders synced by OneDrive and anything under AppData (Claude Desktop may redirect it). See docs/configuration.md.",
+  "workspaces_root": "~/eunomai-business-workspaces",
+  "_diagnostics": "true adds diagnostic tools, validation skills and a hook log. Keep false for users.",
+  "diagnostics": false,
+  "providers": {
+    "directory": {
+      "authorize_url": "https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/authorize",
+      "token_url": "https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/token",
+      "client_id": "<public client id>",
+      "scopes": "openid profile offline_access User.Read",
+      "redirect_uri": "http://localhost:53683",
+      "userinfo_url": "https://graph.microsoft.com/v1.0/me",
+      "login_field": "userPrincipalName"
+    },
+    "git": {
+      "authorize_url": "https://git.example.internal/login/oauth/authorize",
+      "token_url": "https://git.example.internal/login/oauth/access_token",
+      "client_id": "<public client id>",
+      "scopes": "",
+      "redirect_uri": "http://127.0.0.1:53682/callback",
+      "userinfo_url": "https://git.example.internal/api/v1/user",
+      "login_field": "login"
+    }
+  }
+}
