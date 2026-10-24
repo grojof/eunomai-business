@@ -28,6 +28,9 @@ def test_without_diagnostics_no_hooks_and_no_validation_skills(tmp_path):
     assert not any("/tests/" in n for n in names)
     mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
     assert mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_DIAGNOSTICS"] == "0"
+    args = mcp["mcpServers"]["eunomai-business"]["args"]
+    assert args[args.index("-c") + 1] == "${CLAUDE_PLUGIN_ROOT}/connector/constraints.txt"
+    assert "connector/constraints.txt" in names
 
 
 def hook_command(cfg: dict, tmp_path) -> str:

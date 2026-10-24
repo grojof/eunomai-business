@@ -41,6 +41,9 @@ computers have Git with settings of their own (Git for Windows's `core.autocrlf=
 - **Rejected for now:** requiring Git for Windows (installation, varying settings). **To reconsider before 1.0:**
   MinGit, a portable Git distributed per user.
 - **Consequence:** dulwich runs some hooks whatever it is told, so the connector disables them all itself.
+- **No line-level merging:** combining two edits of the same file needs a merge library, and two edits that do
+  not collide as text can still break each other. The connector combines only changes to different files; the
+  rest goes to IT.
 
 ## 4 · Configuration at build time, by IT
 
