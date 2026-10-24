@@ -1,0 +1,76 @@
+name: Dependencies
+
+# Every day: bring dependencies to the newest versions the project's own rules allow, and propose them as one
+# pull request; open an issue when a known vulnerability has no allowed fix.
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependencies
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: automation/dependencies
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.13.5"
+
+      - name: Update within the rules
+        run: >-
+          uv run --project connector --frozen --python 3.12 python tools/update_dependencies.py
+          --summary "$RUNNER_TEMP/summary.md" --problems "$RUNNER_TEMP/problems.md"
+
+      - name: Test the update
+        id: changes
+        run: |
+          if git diff --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          cd connector && uv run --frozen --group dev --python 3.12 pytest -q
+
+      - name: Propose the update
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -qam "Dependencies: newest versions allowed by the project's rules"
+          git push -qf origin "$BRANCH"
+          {
+            cat "$RUNNER_TEMP/summary.md"
+            echo
+            echo "Prepared by the daily Dependencies workflow; tests passed on Linux. Tests on pull requests do"
+            echo "not start for pull requests opened by this workflow (a GitHub rule): run them before merging."
+          } > "$RUNNER_TEMP/body.md"
+          if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --base main --head "$BRANCH" --title "Dependencies: newest versions allowed by the project's rules" \
+              --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+      - name: Report what no allowed version solves
+        if: always()
+        run: |
+          [ -s "$RUNNER_TEMP/problems.md" ] || exit 0
+          title="Dependencies: problems no allowed version solves"
+          number=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file "$RUNNER_TEMP/problems.md"
+          else
+            gh issue create --title "$title" --body-file "$RUNNER_TEMP/problems.md"
+          fi

@@ -139,6 +139,7 @@ sequenceDiagram
 | Local connector (`connector/`) | A Python program started with `uv run --frozen` on the user's computer. Claude talks to it through MCP; it runs outside Claude's sandbox ([decision 1](decisions.md#1--a-local-connector-on-the-users-computer)) | Built |
 | Build tool | `tools/build.py`: organization configuration + source → `eunomai-business.zip`, after validating the configuration | Built |
 | Bill of materials | `tools/sbom.py` → `connector/sbom.cdx.json`, regenerated whenever `connector/uv.lock` changes | Built |
+| Maintenance | GitHub workflows: tests on every pull request (Linux, Windows); daily dependency update (`tools/update_dependencies.py`) | Built |
 | Tests | `connector/tests/`: sign-in, workspaces, versions, barriers, build, tool list and the dependency pins, against a fake git server (`uv run --group dev pytest` in `connector/`) | Built |
 
 ## Connector modules

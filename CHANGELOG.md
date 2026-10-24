@@ -21,6 +21,8 @@
   deprecated, origin, activity, age), deny by default.
 - **Software bill of materials:** `connector/sbom.cdx.json` (CycloneDX 1.5) with versions, hashes, licenses and
   dependencies of every runtime package, shipped inside the plugin; `tools/sbom.py` regenerates it.
+- **Daily dependency maintenance:** a workflow applies the project's rules, proposes updates as one pull request
+  and opens an issue for vulnerabilities without an allowed fix; tests run on every pull request (Linux, Windows).
 - **Compliance page** for audits: data protection, information-security controls, supply chain and licenses,
   and what remains the organization's responsibility.
 - **Guard probe (diagnostics):** the diagnostic hook denies two test markers, as a JSON answer and as exit code 2,
