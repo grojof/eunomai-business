@@ -44,7 +44,9 @@ if sys.platform != "win32":  # the OS keyring is not available in a test run: ke
             self.records[(service, user)] = password
 
         def delete_password(self, service, user):
-            self.records.pop((service, user))
+            if (service, user) not in self.records:  # as the real backends do
+                raise keyring.errors.PasswordDeleteError("not found")
+            del self.records[(service, user)]
 
     keyring.set_keyring(_Memory())
 
