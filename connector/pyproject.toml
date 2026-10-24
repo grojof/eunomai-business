@@ -8,6 +8,7 @@ dependencies = [
     "httpx==0.28.1",
     "truststore==0.10.5",
     "dulwich==1.2.17",
+    "merge3==0.0.16",  # dulwich needs it to combine file contents
     "urllib3==2.8.0",
     "keyring==25.7.0; sys_platform != 'win32'",
 ]

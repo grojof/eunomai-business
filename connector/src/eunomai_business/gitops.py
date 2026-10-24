@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import ssl
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -19,9 +20,14 @@ import truststore
 import urllib3
 from dulwich import porcelain
 from dulwich.client import get_transport_and_path
+from dulwich.graph import can_fast_forward, find_merge_base
+from dulwich.merge import recursive_merge
+from dulwich.object_store import iter_tree_contents
+from dulwich.objects import Commit
 from dulwich.repo import Repo
 
 from . import auth, data_dir
+from .support import NeedsIT, Unreachable
 
 # Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
 # which made checkouts CRLF, and a global filter would run commands. Same behaviour with or without Git
@@ -85,8 +91,10 @@ def _check_config(repo: Repo) -> None:
         unexpected = [key for key, _ in config.items(section) if allowed is None or key.lower() not in allowed]
         if unexpected:
             name = b".".join(section).decode(errors="replace")
-            raise PermissionError(f"unexpected entry in .git/config ({name}: "
-                                  f"{', '.join(k.decode(errors='replace') for k in unexpected)}); refusing to run")
+            keys = ", ".join(k.decode(errors="replace") for k in unexpected)
+            raise NeedsIT("This workspace has a setting the connector does not accept, so it stopped to keep your "
+                          "work safe.", "unexpected entry in .git/config",
+                          {"Folder": repo.path, "Entry": f"{name}: {keys}"})
 
 
 def _git_session() -> dict:
@@ -310,12 +318,44 @@ def push(workspace: str) -> dict:
         origin = _origin(repo)
         _check_host(origin, current)
         out = io.BytesIO()
-        result = porcelain.push(repo, origin, f"refs/heads/{name}:refs/heads/{name}".encode(), outstream=out,
-                                errstream=out, **_remote(current))
+        result = _network(lambda: porcelain.push(repo, origin, f"refs/heads/{name}:refs/heads/{name}".encode(),
+                                                 outstream=out, errstream=out, **_remote(current)))
         errors = {ref.decode(): str(err) for ref, err in (result.ref_status or {}).items() if err}
+        if errors:
+            raise NeedsIT("The server did not accept this version. Your work is safe on this computer.",
+                          "the server rejected the version", _facts(repo, workspace, rejected=errors))
         web = origin.removesuffix(".git")
-        return {"workspace": workspace, "branch": name, "pushed": not errors, "errors": errors or None,
-                "head": _head(repo), "web_url": f"{web}/src/branch/{name}"}
+        return {"workspace": workspace, "branch": name, "pushed": True, "head": _head(repo),
+                "web_url": f"{web}/src/branch/{name}"}
+
+
+# --- the git hosting's API (Gitea for now; the hosting adapter comes later) ----------------------------------
+
+def _api(origin: str, current: dict) -> tuple[str, dict]:
+    parts = urlsplit(origin)
+    segments = parts.path.strip("/").removesuffix(".git").split("/")
+    prefix = "".join(f"/{s}" for s in segments[:-2])  # servers published under a sub-path
+    api = f"{parts.scheme}://{parts.netloc}{prefix}/api/v1/repos/{segments[-2]}/{segments[-1]}"
+    return api, {"Authorization": f"Bearer {current['record']['access_token']}", "Accept": "application/json"}
+
+
+def _proposal_for(origin: str, current: dict, version: str) -> dict | None:
+    """The latest pull request of a version: number, whether it was merged, and the commit it proposed.
+    None when the hosting cannot tell; the caller then relies on the history alone."""
+    api, headers = _api(origin, current)
+    try:
+        with auth.http_client() as client:
+            response = client.get(f"{api}/pulls", headers=headers, params={"state": "all", "limit": 50})
+        if response.status_code != 200:
+            return None
+        mine = [p for p in response.json() if (p.get("head") or {}).get("ref") == version]
+    except Exception:
+        return None
+    if not mine:
+        return None
+    latest = max(mine, key=lambda p: p.get("number", 0))
+    return {"number": latest.get("number"), "merged": bool(latest.get("merged")), "state": latest.get("state"),
+            "head": (latest.get("head") or {}).get("sha")}
 
 
 def pull_request(workspace: str, title: str, description: str = "") -> dict:
@@ -329,11 +369,7 @@ def pull_request(workspace: str, title: str, description: str = "") -> dict:
             raise PermissionError("a pull request proposes a version: switch to one first")
         origin = _origin(repo)
     _check_host(origin, current)
-    parts = urlsplit(origin)
-    segments = parts.path.strip("/").removesuffix(".git").split("/")
-    prefix = "".join(f"/{s}" for s in segments[:-2])  # servers published under a sub-path
-    api = f"{parts.scheme}://{parts.netloc}{prefix}/api/v1/repos/{segments[-2]}/{segments[-1]}"
-    headers = {"Authorization": f"Bearer {current['record']['access_token']}", "Accept": "application/json"}
+    api, headers = _api(origin, current)
     with auth.http_client() as client:
         info = client.get(api, headers=headers)
         info.raise_for_status()
@@ -348,3 +384,165 @@ def pull_request(workspace: str, title: str, description: str = "") -> dict:
     pr = response.json()
     return {"workspace": workspace, "created": True, "number": pr.get("number"), "url": pr.get("html_url"),
             "head": name, "base": base}
+
+
+# --- bringing the latest changes -------------------------------------------------------------------------------
+
+def _ref(repo: Repo, ref: bytes) -> bytes | None:
+    return repo.refs[ref] if ref in repo.refs else None
+
+
+def _dirty(repo: Repo) -> bool:
+    st = porcelain.status(repo, untracked_files="all")
+    return bool(any(st.staged.values()) or st.unstaged or st.untracked)
+
+
+def _facts(repo: Repo, workspace: str, **more) -> dict:
+    """What IT needs to understand a workspace's state. Never tokens."""
+    return {"Workspace": workspace, "Folder": repo.path, "Repository": _origin(repo), "Version": _branch(repo),
+            "Head": _head(repo), "Main branch": _main_branch(repo), **more}
+
+
+def _network(call):
+    """Run a server call; an unreachable server is the user's network, not a problem for IT."""
+    try:
+        return call()
+    except (OSError, urllib3.exceptions.HTTPError) as exc:
+        raise Unreachable() from exc
+
+
+def _backup(repo: Repo, *branches: str) -> str:
+    """Keep where each branch was before anything moves: refs/eunomai/backup/<time>/<branch>."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    for name in branches:
+        ref = f"refs/heads/{name}".encode()
+        if ref in repo.refs:
+            repo.refs[f"refs/eunomai/backup/{stamp}/{name}".encode()] = repo.refs[ref]
+    return f"refs/eunomai/backup/{stamp}"
+
+
+def _track(repo: Repo, refs: dict) -> None:
+    """Mirror the server's branches as refs/remotes/origin/*, dropping branches the server no longer has."""
+    heads = {r.removeprefix(b"refs/heads/"): sha for r, sha in refs.items() if r.startswith(b"refs/heads/")}
+    for ref in list(repo.refs.keys(base=b"refs/remotes/origin/")):
+        if ref != b"HEAD" and ref not in heads:
+            del repo.refs[b"refs/remotes/origin/" + ref]
+    for name, sha in heads.items():
+        repo.refs[b"refs/remotes/origin/" + name] = sha
+
+
+def _would_overwrite(repo: Repo, target_tree: bytes) -> list[str]:
+    """Files on disk that git does not track but the target would write: never overwrite them."""
+    tracked = set(repo.open_index())
+    folder = Path(repo.path)
+    return sorted(entry.path.decode() for entry in iter_tree_contents(repo.object_store, target_tree)
+                  if entry.path not in tracked and (folder / entry.path.decode()).exists())
+
+
+def _move(repo: Repo, branch_name: str, target: bytes, workspace: str) -> None:
+    """Point a branch at target, make it current and update the files. Only on a clean workspace."""
+    blocked = _would_overwrite(repo, repo[target].tree)
+    if blocked:
+        raise NeedsIT("The latest changes would replace files of yours that are not saved in the project. Nothing "
+                      "was changed.", "untracked files in the way", _facts(repo, workspace, files=blocked))
+    ref = f"refs/heads/{branch_name}".encode()
+    repo.refs.set_symbolic_ref(b"HEAD", ref)
+    porcelain.reset(repo, "hard", target)
+    repo.refs[ref] = target
+
+
+def update(workspace: str) -> dict:
+    """Bring the latest changes from the server without losing anything (see the update tool for the rules)."""
+    current = _git_session()
+    notes = []
+    with _repo(workspace) as repo:
+        name, origin = _branch(repo), _origin(repo)
+        if name is None or origin is None:
+            raise NeedsIT("This workspace is in a state the connector does not handle on its own. Your files were "
+                          "not touched.", "workspace without a current branch or without origin",
+                          _facts(repo, workspace))
+        dirty, on_main = _dirty(repo), name in _protected(repo)
+    _check_host(origin, current)
+    if dirty:  # 1. keep everything first
+        if on_main:
+            branch(workspace, f"work/{time.strftime('%Y%m%d-%H%M%S')}")
+        save(workspace, "Automatic save before bringing the latest changes")
+        notes.append("Your unsaved changes were saved first.")
+
+    with _repo(workspace) as repo:
+        name = _branch(repo)
+        client, path = get_transport_and_path(origin, **_remote(current))
+        fetched = _network(lambda: client.fetch(path.encode(), repo))  # 2. what the server has
+        _track(repo, fetched.refs)
+        main = _main_branch(repo)
+        if main is None:  # the repository was empty at clone time; IT may have initialized it since
+            heads = [r.removeprefix(b"refs/heads/").decode() for r in fetched.refs if r.startswith(b"refs/heads/")]
+            main = next((h for h in ("main", "master") if h in heads), heads[0] if heads else None)
+            if main is None:
+                return {"workspace": workspace, "status": "up_to_date",
+                        "user_message": "The project is still empty: nothing to bring yet."}
+            _remember(Path(repo.path), main)
+        remote_main = _ref(repo, f"refs/remotes/origin/{main}".encode())
+        if remote_main is None:
+            raise NeedsIT("The project's main version is missing on the server. Your work is safe.",
+                          "main branch not found on the server", _facts(repo, workspace))
+        result = {"workspace": workspace}
+
+        if name in _protected(repo):  # 4a. on the main branch: only fast-forward
+            local = _ref(repo, f"refs/heads/{name}".encode())
+            if local == remote_main:
+                return {**result, "status": "up_to_date", "branch": name,
+                        "user_message": " ".join(notes + ["Everything is up to date."])}
+            if local is not None and not can_fast_forward(repo, local, remote_main):
+                raise NeedsIT("This copy of the project differs from the server in a way the connector does not "
+                              "resolve on its own. Your work is safe.", "local main branch diverged from the server",
+                              _facts(repo, workspace))
+            result["backup"] = _backup(repo, name)  # 3. a way back, before anything moves
+            _move(repo, name, remote_main, workspace)
+            return {**result, "status": "updated", "branch": name, "head": _head(repo),
+                    "user_message": " ".join(notes + ["The latest changes of the project are here."])}
+
+        version_head = repo.refs[f"refs/heads/{name}".encode()]
+        on_server = _ref(repo, f"refs/remotes/origin/{name}".encode())
+        proposal = _proposal_for(origin, current, name)
+        merged = can_fast_forward(repo, version_head, remote_main) or bool(
+            proposal and proposal["merged"] and proposal["head"] == version_head.decode())
+        if merged:  # 4b. the version is in the main branch: back to it, retire the version
+            result["backup"] = _backup(repo, name, main)
+            _move(repo, main, remote_main, workspace)
+            del repo.refs[f"refs/heads/{name}".encode()]
+            return {**result, "status": "updated", "branch": main, "head": _head(repo), "retired_version": name,
+                    "user_message": " ".join(notes + ["Your proposal was accepted. You now have the latest version "
+                                                      "of the project; start a new version for your next change."])}
+        if on_server is not None and on_server != version_head and not can_fast_forward(repo, on_server,
+                                                                                          version_head):
+            raise NeedsIT("This version was changed on the server from somewhere else. Your work is safe; IT can "
+                          "combine both.", "version diverged from its copy on the server",
+                          _facts(repo, workspace))
+        if proposal and proposal["state"] == "closed" and not proposal["merged"]:
+            notes.append("Your last proposal was closed without being accepted; your version is kept.")
+        if can_fast_forward(repo, remote_main, version_head):  # the version already has everything
+            return {**result, "status": "up_to_date", "branch": name,
+                    "user_message": " ".join(notes + ["Everything is up to date."])}
+
+        # 4c. the main branch moved on: combine it into the version, only if it combines cleanly
+        bases = find_merge_base(repo, [version_head, remote_main])
+        tree, conflicts = recursive_merge(repo.object_store, bases, repo[version_head], repo[remote_main])
+        if conflicts:
+            raise NeedsIT("The latest changes of the project touch the same parts as your version, so they cannot "
+                          "be combined automatically. Your work is safe; IT can combine them.",
+                          "merge conflict between the version and the main branch",
+                          _facts(repo, workspace, conflicts=_text(conflicts)))
+        repo.object_store.add_object(tree)
+        merge = Commit()
+        merge.tree, merge.parents = tree.id, [version_head, remote_main]
+        merge.author = merge.committer = _author(current)
+        merge.commit_time = merge.author_time = int(time.time())
+        merge.commit_timezone = merge.author_timezone = -time.timezone
+        merge.message = f"Bring in the latest changes from {main}\n".encode()
+        repo.object_store.add_object(merge)
+        result["backup"] = _backup(repo, name)
+        _move(repo, name, merge.id, workspace)
+        return {**result, "status": "updated", "branch": name, "head": _head(repo),
+                "user_message": " ".join(notes + ["The latest changes of the project were added to your version; "
+                                                  "your work is kept."])}

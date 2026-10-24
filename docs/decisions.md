@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project files."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project files, and no technical problem left to the user."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md]
@@ -59,3 +59,14 @@ Claude go in a project plugin ([architecture](architecture.md#plugin-per-project
 
 - **Rejected:** managed blocks in each project's `.gitattributes` and `.gitignore` (mixes the plugin's logic
   into every repository and needs maintenance in each).
+
+## 6 · The user never resolves a technical problem
+
+Business users do not handle git, merges or errors. Each situation is either resolved by the connector on its own,
+with certainty and without losing anything, or the connector stops, keeps the user's work, tells the user in
+plain words, and hands IT a report with an e-mail link ready to send ([barriers](barriers.md#when-the-connector-stops)).
+
+- **Rejected:** asking business users to resolve conflicts or read error messages; resolving doubtful cases
+  automatically "most of the time".
+- **Consequence:** the rules for projects and for the connector aim to make stops rare; every stop is a case for
+  IT, never a dead end for the user.

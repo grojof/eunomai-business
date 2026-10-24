@@ -31,6 +31,7 @@ contain internal host names, so keep the built zip inside the organization.
 | `connector_source` | `bundled` | `bundled`: the connector ships inside the zip. `path`: it runs from `connector_path` (development only). Any other value is an error. |
 | `connector_path` | — | Folder of the connector source; required when `connector_source` is `path`. |
 | `workspaces_root` | `~/eunomai-business-workspaces` | Where each user's workspaces (local clones) go. `~` is the user's profile; `%VAR%` is expanded. Must be absolute after expansion. |
+| `support_email` | — | The address users send to when the connector stops and needs IT. Optional; without it users get the report but no e-mail link. |
 | `diagnostics` | `false` | `true` adds the diagnostic tools (`diag_*`), the validation skills and a hook log. For validating an installation; keep `false` for users. |
 | `providers` | — | Sign-in providers, by name. Must include `git`. See below. |
 
@@ -125,6 +126,7 @@ Set by the plugin from the build; listed so nothing is hidden. Users never set t
 | `EUNOMAI_PROVIDERS` | The `providers` object, as JSON |
 | `EUNOMAI_WORKSPACES_ROOT` | `workspaces_root` |
 | `EUNOMAI_DIAGNOSTICS` | `1` or `0`, from `diagnostics` |
+| `EUNOMAI_SUPPORT_EMAIL` | `support_email` |
 | `EUNOMAI_EXPANSION_PROBE` | Lets the diagnostics check that `${CLAUDE_PLUGIN_ROOT}` is expanded |
 
 The connector also changes `GIT_CONFIG_SYSTEM`, `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL` **for its own

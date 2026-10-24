@@ -275,6 +275,7 @@ dependencies = [
     { name = "httpx" },
     { name = "keyring", marker = "sys_platform != 'win32'" },
     { name = "mcp" },
+    { name = "merge3" },
     { name = "truststore" },
     { name = "urllib3" },
 ]
@@ -290,6 +291,7 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "keyring", marker = "sys_platform != 'win32'", specifier = "==25.7.0" },
     { name = "mcp", specifier = "==2.3.0" },
+    { name = "merge3", specifier = "==0.0.16" },
     { name = "truststore", specifier = "==0.10.5" },
     { name = "urllib3", specifier = "==2.8.0" },
 ]
@@ -512,6 +514,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9e/2d/7c251e34207f6c51000312fc8839111ac45cfe02023f90b44e7f1051dd8e/mcp_types-2.3.0.tar.gz", hash = "sha256:d1e46549edb35ee19a94940fcee6d1addd7e589ab7ea92dda83f5d84781fc362", size = 65898, upload-time = "2026-10-02T22:06:57.863Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ce/48/32583066b155bb5d4507e7887dc88ee23118cc4de8e2a12870c49719e2a8/mcp_types-2.3.0-py3-none-any.whl", hash = "sha256:968efdbdaedfab06adae40d378a34395f1090c5921d4be3c9cde283aaf76d91d", size = 69108, upload-time = "2026-10-02T22:06:54.099Z" },
+]
+
+[[package]]
+name = "merge3"
+version = "0.0.16"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/71/daaa7978561b9a7bfdcee4ba5ec2ead6162f6a9d2e2edf069def96085c6b/merge3-0.0.16.tar.gz", hash = "sha256:0852de4381cb46be5ef4ed49e3ac20c5a4a0cd46a8ff4bbb870bc27aab543306", size = 15915, upload-time = "2025-10-15T16:22:25.548Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e3/e9/a94184895f008ecc70ae4d227deb6a4209bb4f86c5f35b79b8cf6fc23ee4/merge3-0.0.16-py3-none-any.whl", hash = "sha256:b9d907b7281213a5dca1d711d168c4f8fe8aca20d74e2456bb177c4f31dfd927", size = 16546, upload-time = "2025-10-15T16:22:24.08Z" },
 ]
 
 [[package]]
