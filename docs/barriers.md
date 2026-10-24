@@ -49,7 +49,7 @@ project and its git server. See [project-practices.md](project-practices.md).
 |---|---|
 | 1 · Keep | Unsaved changes are saved first; on the main branch they go to a new version (`work/<date>`) |
 | 2 · Fetch | The server's branches are read; nothing local moves yet |
-| 3 · Back up | Before anything moves, the branch's position is kept as `refs/eunomai/backup/<time>/<branch>` |
+| 3 · Back up | Before anything moves, the branch's position is kept as `refs/eunomai/backup/<time>/<branch>`; files changed during the update stop it instead of being replaced |
 | 4 · Decide | Accepted version (in the main branch, or its pull request merged): back to the main branch, the version retired. Open version behind the main branch: combined only if no file was changed on both sides, checked before touching any file; lines of the same file are never merged automatically. On the main branch: fast-forward only |
 | Stop | The same file changed on both sides, a version changed elsewhere, a main branch that diverged, files in the way: nothing changes, and IT is told |
 
@@ -96,6 +96,11 @@ computer itself. These barriers keep that from becoming a way to run commands on
 |---|---|
 | All git hooks are disabled: the connector empties the repository's hook table before any operation | dulwich runs `post-commit` even when told not to verify; any hook written into `.git/hooks` would run outside the sandbox |
 | Only known `.git/config` entries are accepted: `core` (format, file mode, bare, ref logs, case, symlinks, Unicode, `autocrlf`), `remote.<name>.url/fetch`, `branch.<name>.remote/merge`. Anything else stops the operation | Filters, `hooksPath`, `fsmonitor`, includes and submodules can run commands or fetch code |
+| The configuration is checked once per operation and then pinned: what is written to `.git/config` afterwards is not read | dulwich re-reads the configuration on every call; a filter written between the check and the use would run |
+| Content is never filtered: no filter driver, no line-ending conversion, no LFS, whatever `.gitattributes` says | A filter is a command; files go in and out exactly as they are |
+| The repository's address and main branch come from the connector's own registry, recorded at clone time; an address changed in `.git/config` stops the operation | Otherwise the sandbox could send the user's work to another repository |
+| A repository that points to another folder (`commondir`, `alternates`) is refused | Reads and writes must stay in the workspace |
+| One operation at a time per workspace, across connector processes | Two updates or saves at once could undo each other |
 | The computer's Git configuration (system and user) is ignored | Same behaviour with or without Git installed; a global filter cannot apply ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)) |
 | Each clone gets `core.autocrlf=false` | A Git on the computer, if any, sees the files exactly as the connector does |
 | Clones never fetch submodules (dulwich's default, not exposed as an option) | A submodule could bring code from another server |

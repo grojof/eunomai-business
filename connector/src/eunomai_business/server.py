@@ -32,7 +32,7 @@ def _safe(call, *args):
     except support.Unreachable:
         return support.unreachable()
     except _FOR_CLAUDE as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:300]}
+        return {"error": support.clean(f"{type(exc).__name__}: {exc}", 300)}
     except _NETWORK:
         return support.unreachable()
     except Exception as exc:

@@ -6,13 +6,16 @@ same files the connector saves. The git sign-in token goes only to the git serve
 (login + OAuth access token); it is never written to .git/config, only to the encrypted sign-in record.
 """
 
+import hashlib
 import io
 import json
 import os
 import re
 import shutil
 import ssl
+import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -20,6 +23,7 @@ import truststore
 import urllib3
 from dulwich import porcelain
 from dulwich.client import get_transport_and_path
+from dulwich.config import ConfigFile, StackedConfig
 from dulwich.diff_tree import tree_changes
 from dulwich.graph import can_fast_forward, find_merge_base
 from dulwich.merge import recursive_merge
@@ -57,45 +61,101 @@ def root() -> Path:
     return path
 
 
+_WINDOWS_RESERVED = re.compile(r"^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$", re.IGNORECASE)
+
+
 def _folder(workspace: str) -> Path:
-    if not _NAME.match(workspace or ""):
-        raise ValueError("workspace must be a plain folder name (letters, digits, . _ -)")
+    if not _NAME.match(workspace or "") or _WINDOWS_RESERVED.match(workspace):
+        raise ValueError("workspace must be a plain folder name (letters, digits, . _ -), not a reserved name")
     return root() / workspace
 
 
-def _open(path: str) -> Repo:
-    """Open a repository with its hooks disabled: dulwich runs post-commit even with no_verify, and a hook
-    written from Claude's sandbox would run on this computer."""
-    repo = Repo(path)
-    repo.hooks.clear()
-    return repo
+class _NoFilters:
+    """Content goes in and out exactly as it is: no filter driver, no line-ending conversion, no LFS."""
+
+    def checkin_normalize(self, blob, tree_path):
+        return blob
+
+    def checkout_normalize(self, blob, tree_path):
+        return blob
+
+    def close(self):
+        pass
 
 
-def _repo(workspace: str) -> Repo:
-    """Open a workspace's repository. Use it in a `with` block: open pack files lock the folder on Windows."""
+class _Workspace(Repo):
+    """A repository the connector can trust while Claude's sandbox writes into the same folder, `.git` included.
+
+    Hooks never run (dulwich runs post-commit even with no_verify). Content is never filtered. Once validated, the
+    configuration is pinned: dulwich re-reads .git/config on every call, so a filter written between the check and
+    the use would otherwise run on this computer."""
+
+    _pinned: ConfigFile | None = None  # Repo.__init__ already reads the configuration
+
+    def __init__(self, path: str):
+        super().__init__(path)
+        self.hooks.clear()
+
+    def pin(self, config: ConfigFile) -> None:
+        self._pinned = config
+
+    def get_config(self) -> ConfigFile:
+        return self._pinned if self._pinned is not None else super().get_config()
+
+    def get_config_stack(self) -> StackedConfig:
+        if self._pinned is None:
+            return super().get_config_stack()
+        return StackedConfig([self._pinned], writable=self._pinned)
+
+    def get_blob_normalizer(self, config=None) -> _NoFilters:
+        return _NoFilters()
+
+
+def _open(path: str) -> _Workspace:
+    return _Workspace(path)
+
+
+def _repo(workspace: str) -> _Workspace:
+    """Open a workspace's repository, validated and pinned. Use it in a `with` block: open pack files lock the
+    folder on Windows."""
     folder = _folder(workspace)
     if not (folder / ".git").is_dir():
         raise FileNotFoundError(f"no workspace named {workspace!r} in {root()}; see workspace_list")
     repo = _open(str(folder))
     try:
-        _check_config(repo)
+        config = Repo.get_config(repo)
+        _check_config(repo, config)
+        repo.pin(config)
     except Exception:
         repo.close()
         raise
     return repo
 
 
-def _check_config(repo: Repo) -> None:
-    config = repo.get_config()
+def _check_config(repo: Repo, config: ConfigFile) -> None:
+    def stop(problem: str, detail: str):
+        raise NeedsIT("This workspace has a setting the connector does not accept, so it stopped to keep your "
+                      "work safe.", problem, {"Folder": repo.path, "Detail": detail})
+
+    controldir = Path(repo.controldir())
+    if Path(repo.commondir()).resolve() != controldir.resolve():
+        stop("the repository points to another folder (commondir)", repo.commondir())
+    if (controldir / "objects" / "info" / "alternates").exists():
+        stop("the repository borrows objects from another folder (alternates)", "objects/info/alternates")
+    registered = _registry().get(str(Path(repo.path).resolve()), {}).get("origin")
+    try:
+        configured = config.get((b"remote", b"origin"), b"url").decode()
+    except KeyError:
+        configured = None
+    if registered and configured != registered:
+        stop("the repository address in .git/config changed after the clone", f"{configured} != {registered}")
     for section in config.sections():
         allowed = _SAFE_CORE if section == (b"core",) else _SAFE_SECTIONS.get(section[0])
         unexpected = [key for key, _ in config.items(section) if allowed is None or key.lower() not in allowed]
         if unexpected:
             name = b".".join(section).decode(errors="replace")
-            keys = ", ".join(k.decode(errors="replace") for k in unexpected)
-            raise NeedsIT("This workspace has a setting the connector does not accept, so it stopped to keep your "
-                          "work safe.", "unexpected entry in .git/config",
-                          {"Folder": repo.path, "Entry": f"{name}: {keys}"})
+            stop("unexpected entry in .git/config",
+                 f"{name}: {', '.join(k.decode(errors='replace') for k in unexpected)}")
 
 
 def _git_session() -> dict:
@@ -126,10 +186,63 @@ def _remote(current: dict) -> dict:
 
 
 def _origin(repo: Repo) -> str | None:
+    """The repository the workspace was cloned from, as recorded by the connector (never read from .git)."""
+    return _registry().get(str(Path(repo.path).resolve()), {}).get("origin")
+
+
+def _registered_origin(repo: Repo, workspace: str) -> str:
+    origin = _origin(repo)
+    if origin is None:
+        raise NeedsIT("This workspace was not set up by this version of the connector. Your files are safe; IT can "
+                      "set it up again.", "workspace not in the connector's registry", {"Workspace": workspace,
+                                                                                        "Folder": repo.path})
+    return origin
+
+
+_held = threading.local()
+
+
+@contextmanager
+def _exclusive(name: str, wait: float = 15.0):
+    """One operation at a time per workspace (and on the registry), across threads and connector processes: a
+    lock file in the connector's own folder, which Claude's sandbox cannot reach. Re-entrant within a thread."""
+    held = getattr(_held, "names", None)
+    if held is None:
+        held = _held.names = set()
+    if name in held:
+        yield
+        return
+    lock = data_dir() / "locks" / (hashlib.sha256(name.encode()).hexdigest()[:16] + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + wait
+    while True:
+        try:
+            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > 600:  # left behind by a process that died
+                    lock.unlink(missing_ok=True)
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.time() > deadline:
+                raise PermissionError("another operation on this workspace is still running; try again shortly")
+            time.sleep(0.1)
+    held.add(name)
     try:
-        return repo.get_config().get((b"remote", b"origin"), b"url").decode()
-    except KeyError:
-        return None
+        yield
+    finally:
+        held.discard(name)
+        lock.unlink(missing_ok=True)
+
+
+def _one_at_a_time(operation):
+    def wrapped(workspace: str, *args):
+        with _exclusive(f"workspace:{workspace}"):
+            return operation(workspace, *args)
+    wrapped.__name__, wrapped.__doc__ = operation.__name__, operation.__doc__
+    return wrapped
 
 
 # What the connector must remember about each workspace lives in its own per-user folder, not in .git: Claude's
@@ -141,12 +254,13 @@ def _registry() -> dict:
         return {}
 
 
-def _remember(folder: Path, main_branch: str | None) -> None:
-    registry = _registry()
-    registry[str(folder.resolve())] = {"main_branch": main_branch}
-    tmp = data_dir() / "workspaces.json.tmp"
-    tmp.write_text(json.dumps(registry, indent=1), encoding="utf-8")
-    os.replace(tmp, data_dir() / "workspaces.json")
+def _remember(folder: Path, **values) -> None:
+    with _exclusive("registry"):
+        registry = _registry()
+        registry.setdefault(str(folder.resolve()), {}).update(values)
+        tmp = data_dir() / f"workspaces.json.{os.getpid()}.tmp"
+        tmp.write_text(json.dumps(registry, indent=1), encoding="utf-8")
+        os.replace(tmp, data_dir() / "workspaces.json")
 
 
 def _branch(repo: Repo) -> str | None:
@@ -182,8 +296,10 @@ def _crlf(folder: Path, paths: list[str]) -> list[str]:
     found = []
     for path in paths:
         file = folder / path
-        if file.is_file() and b"\r\n" in file.read_bytes()[:1_000_000]:
-            found.append(path)
+        if file.is_file():
+            with open(file, "rb") as content:  # the first megabyte is enough, and a huge file costs nothing
+                if b"\r\n" in content.read(1_000_000):
+                    found.append(path)
     return found
 
 
@@ -204,17 +320,18 @@ def _check_branch_name(name: str) -> None:
 
 def clone(repo_url: str, workspace: str = "") -> dict:
     current = _git_session()
-    if urlsplit(repo_url).username:
+    parts = urlsplit(repo_url)
+    if parts.username is not None or parts.password is not None or "@" in parts.netloc:
         raise ValueError("repo_url must not contain credentials")
     _check_host(repo_url, current)
-    workspace = workspace or Path(urlsplit(repo_url).path).name.removesuffix(".git")
+    workspace = workspace or Path(parts.path).name.removesuffix(".git")
     folder = _folder(workspace)
     if folder.exists():
         raise FileExistsError(f"{folder} already exists; use it or pick another workspace name")
     folder.parent.mkdir(parents=True, exist_ok=True)
     remote = _remote(current)
     client, path = get_transport_and_path(repo_url, **remote)
-    advertised = client.get_refs(path.encode())
+    advertised = _network(lambda: client.get_refs(path.encode()))
     refs = getattr(advertised, "refs", None) or {}
     default = (getattr(advertised, "symrefs", None) or {}).get(b"HEAD", b"").removeprefix(b"refs/heads/")
     heads = _text(r.removeprefix(b"refs/heads/") for r in refs if r.startswith(b"refs/heads/"))
@@ -222,21 +339,23 @@ def clone(repo_url: str, workspace: str = "") -> dict:
     try:
         if heads:
             out = io.BytesIO()
-            porcelain.clone(repo_url, str(folder), errstream=out, **remote).close()
-            repo = _open(str(folder))
+            _network(lambda: porcelain.clone(repo_url, str(folder), checkout=False, errstream=out,
+                                             **remote)).close()
         else:  # empty repository (no branch yet): set it up the way `git clone` would
             Repo.init(str(folder), mkdir=True).close()
-            repo = _open(str(folder))
-            config = repo.get_config()
-            config.set((b"remote", b"origin"), b"url", repo_url.encode())
-            config.set((b"remote", b"origin"), b"fetch", b"+refs/heads/*:refs/remotes/origin/*")
-            config.write_to_path()
-            repo.refs.set_symbolic_ref(b"HEAD", b"refs/heads/main")
-        main = default.decode() or next((h for h in ("main", "master") if h in heads), heads[0] if heads else None)
-        _remember(folder, main if heads else None)
-        config = repo.get_config()
+        repo = _open(str(folder))
+        config = Repo.get_config(repo)
+        config.set((b"remote", b"origin"), b"url", repo_url.encode())
+        config.set((b"remote", b"origin"), b"fetch", b"+refs/heads/*:refs/remotes/origin/*")
         config.set((b"core",), b"autocrlf", b"false")  # a Git on this computer sees the files as they are
         config.write_to_path()
+        repo.pin(config)
+        main = default.decode() or next((h for h in ("main", "master") if h in heads), heads[0] if heads else None)
+        _remember(folder, origin=repo_url, main_branch=main if heads else None)
+        if heads:
+            porcelain.reset(repo, "hard", repo.head())  # files written without any filter
+        else:
+            repo.refs.set_symbolic_ref(b"HEAD", b"refs/heads/main")
     except Exception:
         if repo is not None:
             repo.close()
@@ -270,15 +389,16 @@ def status(workspace: str) -> dict:
                 "crlf_in_changed_files": _crlf(Path(repo.path), changed)}
 
 
+@_one_at_a_time
 def branch(workspace: str, name: str) -> dict:
     """Create a version (branch) from the main branch and switch to it; local changes are kept."""
     _check_branch_name(name)
     with _repo(workspace) as repo:
+        if name.lower() in {p.lower() for p in _protected(repo)}:  # Windows treats Main and main as one
+            raise PermissionError(f"{name!r} is the repository's main branch, not a version")
         ref = f"refs/heads/{name}".encode()
         if ref in repo.refs:
             raise FileExistsError(f"version {name!r} already exists")
-        if name in _protected(repo):
-            raise PermissionError(f"{name!r} is the repository's main branch, not a version")
         previous = _branch(repo)
         if _main_branch(repo) is None or _head(repo) is None:
             raise PermissionError("the repository has no main branch yet: whoever manages it must initialize it "
@@ -291,6 +411,7 @@ def branch(workspace: str, name: str) -> dict:
         return {"workspace": workspace, "branch": name, "from": previous, "head": _head(repo)}
 
 
+@_one_at_a_time
 def save(workspace: str, message: str) -> dict:
     """Save point: stage every change (new, modified, deleted) and commit as the signed-in git user."""
     if not (message or "").strip():
@@ -312,6 +433,7 @@ def save(workspace: str, message: str) -> dict:
                 "crlf_in_changed_files": before["crlf_in_changed_files"]}
 
 
+@_one_at_a_time
 def push(workspace: str) -> dict:
     """Send the current version to the server (never the main branch, never forced)."""
     current = _git_session()
@@ -319,7 +441,7 @@ def push(workspace: str) -> dict:
         name = _branch(repo)
         if name is None or name in _protected(repo):
             raise PermissionError("only versions are sent; the main branch changes through a pull request")
-        origin = _origin(repo)
+        origin = _registered_origin(repo, workspace)
         _check_host(origin, current)
         out = io.BytesIO()
         try:
@@ -377,7 +499,7 @@ def pull_request(workspace: str, title: str, description: str = "") -> dict:
         name = _branch(repo)
         if name is None or name in _protected(repo):
             raise PermissionError("a pull request proposes a version: switch to one first")
-        origin = _origin(repo)
+        origin = _registered_origin(repo, workspace)
     _check_host(origin, current)
     api, headers = _api(origin, current)
     with auth.http_client() as client:
@@ -476,19 +598,24 @@ def _move(repo: Repo, branch_name: str, target: bytes, workspace: str) -> None:
     if blocked:
         raise NeedsIT("The latest changes would replace files of yours that are not saved in the project. Nothing "
                       "was changed.", "untracked files in the way", _facts(repo, workspace, files=blocked))
+    if _dirty(repo):  # something changed since the automatic save: never overwrite it
+        raise NeedsIT("Files changed while the latest changes were being brought, so nothing was "
+                      "replaced. Your work is safe; try again.", "workspace changed during an update",
+                      _facts(repo, workspace))
     ref = f"refs/heads/{branch_name}".encode()
     repo.refs.set_symbolic_ref(b"HEAD", ref)
     porcelain.reset(repo, "hard", target)
     repo.refs[ref] = target
 
 
+@_one_at_a_time
 def update(workspace: str) -> dict:
     """Bring the latest changes from the server without losing anything (see the update tool for the rules)."""
     current = _git_session()
     notes = []
     with _repo(workspace) as repo:
-        name, origin = _branch(repo), _origin(repo)
-        if name is None or origin is None:
+        name, origin = _branch(repo), _registered_origin(repo, workspace)
+        if name is None:
             raise NeedsIT("This workspace is in a state the connector does not handle on its own. Your files were "
                           "not touched.", "workspace without a current branch or without origin",
                           _facts(repo, workspace))
@@ -512,14 +639,17 @@ def update(workspace: str) -> dict:
             if main is None:
                 return {"workspace": workspace, "status": "up_to_date",
                         "user_message": "The project is still empty: nothing to bring yet."}
-            _remember(Path(repo.path), main)
+            _remember(Path(repo.path), main_branch=main)
         remote_main = _ref(repo, f"refs/remotes/origin/{main}".encode())
         if remote_main is None:
             raise NeedsIT("The project's main version is missing on the server. Your work is safe.",
                           "main branch not found on the server", _facts(repo, workspace))
         result = {"workspace": workspace}
 
-        if name in _protected(repo):  # 4a. on the main branch: only fast-forward
+        if name in _protected(repo) and name != main:
+            raise NeedsIT("This copy of the project is on a branch the connector does not handle on its own. Your "
+                          "work is safe.", "workspace on a main branch other than the server's", _facts(repo, workspace))
+        if name == main:  # 4a. on the main branch: only fast-forward
             local = _ref(repo, f"refs/heads/{name}".encode())
             if local == remote_main:
                 return {**result, "status": "up_to_date", "branch": name,

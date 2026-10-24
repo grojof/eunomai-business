@@ -220,3 +220,18 @@ def test_sending_never_overwrites_the_server(signed_in, workspaces):
     result = tools._safe(gitops.push, "no-force")
     assert result["status"] == "needs_it" and "changes this computer does not have" in result["it_report"]
     assert signed_in.repos["no-force"].refs[b"refs/heads/ana/v"] == elsewhere
+
+
+def test_an_edit_during_the_update_is_never_overwritten(signed_in, workspaces, monkeypatch):
+    ws = joined(signed_in, "during")
+    signed_in.server_commit("during", "main", {"README.md": b"# Sandbox\n\nNewer notes.\n"})
+    original = gitops._track
+
+    def track_then_edit(repo, refs):  # Claude edits a file while the server's changes are being fetched
+        original(repo, refs)
+        (ws / "README.md").write_bytes(b"# Sandbox\n\nEdited meanwhile.\n")
+
+    monkeypatch.setattr(gitops, "_track", track_then_edit)
+    with pytest.raises(NeedsIT, match="changed during an update"):
+        gitops.update("during")
+    assert (ws / "README.md").read_bytes() == b"# Sandbox\n\nEdited meanwhile.\n"
