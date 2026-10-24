@@ -1,0 +1,5 @@
+{
+  "name": "eunomai-node-spike",
+  "version": "0.0.1",
+  "description": "Research spike: can eunomai-business's connector run on Claude Desktop's own Node.js? Measures the runtime, certificates, DPAPI and an mcp_tool guard hook."
+}

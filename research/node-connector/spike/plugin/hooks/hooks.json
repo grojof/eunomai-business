@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash|mcp__workspace__bash",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:eunomai-node-spike:spike",
+            "tool": "spike_guard",
+            "input": {
+              "tool_name": "${tool_name}",
+              "file_path": "${tool_input.file_path}",
+              "command": "${tool_input.command}"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
