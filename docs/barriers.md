@@ -99,6 +99,6 @@ Only in builds with `diagnostics: true` ([configuration.md](configuration.md#set
 |---|---|
 | `diag_environment` | Reports host, user, paths, the providers' names and some environment variables |
 | `diag_reach` | Requests any URL from the computer, with the OS certificate store and the bundled one |
-| Hooks on every tool use | Log each tool call (time, tool name, computer, paths, session) to `hooks.log` |
+| Hooks on every tool use | Log each tool call (time, tool name, input field names, timings, computer, paths, session) to `hooks.log`; deny only tools whose input mentions a guard-test marker (`eunomai-guard-test-json`, `eunomai-guard-test-exit2`) |
 | `diag_hook_log` | Reads that log |
 | Skills `validate-setup` and `validate-git` | Step-by-step validation of an installation |
