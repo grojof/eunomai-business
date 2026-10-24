@@ -70,9 +70,11 @@ The newest version that passes is recommended, with its runtime requirements. Th
 check allows.
 
 eunomai-business follows the same rules itself. Its whole dependency tree is locked (`connector/uv.lock`, nothing
-younger than two weeks unless it fixes a vulnerability) and users' computers install exactly that tree
-(`connector/constraints.txt`, passed to `uvx`). Outside that tree: a test tool used only on developers' computers,
-and a package installed only in web browsers.
+younger than two weeks unless it fixes a vulnerability). Users' computers install exactly that tree with
+`uv run --frozen`, which checks every package against the hash recorded in the lock and refuses a mismatch,
+downloads with the operating system's certificate store, and ignores uv's configuration files on the computer.
+Outside that tree: a test tool used only on developers' computers, and a package installed only in web
+browsers.
 
 ## When the connector stops
 

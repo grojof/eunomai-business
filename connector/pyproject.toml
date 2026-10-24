@@ -31,7 +31,7 @@ packages = ["src/eunomai_business"]
 exclude-newer = "14 days"
 # ...unless every older version is vulnerable: then the fixed one wins (dependency_check says which).
 exclude-newer-package = { certifi = "2026-10-21T00:00:00Z" }  # 2026.10.19 fixes GHSA-6q48-6c7w-9gw2
-# Rebuild when the source changes, not only when pyproject.toml does (uvx caches local builds).
+# Rebuild when the source changes, not only when pyproject.toml does (uv caches local builds).
 cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }]
 
 [tool.pytest.ini_options]

@@ -3,7 +3,7 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "{{UVX_COMMAND}} --from \"{{CONNECTOR}}\" -c \"{{CONSTRAINTS}}\" eunomai-business-hook", "timeout": 60 }
+          { "type": "command", "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --native-tls --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-hook", "timeout": 60 }
         ]
       }
     ],
@@ -11,7 +11,7 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "{{UVX_COMMAND}} --from \"{{CONNECTOR}}\" -c \"{{CONSTRAINTS}}\" eunomai-business-hook", "timeout": 30 }
+          { "type": "command", "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --native-tls --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-hook", "timeout": 30 }
         ]
       }
     ]

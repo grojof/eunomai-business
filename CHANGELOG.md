@@ -9,8 +9,10 @@
   gets one plain sentence and IT a report, with an e-mail link when `support_email` is set.
 - **New setting `support_email`.**
 - **Dependencies follow the project's own rules:** the whole tree locked with nothing younger than two weeks
-  unless it fixes a vulnerability (certifi 2026.10.19), truststore back to 0.10.4, and users' computers install
-  exactly that tree through `constraints.txt`.
+  unless it fixes a vulnerability (certifi 2026.10.19), truststore back to 0.10.4.
+- **Launch with `uv run --frozen`:** users' computers install exactly the locked tree, each package checked
+  against its hash; downloads use the operating system's certificate store; uv's configuration files on the
+  computer are ignored; Python 3.12. The setting `uvx` becomes `uv`.
 - **The specialist (first version):** the `specialist` skill guides a business user from a vague idea to a pull
   request (understand, shape, specify, build, deliver), writing OpenSpec files without its command-line tool.
 - **Settings for the specialist:** `docs_language`, `code_language`, `free_development` (off by default),

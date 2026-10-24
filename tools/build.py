@@ -22,7 +22,7 @@ CONNECTOR_SRC = ROOT / "connector"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache")
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies", "projects",
                    "dependency_exceptions"}
-KEYS = {"uvx", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
+KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers"} | SPECIALIST_KEYS
 PROVIDER_KEYS = {"authorize_url", "token_url", "client_id", "scopes", "redirect_uri", "userinfo_url", "login_field"}
 PROVIDER_REQUIRED = {"authorize_url", "token_url", "client_id", "redirect_uri", "userinfo_url"}
@@ -126,15 +126,13 @@ def build(cfg: dict, out_dir: Path) -> Path:
     else:
         connector = Path(cfg["connector_path"]).resolve().as_posix()
 
-    uvx = str(cfg.get("uvx") or "uvx").replace("\\", "/")
+    uv = str(cfg.get("uv") or "uv").replace("\\", "/")
     values = {
-        "UVX": uvx,
+        "UV": uv,
         # Hooks run through whatever shell Claude Desktop picks (Git Bash, cmd, PowerShell). A bare command works in
         # all of them; a quoted one breaks PowerShell, so quotes are only for a path with spaces.
-        "UVX_COMMAND": f'"{uvx}"' if " " in uvx else uvx,
+        "UV_COMMAND": f'"{uv}"' if " " in uv else uv,
         "CONNECTOR": connector,
-        # every package at the exact version tested: uvx would otherwise resolve the newest ones
-        "CONSTRAINTS": f"{connector}/constraints.txt",
         "PROVIDERS": json.dumps({k: v for k, v in cfg["providers"].items() if not k.startswith("_")},
                                 separators=(",", ":")),
         "WORKSPACES_ROOT": cfg.get("workspaces_root") or "~/eunomai-business-workspaces",
