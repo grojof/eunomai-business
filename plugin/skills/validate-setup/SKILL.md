@@ -19,6 +19,13 @@ language the user writes in; keep tool names, hypothesis numbers and error texts
 4. `whoami(provider)` again for each provider, to confirm the stored sign-in works.
 5. `diag_hook_log` — say whether hook lines exist, on which host and with which shell. If the session context
    contains a line starting with `[eunomai-business] SessionStart hook ran`, quote it.
+6. Guard probe (H9). None of these files exist; the point is whether a hook stops the tool first:
+   a. with your file-reading tool, read `eunomai-guard-test-json.txt`;
+   b. with your shell, run `cat eunomai-guard-test-exit2.txt`;
+   c. with your file-reading tool, read `eunomai-guard-control.txt` (control: expect "not found", not a block).
+   For each, report whether the tool was blocked by a hook and the exact message you saw. Then
+   `diag_hook_log(15)`: for those calls note `guard`, `input_keys`, `launch_ms` and `hook_ms`, and give the range
+   of `launch_ms` over all PreToolUse lines.
 
 ## The hypotheses (use these exact numbers and names)
 
@@ -30,6 +37,7 @@ language the user writes in; keep tool names, hypothesis numbers and error texts
 | H4 | Sign-in works with every provider: browser, loopback redirect, no secret, tokens stored in the per-user store | step 3 ends `signed_in` for each provider |
 | H5 | The stored sign-in is reused (new task, Desktop restart, refresh after expiry) | step 4 and later runs |
 | H6 | Plugin hooks run in Cowork, on the host, and with which shell | step 5 |
+| H9 | A PreToolUse hook receives the tool's input and its *deny* stops the tool (JSON answer and exit code 2); time per call | step 6: a and b blocked, c not; `input_keys` present; `launch_ms` |
 
 Report one table (one row per provider for H4 and H5): hypothesis, what was observed, and pass / fail / not
 tested. Facts only; mark anything you inferred as inferred.
