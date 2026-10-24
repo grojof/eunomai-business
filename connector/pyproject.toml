@@ -1,0 +1,36 @@
+[project]
+name = "eunomai-business"
+version = "0.1.0"
+description = "Local connector of eunomai-business: sign-in, workspaces, versions and save points for business users in Claude Cowork."
+requires-python = ">=3.12"
+dependencies = [
+    "mcp==2.3.0",
+    "httpx==0.28.1",
+    "truststore==0.10.5",
+    "dulwich==1.2.17",
+    "urllib3==2.8.0",
+    "keyring==25.7.0; sys_platform != 'win32'",
+]
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+
+[project.scripts]
+eunomai-business = "eunomai_business.server:main"
+eunomai-business-hook = "eunomai_business.hook:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eunomai_business"]
+
+[tool.uv]
+# Rebuild when the source changes, not only when pyproject.toml does (uvx caches local builds).
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# A deprecated call breaks the tests now rather than the connector after an upgrade.
+filterwarnings = ["error::DeprecationWarning"]

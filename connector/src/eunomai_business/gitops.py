@@ -1,0 +1,350 @@
+"""Workspaces, versions (branches) and save points (commits), without Git installed (dulwich).
+
+Each workspace is a clone in the workspaces folder the organization sets when it builds the plugin (default
+~/eunomai-business-workspaces/<workspace>). The user selects the workspace's folder in Cowork, so Claude edits the
+same files the connector saves. The git sign-in token goes only to the git server's own origin, as HTTP basic auth
+(login + OAuth access token); it is never written to .git/config, only to the encrypted sign-in record.
+"""
+
+import io
+import json
+import os
+import re
+import shutil
+import ssl
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import truststore
+import urllib3
+from dulwich import porcelain
+from dulwich.client import get_transport_and_path
+from dulwich.repo import Repo
+
+from . import auth, data_dir
+
+# Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
+# which made checkouts CRLF, and a global filter would run commands. Same behaviour with or without Git
+# installed. Only this process is affected.
+os.environ.pop("GIT_CONFIG_SYSTEM", None)  # dulwich reads it even with GIT_CONFIG_NOSYSTEM set
+os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
+os.environ["GIT_CONFIG_GLOBAL"] = str(data_dir() / "no-global-gitconfig")  # never created
+
+PROVIDER = "git"
+_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_BRANCH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_ALWAYS_PROTECTED = {"main", "master"}
+# The folder is also writable from Claude's sandbox, .git included. Only these config entries are accepted, so
+# nothing written there (filters, hooksPath, fsmonitor, includes...) can make this host process run a command.
+_SAFE_CORE = {b"repositoryformatversion", b"filemode", b"bare", b"logallrefupdates", b"ignorecase",
+              b"symlinks", b"precomposeunicode", b"autocrlf"}
+_SAFE_SECTIONS = {b"remote": {b"url", b"fetch"}, b"branch": {b"remote", b"merge"}}
+
+
+def root() -> Path:
+    """Workspaces folder: EUNOMAI_WORKSPACES_ROOT with ~ and %VAR% expanded."""
+    raw = os.environ.get("EUNOMAI_WORKSPACES_ROOT") or "~/eunomai-business-workspaces"
+    path = Path(os.path.expandvars(os.path.expanduser(raw)))
+    if not path.is_absolute():
+        raise ValueError(f"workspaces folder must be absolute after expansion, got {raw!r}")
+    return path
+
+
+def _folder(workspace: str) -> Path:
+    if not _NAME.match(workspace or ""):
+        raise ValueError("workspace must be a plain folder name (letters, digits, . _ -)")
+    return root() / workspace
+
+
+def _open(path: str) -> Repo:
+    """Open a repository with its hooks disabled: dulwich runs post-commit even with no_verify, and a hook
+    written from Claude's sandbox would run on this computer."""
+    repo = Repo(path)
+    repo.hooks.clear()
+    return repo
+
+
+def _repo(workspace: str) -> Repo:
+    """Open a workspace's repository. Use it in a `with` block: open pack files lock the folder on Windows."""
+    folder = _folder(workspace)
+    if not (folder / ".git").is_dir():
+        raise FileNotFoundError(f"no workspace named {workspace!r} in {root()}; see workspace_list")
+    repo = _open(str(folder))
+    try:
+        _check_config(repo)
+    except Exception:
+        repo.close()
+        raise
+    return repo
+
+
+def _check_config(repo: Repo) -> None:
+    config = repo.get_config()
+    for section in config.sections():
+        allowed = _SAFE_CORE if section == (b"core",) else _SAFE_SECTIONS.get(section[0])
+        unexpected = [key for key, _ in config.items(section) if allowed is None or key.lower() not in allowed]
+        if unexpected:
+            name = b".".join(section).decode(errors="replace")
+            raise PermissionError(f"unexpected entry in .git/config ({name}: "
+                                  f"{', '.join(k.decode(errors='replace') for k in unexpected)}); refusing to run")
+
+
+def _git_session() -> dict:
+    current = auth.session(PROVIDER)
+    if not current:
+        raise PermissionError(f"not signed in to {PROVIDER!r}: run sign_in_start({PROVIDER!r}) first")
+    return current
+
+
+def _origin_of(url: str) -> tuple[str, str | None, int]:
+    parts = urlsplit(url)
+    return parts.scheme, parts.hostname, parts.port or {"https": 443, "http": 80}.get(parts.scheme, 0)
+
+
+def _check_host(url: str, current: dict) -> None:
+    """The token may only travel to the git server the sign-in belongs to."""
+    auth.check_url(url)
+    if _origin_of(url) != _origin_of(current["cfg"]["userinfo_url"]):
+        server = urlsplit(current["cfg"]["userinfo_url"])
+        raise PermissionError(f"{urlsplit(url).netloc} is not the signed-in git server ({server.netloc})")
+
+
+def _remote(current: dict) -> dict:
+    """Arguments for dulwich's HTTP client: OS certificate store, basic auth with the OAuth token."""
+    pool = urllib3.PoolManager(ssl_context=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=30)
+    login = str(current["user"].get(current["cfg"]["login_field"], "oauth"))
+    return {"username": login, "password": current["record"]["access_token"], "pool_manager": pool}
+
+
+def _origin(repo: Repo) -> str | None:
+    try:
+        return repo.get_config().get((b"remote", b"origin"), b"url").decode()
+    except KeyError:
+        return None
+
+
+# What the connector must remember about each workspace lives in its own per-user folder, not in .git: Claude's
+# sandbox can write .git, so nothing a barrier relies on can come from there.
+def _registry() -> dict:
+    try:
+        return json.loads((data_dir() / "workspaces.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+
+
+def _remember(folder: Path, main_branch: str | None) -> None:
+    registry = _registry()
+    registry[str(folder.resolve())] = {"main_branch": main_branch}
+    tmp = data_dir() / "workspaces.json.tmp"
+    tmp.write_text(json.dumps(registry, indent=1), encoding="utf-8")
+    os.replace(tmp, data_dir() / "workspaces.json")
+
+
+def _branch(repo: Repo) -> str | None:
+    try:
+        return porcelain.active_branch(repo).decode()
+    except (KeyError, IndexError):
+        return None
+
+
+def _head(repo: Repo) -> str | None:
+    try:
+        return repo.head().decode()[:12]
+    except KeyError:  # no commit yet
+        return None
+
+
+def _main_branch(repo: Repo) -> str | None:
+    """The server's main branch, as it was when the workspace was cloned (None: the repository was empty)."""
+    return _registry().get(str(Path(repo.path).resolve()), {}).get("main_branch")
+
+
+def _protected(repo: Repo) -> set[str]:
+    return _ALWAYS_PROTECTED | {name for name in [_main_branch(repo)] if name}
+
+
+def _text(paths) -> list[str]:
+    """Repository paths with '/' on every OS."""
+    return sorted((p.decode() if isinstance(p, bytes) else str(p)).replace(os.sep, "/") for p in paths)
+
+
+def _crlf(folder: Path, paths: list[str]) -> list[str]:
+    """Changed files that contain CRLF line endings."""
+    found = []
+    for path in paths:
+        file = folder / path
+        if file.is_file() and b"\r\n" in file.read_bytes()[:1_000_000]:
+            found.append(path)
+    return found
+
+
+def _author(current: dict) -> bytes:
+    user = current["user"]
+    name = user.get("full_name") or user.get("login") or "unknown"
+    email = user.get("email") or f"{user.get('login', 'unknown')}@users.noreply"
+    return f"{name} <{email}>".encode()
+
+
+def _check_branch_name(name: str) -> None:
+    parts = (name or "").split("/")
+    if len(name or "") > 100 or not all(_BRANCH_PART.match(p) and not p.endswith((".", ".lock")) for p in parts) \
+            or ".." in name:
+        raise ValueError("version name: parts of letters, digits, . _ - separated by '/', each starting with a "
+                         "letter or digit, no '..'")
+
+
+def clone(repo_url: str, workspace: str = "") -> dict:
+    current = _git_session()
+    if urlsplit(repo_url).username:
+        raise ValueError("repo_url must not contain credentials")
+    _check_host(repo_url, current)
+    workspace = workspace or Path(urlsplit(repo_url).path).name.removesuffix(".git")
+    folder = _folder(workspace)
+    if folder.exists():
+        raise FileExistsError(f"{folder} already exists; use it or pick another workspace name")
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    remote = _remote(current)
+    client, path = get_transport_and_path(repo_url, **remote)
+    advertised = client.get_refs(path.encode())
+    refs = getattr(advertised, "refs", None) or {}
+    default = (getattr(advertised, "symrefs", None) or {}).get(b"HEAD", b"").removeprefix(b"refs/heads/")
+    heads = _text(r.removeprefix(b"refs/heads/") for r in refs if r.startswith(b"refs/heads/"))
+    repo = None
+    try:
+        if heads:
+            out = io.BytesIO()
+            porcelain.clone(repo_url, str(folder), errstream=out, **remote).close()
+            repo = _open(str(folder))
+        else:  # empty repository (no branch yet): set it up the way `git clone` would
+            Repo.init(str(folder), mkdir=True).close()
+            repo = _open(str(folder))
+            config = repo.get_config()
+            config.set((b"remote", b"origin"), b"url", repo_url.encode())
+            config.set((b"remote", b"origin"), b"fetch", b"+refs/heads/*:refs/remotes/origin/*")
+            config.write_to_path()
+            repo.refs.set_symbolic_ref(b"HEAD", b"refs/heads/main")
+        main = default.decode() or next((h for h in ("main", "master") if h in heads), heads[0] if heads else None)
+        _remember(folder, main if heads else None)
+        config = repo.get_config()
+        config.set((b"core",), b"autocrlf", b"false")  # a Git on this computer sees the files as they are
+        config.write_to_path()
+    except Exception:
+        if repo is not None:
+            repo.close()
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+    files = [p for p in folder.rglob("*") if p.is_file() and ".git" not in p.relative_to(folder).parts]
+    with repo:
+        return {"workspace": workspace, "path": str(folder), "origin": _origin(repo), "branch": _branch(repo),
+                "head": _head(repo), "files": len(files), "empty_repository": not heads,
+                "remote_branches": heads, "main_branch": _main_branch(repo)}
+
+
+def workspaces() -> dict:
+    found = []
+    if root().is_dir():
+        for folder in sorted(root().iterdir()):
+            if (folder / ".git").is_dir():
+                with _open(str(folder)) as repo:
+                    found.append({"workspace": folder.name, "path": str(folder), "branch": _branch(repo),
+                                  "head": _head(repo), "origin": _origin(repo)})
+    return {"root": str(root()), "workspaces": found}
+
+
+def status(workspace: str) -> dict:
+    with _repo(workspace) as repo:
+        st = porcelain.status(repo, untracked_files="all")
+        staged = {kind: _text(paths) for kind, paths in st.staged.items() if paths}
+        changed = _text(st.unstaged) + _text(st.untracked)
+        return {"workspace": workspace, "branch": _branch(repo), "head": _head(repo), "staged": staged,
+                "unstaged": _text(st.unstaged), "untracked": _text(st.untracked),
+                "crlf_in_changed_files": _crlf(Path(repo.path), changed)}
+
+
+def branch(workspace: str, name: str) -> dict:
+    """Create a version (branch) from the current one and switch to it; local changes are kept."""
+    _check_branch_name(name)
+    with _repo(workspace) as repo:
+        ref = f"refs/heads/{name}".encode()
+        if ref in repo.refs:
+            raise FileExistsError(f"version {name!r} already exists")
+        if name in _protected(repo):
+            raise PermissionError(f"{name!r} is the repository's main branch, not a version")
+        previous = _branch(repo)
+        if _main_branch(repo) is None or _head(repo) is None:
+            raise PermissionError("the repository has no main branch yet: whoever manages it must initialize it "
+                                  "(for example with a README) before versions can be created")
+        repo.refs[ref] = repo.head()
+        repo.refs.set_symbolic_ref(b"HEAD", ref)  # same commit, so the working tree stays as it is
+        return {"workspace": workspace, "branch": name, "from": previous, "head": _head(repo)}
+
+
+def save(workspace: str, message: str) -> dict:
+    """Save point: stage every change (new, modified, deleted) and commit as the signed-in git user."""
+    if not (message or "").strip():
+        raise ValueError("a save point needs a message")
+    current = _git_session()
+    with _repo(workspace) as repo:
+        if _branch(repo) is None or _branch(repo) in _protected(repo):
+            raise PermissionError("create a version first: save points never go straight to the main branch")
+        before = status(workspace)
+        porcelain.add(repo)  # no paths: new and modified files from the repository root
+        st = porcelain.status(repo)
+        if not any(st.staged.values()) and not st.unstaged:
+            return {"workspace": workspace, "saved": False, "reason": "nothing changed"}
+        # all=True also takes modified and deleted tracked files, like `git commit -a`
+        sha = porcelain.commit(repo, message=message.strip().encode(), author=_author(current),
+                               committer=_author(current), all=True, no_verify=True)
+        return {"workspace": workspace, "saved": True, "branch": _branch(repo), "commit": sha.decode()[:12],
+                "files": sorted({*before["untracked"], *before["unstaged"], *sum(before["staged"].values(), [])}),
+                "crlf_in_changed_files": before["crlf_in_changed_files"]}
+
+
+def push(workspace: str) -> dict:
+    """Send the current version to the server (never the main branch, never forced)."""
+    current = _git_session()
+    with _repo(workspace) as repo:
+        name = _branch(repo)
+        if name is None or name in _protected(repo):
+            raise PermissionError("only versions are sent; the main branch changes through a pull request")
+        origin = _origin(repo)
+        _check_host(origin, current)
+        out = io.BytesIO()
+        result = porcelain.push(repo, origin, f"refs/heads/{name}:refs/heads/{name}".encode(), outstream=out,
+                                errstream=out, **_remote(current))
+        errors = {ref.decode(): str(err) for ref, err in (result.ref_status or {}).items() if err}
+        web = origin.removesuffix(".git")
+        return {"workspace": workspace, "branch": name, "pushed": not errors, "errors": errors or None,
+                "head": _head(repo), "web_url": f"{web}/src/branch/{name}"}
+
+
+def pull_request(workspace: str, title: str, description: str = "") -> dict:
+    """Propose the current version for the main branch. Gitea API for now; the hosting adapter comes later."""
+    if not (title or "").strip():
+        raise ValueError("a pull request needs a title")
+    current = _git_session()
+    with _repo(workspace) as repo:
+        name = _branch(repo)
+        if name is None or name in _protected(repo):
+            raise PermissionError("a pull request proposes a version: switch to one first")
+        origin = _origin(repo)
+    _check_host(origin, current)
+    parts = urlsplit(origin)
+    segments = parts.path.strip("/").removesuffix(".git").split("/")
+    prefix = "".join(f"/{s}" for s in segments[:-2])  # servers published under a sub-path
+    api = f"{parts.scheme}://{parts.netloc}{prefix}/api/v1/repos/{segments[-2]}/{segments[-1]}"
+    headers = {"Authorization": f"Bearer {current['record']['access_token']}", "Accept": "application/json"}
+    with auth.http_client() as client:
+        info = client.get(api, headers=headers)
+        info.raise_for_status()
+        base = info.json().get("default_branch") or "main"
+        response = client.post(f"{api}/pulls", headers=headers,
+                               json={"head": name, "base": base, "title": title.strip(), "body": description})
+    if response.status_code == 409:
+        return {"workspace": workspace, "created": False, "head": name, "base": base,
+                "reason": "a pull request for this version is already open"}
+    if response.status_code != 201:
+        raise RuntimeError(f"git server answered {response.status_code}: {response.text[:300]}")
+    pr = response.json()
+    return {"workspace": workspace, "created": True, "number": pr.get("number"), "url": pr.get("html_url"),
+            "head": name, "base": base}
