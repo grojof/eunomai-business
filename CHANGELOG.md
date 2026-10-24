@@ -17,6 +17,8 @@
   `allowed_technologies`, `projects`, `dependency_exceptions`; tool `specialist_settings`.
 - **`dependency_check`:** which package version may be used, decided by rules (vulnerabilities, yanked,
   deprecated, origin, activity, age), deny by default.
+- **Compliance page** for audits: data protection, information-security controls, supply chain and licenses,
+  and what remains the organization's responsibility.
 - **Guard probe (diagnostics):** the diagnostic hook denies two test markers, as a JSON answer and as exit code 2,
   and logs input field names and timings, to validate the planned file guard (H9).
 
