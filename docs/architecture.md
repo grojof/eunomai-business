@@ -169,11 +169,11 @@ sequenceDiagram
   each task's folder and does not outlive the task. Claude Desktop installed as a Windows package (MSIX) redirects
   that folder for the processes it starts ([where](data-on-computers.md)).
 - **Where the session runs.** Since 2026-10-06, new Cowork tasks on Pro and Max plans run on Anthropic's servers;
-  Team and Enterprise owners decide it for their organization. Local connectors, this one included, still work, but
-  only through the open desktop app
-  ([Anthropic](https://support.claude.com/en/articles/15520349)). Claude's sandbox may therefore be in the cloud
-  while the connector, the hooks and the workspace folder stay on the user's computer (check H16 in
-  [validation](validation/hypotheses.md)).
+  on Team and Enterprise an owner decides it ("Run Cowork in the cloud": on by default on Team, off on Enterprise).
+  Anthropic states that local connectors work through the open desktop app
+  ([Anthropic](https://support.claude.com/en/articles/15520349)), but whether this connector and the shared
+  workspace folder work when the sandbox is in the cloud is not yet validated (check H16 in
+  [validation](validation/hypotheses.md)). Until it is, organizations keep Cowork tasks on users' computers.
 
 ## What is tied to a git hosting
 
@@ -190,22 +190,28 @@ organization's configuration. Only the hosting-specific rows above move into it.
 
 ## Hooks
 
-Hooks run on the user's computer, not in Cowork's sandbox, through Git Bash if installed and PowerShell otherwise.
-Each one sets `onFailure: "continue"`: a hook that cannot start never blocks Claude, since the barriers that hold are
-in the connector.
+Hooks run on the user's computer, not in Cowork's sandbox: through Git Bash if installed, PowerShell otherwise.
 
-**Built: file guard** (`eunomai-business-guard`, in every build). A PreToolUse hook on `Write`, `Edit` and the
-sandbox shell that denies, with a reason Claude can act on:
+**Built: file guard** (`eunomai-business-guard`, in every build). A PreToolUse hook on the file tools (`Write`,
+`Edit`, `MultiEdit`, `NotebookEdit`) and the shell (`Bash`, `mcp__workspace__bash`) that denies, with a reason
+Claude can act on:
 
-| Kind | Files | Why |
-|---|---|---|
-| Project context | `AGENTS.md`, `CLAUDE.md` | IT keeps them; the specialist reads the project's context from the main branch on the server |
-| Configuration | `.claude/`, `.mcp.json`, `.git/` | They configure Claude or the repository |
-| Executables | `.bat`, `.cmd`, `.ps1`, `.vbs`, `.lnk`, `.exe` and other files Windows runs on a double click | The workspace folder is on the user's computer: a double click would run what the sandbox wrote |
+| Kind | Files | Where | Why |
+|---|---|---|---|
+| Executables | `.bat`, `.cmd`, `.ps1`, `.vbs`, `.lnk`, `.exe`, `.jar`, `.chm`, `.msi` and other files Windows runs, installs or follows on a double click | Everywhere Claude writes | The files are on the user's computer: a double click would run what the sandbox wrote |
+| Project context | `AGENTS.md`, `CLAUDE.md` | In workspaces | IT keeps them; the specialist reads the project's context from the server ([decision 8](decisions.md#8--the-projects-context-belongs-to-it)) |
+| Configuration | `.claude/`, `.mcp.json`, `.git/`, and continuous integration (`.gitea/`, `.github/`, `.forgejo/`, `.gitlab-ci.yml`...) | In workspaces | They configure Claude, the repository, or what runs on IT's servers |
 
-`version_save` enforces the same rules on the host, where the sandbox cannot reach: context and configuration
-files go back to how the last save point has them, and an executable stops the save. The hook makes Claude learn
-at once; the save is what holds.
+A path is a workspace's when one of its folders has a registered workspace's name. Names Windows treats as the
+same file count as protected too: trailing dots and spaces, alternate streams (`run.bat::x`), 8.3 short names.
+The guard is set to `onFailure: "block"`: a guard that cannot run stops the write instead of letting it through.
+
+`version_save` enforces the same rules on the host, where the sandbox cannot reach: every path must be valid on
+Windows and stay inside the workspace; context and configuration files go back to how the last save point has them
+(matched regardless of case, never through a link); adding or changing an executable stops the save (removing one
+is allowed); and the tree actually committed is checked again, so a file written in the meantime undoes the save
+point. A prototype page is saved only with a Content-Security-Policy that loads nothing from other sites. The hook
+keeps dangerous files off the computer; the save keeps them out of the repository.
 
 **Built: measurement hooks** (diagnostics only): they log each tool call and deny two guard-test markers (H9).
 
@@ -213,9 +219,15 @@ at once; the save is what holds.
 organization rules added in the build configuration; organizations extend the defaults and cannot remove the fixed
 rules above.
 
-**Limits:** a hook sees a shell command as text. A plain write to a protected name is caught; a command built to
-hide it is not, which is why `version_save` repeats the check. The guard reduces mistakes and casual exposure; the
-real boundary for secrets is not putting them where Claude works.
+**Limits:**
+
+- A hook sees a shell command as text: a plain write to a protected name is caught, a command built to hide it
+  is not. The save repeats the check for the repository; nothing repeats it for the disk.
+- Script sources that Windows opens with an interpreter (`.js` through Windows Script Host, `.py` through the
+  Python launcher) cannot be refused without refusing every web application. Disabling Windows Script Host on
+  business users' computers is an operating-system control for IT ([barriers](barriers.md#what-eunomai-business-does-not-protect)).
+- The guard reduces mistakes and casual exposure; the real boundary for secrets is not putting them where Claude
+  works.
 
 ## Plugin per project
 

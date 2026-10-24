@@ -25,7 +25,7 @@ installed as a Windows package (MSIX, as from the Microsoft Store) redirects it 
 | Sign-in records | `<data>\signin-<hash>.dpapi`, one per provider (measured; the hash comes from the provider name and client ID) | Access token, refresh token, expiry times. Encrypted with DPAPI for that Windows user | **Yes** | **Yes**: delete them (below) |
 | Workspace registry | `<data>\workspaces.json` | Each workspace's folder, repository address and main branch, so the connector protects them | No | **Yes** |
 | Operation locks | `<data>\locks\` | Empty files that exist only while an operation runs | No | Normally empty |
-| Hook log (only with `diagnostics: true`) | `<data>\hooks.log`, and `hooks.log.1` after rotation (measured) | One JSON line per tool call: time, event, tool name, the names (not values) of its input fields, launch and run times, computer name, OS, shell, working folder, plugin folder, session ID. No file contents, no tokens | Low: paths include the Windows user name | **Yes**; rotated at 1 MB, so at most about 2 MB (a short session wrote 41 KB) |
+| Hook log (only with `diagnostics: true`) | `<data>\hooks.log`, and `hooks.log.1` after rotation (measured) | One JSON line per tool call: time, event, tool name, the names (not values) of its input fields, whether a guard-test marker matched, launch and run times, computer name, OS, shell, working folder, plugin folder, session ID. No file contents, no tokens | Low: paths include the Windows user name | **Yes**; rotated at 1 MB, so at most about 2 MB (a short session wrote 41 KB) |
 | Workspaces | `workspaces_root`, default `%USERPROFILE%\eunomai-business-workspaces\<name>` (measured) | Clones of the repositories: the user's work, versions not yet sent included | **As sensitive as the repositories** | **Yes, on purpose**: it is the user's work |
 | Backups before an update | Inside each workspace's `.git`, as `refs/eunomai/backup/<time>/<branch>` | Where each branch was before `workspace_update` moved it | As the workspace | With the workspace |
 | uv | `%USERPROFILE%\.local\bin\uv.exe`, `uvx.exe`, `uvw.exe`; `%LOCALAPPDATA%\uv\uv-receipt.json`; user `PATH` entry (measured) | The uv program, installed per user | No | Yes; it is a separate program |
@@ -40,7 +40,7 @@ Nothing is written to the registry or outside the user's profile, and nothing ne
 
 When the connector stops, the report the user can send to IT contains the workspace's folder and repository,
 the version, its last save point and the main branch, the files involved, the error text for unexpected errors,
-the connector version, the computer's OS and the time. It never contains
+the connector version and build, the computer's OS and the time. It never contains
 tokens. It travels only if the user sends the e-mail.
 
 ## Calls to public services

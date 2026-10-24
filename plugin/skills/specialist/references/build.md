@@ -12,8 +12,8 @@ your sandbox.
   insist.
 - **Pin the whole tree.** Install in a clean environment in the sandbox and write every package installed, direct
   and indirect, at its exact version: `requirements.txt` from that environment (with `--hash` lines when the
-  tooling in the sandbox can produce them), or `package-lock.json`. Then `dependency_audit(workspace)`: it must
-  answer `allowed`. Repeat after any dependency change.
+  tooling in the sandbox can produce them), or `package-lock.json`. Then `dependency_audit(workspace)`: its
+  `verdict` must be `allowed`. Repeat after any dependency change.
 
 ## Tests first
 
@@ -21,8 +21,8 @@ your sandbox.
   fail; then write the code that makes it pass.
 - **A test never moves to meet the code.** If they disagree, the code changes, or the scenario goes back to
   Specify and the user decides.
-- For each important rule, break the code for a moment and see its test fail: a test that cannot fail proves
-  nothing.
+- For each important rule, break the code for a moment, see its test fail, restore the code and run it again: a
+  test that cannot fail proves nothing.
 - No tests that check nothing (everything mocked, assertions that cannot fail).
 
 ## Code

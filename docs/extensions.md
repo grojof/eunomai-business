@@ -34,7 +34,7 @@ knowledge needed for business-logic decisions, from the same source the business
 **Planned in eunomai-business:** the vocabulary is set in the organization's configuration at build time
 ([decision 4](decisions.md#4--configuration-at-build-time-by-it)). The guided flows write pages with it, and a
 deterministic check (not the model's judgment) verifies it. The plugin still does not manage project files
-([decision 5](decisions.md#5--the-plugin-never-manages-files-in-a-project)): the pages are the users' work, written with the
+([decision 5](decisions.md#5--the-plugin-manages-no-project-rules)): the pages are the users' work, written with the
 organization's vocabulary.
 
 **Out of scope here:** the reading service, the index and the knowledge-base server.

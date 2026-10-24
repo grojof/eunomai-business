@@ -10,7 +10,7 @@ related: [architecture.md, decisions.md]
 # Guided flows
 
 **Status:** first version built as the `specialist` skill; its behaviour in Cowork is still to be validated
-(checks H11–H17 in [validation](validation/hypotheses.md); first business-user test on 2026-10-24).
+(checks H11–H15 in [validation](validation/hypotheses.md); first business-user test on 2026-10-24).
 
 The specialist is developer, analyst and consultant at the business user's side. Business users often start
 from a vague idea, or from a clear idea that is not the right one; building straight away turns the application
@@ -61,9 +61,10 @@ After the review, the specialist brings the accepted work back on its own and su
 
 Every pull request opens with the same short summary: the goal, what was built mapped to the requirements, the
 test of each scenario, what is **not settled** (unconfirmed assumptions, rules without a source, open questions),
-what was skipped, the skills used besides the specialist and any conflict with its rules, and course changes that
-matter. Gaps are visible instead of hidden, and the reviewer can take
-any of them straight back to the user. The template is in
+what was skipped, the skills used besides the specialist and any conflict with its rules, lines proposed for the
+project's context, and course changes that matter. Below it, the connector appends its own checks (the dependency
+audit), which the model does not write. Gaps are visible instead of hidden, and the reviewer can take any of them
+straight back to the user. The template is in
 [`deliver.md`](../plugin/skills/specialist/references/deliver.md).
 
 ## Keeping it clean
@@ -99,4 +100,4 @@ code, the specialist still analyses, shapes and specifies, and delivers that to 
 
 ## To validate
 
-Checks H11 to H17 in [validation](validation/hypotheses.md).
+Checks H11 to H15 in [validation](validation/hypotheses.md).

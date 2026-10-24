@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project files, and no technical problem left to the user."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, and a project context that belongs to IT."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md]
@@ -19,7 +19,12 @@ and browser; hence the [barriers](barriers.md).
 
 - **Rejected:** a remote connector. Claude calls remote connectors from Anthropic's cloud, so internal servers
   would have to be published to the internet.
-- **Requires:** Cowork running on the user's computer, and `uv` installed once per user.
+- **Requires:** the desktop app open, Cowork tasks on the user's computer until check H16 shows the cloud works
+  too, and `uv` installed once per user.
+- **To reconsider before 1.0:** a Claude Desktop extension (MCPB) runs on the Node.js that ships with Claude
+  Desktop ([Anthropic](https://claude.com/docs/connectors/building/mcpb)), which would remove uv and Python from
+  users' computers. It means rewriting the connector (git in JavaScript instead of dulwich), and whether a plugin's
+  local server can use that runtime is not verified.
 
 ## 2 · Public sign-in clients, tokens encrypted per user
 
@@ -54,9 +59,10 @@ Everything that varies between organizations is set by IT in one file and built 
 - **Consequence:** a configuration change means rebuilding and publishing the plugin; the zip carries internal
   host names and stays inside the organization.
 
-## 5 · The plugin never manages files in a project
+## 5 · The plugin manages no project rules
 
-eunomai-business enforces its own barriers only. Rules for a project's files (line endings, ignored files) are
+eunomai-business enforces its own barriers only. Its file guard refuses to save the files that steer Claude or run
+on the user's computer ([decision 8](#8--the-projects-context-belongs-to-it)); it writes no rule into a project. Rules for a project's files (line endings, ignored files) are
 [good practices](project-practices.md) owned by the project, valid for any git hosting. Project-specific rules for
 Claude go in a project plugin ([architecture](architecture.md#plugin-per-project)).
 
@@ -95,5 +101,7 @@ and a save point never carries a change to it.
 
 - **Rejected:** relying on Cowork reading the folder's `CLAUDE.md` (not documented for Cowork) or on each user
   setting up a Cowork project with instructions (unreliable for the least technical user).
-- **Consequence:** this complements decision 5: the plugin still manages no project rules; it only refuses to carry
-  changes to the files that steer Claude.
+- **Consequence:** the connector reads the context from the server each time it is asked, never from the folder
+  or from references the sandbox could rewrite. Organizations on Team and Enterprise back this with one line of
+  organization instructions, which take precedence over a user's own
+  ([configuration](configuration.md#whose-context-counts)).

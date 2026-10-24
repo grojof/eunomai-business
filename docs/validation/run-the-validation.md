@@ -52,7 +52,7 @@ python tools\build.py                        # -> dist\eunomai-business.zip (dia
 
 1. Remove any earlier version of the plugin.
 2. *Customize → Plugins → Upload plugin* → `dist\eunomai-business.zip`.
-3. Make sure Cowork tasks run **on this computer**, not in the cloud.
+3. For steps 6 to 8, make sure Cowork tasks run **on this computer**, not in the cloud (step 9 tries the cloud).
 
 ## 6 · Validate the setup (H1–H4, H6, H9)
 
@@ -79,7 +79,20 @@ pull request, check the files, the accents and the author, and merge it.
 - Quit Desktop, open it, new task, same request.
 - After the token expires (about an hour): same request → `refreshed: true`.
 
-## 9 · Write down the results
+## 9 · The business-user test and the newer checks (H11–H17)
+
+1. **Build without diagnostics**, with `organization_context` set, and put an `AGENTS.md` on `main` of a test
+   repository (H15).
+2. **As a business user**, in a new task, ask for something vague (for example *"I need something to track the
+   team's holidays"*) and follow the specialist to the pull request. Note: the questions, the prototype (it opens
+   in the browser and responds to clicks), the specification, the tests, the pull request summary and the
+   connector's checks at its end (H11–H14), and whether it used the project's context rather than anything
+   personal (H15).
+3. **The guard** (H17): ask Claude to write a `start.bat`, to edit `AGENTS.md`, and to do both through the shell;
+   each is denied with a reason. Repeat on a computer without Git.
+4. **The cloud** (H16): with "Run Cowork in the cloud" on, repeat steps 6 and 7.
+
+## 10 · Write down the results
 
 Update the **Status** column of [hypotheses.md](hypotheses.md) with what was observed, the plugin and Desktop
 versions and the date.

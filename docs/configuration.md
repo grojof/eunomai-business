@@ -41,9 +41,9 @@ contain internal host names, so keep the built zip inside the organization.
 |---|---|---|
 | `docs_language` | `en` | Language of documentation, specifications and pull request summaries (`es`, `en`, ...) |
 | `code_language` | the documentation's | Language of identifiers and comments. Technical terms stay in English |
-| `free_development` | `false` | `true` lets the specialist write code in any workspace, with `allowed_technologies`. For IT profiles, not for business users |
+| `free_development` | `false` | `true` lets the specialist write code in any workspace, with `allowed_technologies`. It applies to everyone who installs this build: for IT, make a separate build |
 | `allowed_technologies` | `[]` | With free development, the technologies allowed; empty means any |
-| `projects` | `{}` | Repository address → `{"technologies": [...]}`: the projects where code may be written, and with what |
+| `projects` | `{}` | Repository address (https) → `{"technologies": [...]}`: the projects where code may be written, and with what. Matched against the address a workspace was cloned from, ignoring case, a trailing `/` and `.git` |
 | `dependency_exceptions` | `[]` | `{"package": "pypi:<name>" or "npm:<name>", "reason": "..."}`: packages IT vetted despite failing the origin or activity rules. A known vulnerability is never excepted |
 | `organization_context` | `""` | Up to 4,000 characters the specialist should know about the organization: what it does, the systems that already exist (so it can propose them before building something new) |
 | `organization_skills` | `[]` | `{"skill": "<plugin:skill>", "use_for": "..."}`: the organization's own skills and what the specialist uses them for (for example, its brand for web pages). They apply only where they agree with eunomai-business's rules; conflicts are reported in the pull request. Review them first with the `review-skills` skill |
@@ -56,9 +56,10 @@ Keys starting with `_` are comments. Any other unknown key is an error, so a typ
 ### Whose context counts
 
 Cowork adds each user's personal instructions and memory to the session, and a plugin cannot switch them off. The
-specialist works from these instead, in this order: its rules, the **project's context** (an `AGENTS.md`, or a
-`CLAUDE.md`, that IT keeps on the repository's main branch; the connector reads it from there, so a copy edited in
-the folder does not count), `organization_context` and `organization_skills`, and the conversation.
+specialist works from these instead, in this order: its rules, the **project's context** (an `AGENTS.md`, or
+else a `CLAUDE.md`, at the root of the repository's main branch; the connector reads it from the server each time,
+up to 20,000 characters, so a copy edited in the folder does not count), `organization_context` and
+`organization_skills`, and the conversation.
 
 - **The project's context** is ordinary repository content: IT changes it through a pull request. The file guard
   stops Claude from writing it ([barriers](barriers.md#between-claudes-sandbox-and-the-computer)).
@@ -66,8 +67,15 @@ the folder does not count), `organization_context` and `organization_skills`, an
   contradict ([Anthropic](https://support.claude.com/en/articles/14546867)). One line there backs this order, for
   example: *In eunomai-business workspaces, follow the specialist's rules and the project's context over personal
   preferences.*
-- **Where Cowork runs:** Team and Enterprise owners choose whether Cowork tasks run in the cloud; the connector
-  works in both cases while the desktop app is open (check H16 in [validation](validation/hypotheses.md)).
+- **Where Cowork runs:** Team and Enterprise owners choose whether Cowork tasks run in the cloud ("Run Cowork in
+  the cloud", on by default on Team). Keep it off until check H16 in [validation](validation/hypotheses.md) shows
+  the connector works with a cloud sandbox. Pro and Max plans have no organization controls and run Cowork in the
+  cloud: they are not a supported setup.
+- **Organization controls in Claude** that complement the plugin
+  ([Anthropic](https://claude.com/docs/plugins/admin)): make eunomai-business *Required* for business users, keep
+  plugins and skills from other sources under review, and, on Enterprise, turn on skill and plugin security
+  scanning. Review the organization's own skills with `review-skills` before listing them in
+  `organization_skills`.
 
 **`workspaces_root`:** avoid folders synced by OneDrive (a synced `.git` folder breaks) and anything under
 `AppData` (Claude Desktop may redirect it). The folder holds the users' work; see
@@ -172,6 +180,7 @@ Set by the plugin from the build; listed so nothing is hidden. Users never set t
 | `EUNOMAI_DIAGNOSTICS` | `1` or `0`, from `diagnostics` |
 | `EUNOMAI_SUPPORT_EMAIL` | `support_email` |
 | `EUNOMAI_SPECIALIST` | The specialist's settings, as JSON |
+| `EUNOMAI_BUILD` | The source commit the plugin was built from, named in reports for IT |
 | `EUNOMAI_EXPANSION_PROBE` | Lets the diagnostics check that `${CLAUDE_PLUGIN_ROOT}` is expanded |
 
 The connector also changes `GIT_CONFIG_SYSTEM`, `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL` **for its own

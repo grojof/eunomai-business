@@ -28,7 +28,7 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     guard = hooks["PreToolUse"][0]
     assert "Write" in guard["matcher"] and "mcp__workspace__bash" in guard["matcher"]
     assert guard["hooks"][0]["command"].endswith("eunomai-business-guard")
-    assert guard["hooks"][0]["onFailure"] == "continue"
+    assert guard["hooks"][0]["onFailure"] == "block"  # a guard that cannot run stops the write
     assert not any(n.startswith("skills/validate-") for n in names)
     assert "skills/specialist/SKILL.md" in names and "skills/specialist/references/specify.md" in names
     assert "skills/review-skills/SKILL.md" in names

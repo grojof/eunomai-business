@@ -8,6 +8,9 @@ import pytest
 from eunomai_business import deps, server as tools, settings
 
 
+REAL_EXISTS = deps._exists  # before the fixture below replaces it
+
+
 @pytest.fixture(autouse=True)
 def source_repositories_exist(monkeypatch):
     monkeypatch.setattr(deps, "_exists", lambda url: True)
@@ -202,7 +205,8 @@ def registry(monkeypatch, packages: dict, vulns: dict | None = None, requires: d
             return {"info": {"project_urls": {"Source": f"https://github.com/o/{name}"}, "license": "MIT"},
                     "releases": {v: [{"upload_time_iso_8601": stamp(d), "yanked": False}]
                                  for v, d in packages[name].items()}}
-        return {"time": {v: stamp(d) for v, d in packages[name].items()}, "repository": "github:o/" + name.split("/")[-1],
+        return {"time": {v: stamp(d) for v, d in packages[name].items()},
+                "repository": "github:o/" + name.split("/")[-1],
                 "versions": {v: {} for v in packages[name]}}
 
     monkeypatch.setattr(deps, "_get", get)
@@ -225,27 +229,96 @@ def test_the_audit_checks_every_pinned_package_direct_and_indirect(monkeypatch, 
 
 def test_the_audit_refuses_loose_pins_and_notes_missing_hashes(monkeypatch, tmp_path):
     registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
-    (tmp_path / "requirements.txt").write_text("fastapi==0.1.0\nuvicorn>=0.30\n-r other.txt\n")
+    (tmp_path / "requirements.txt").write_text("fastapi==0.1.0\nuvicorn>=0.30\n")
     result = deps.audit(tmp_path)
     assert result["not_pinned"] == ["requirements.txt: uvicorn>=0.30"] and result["verdict"] == "blocked"
     assert result["without_hashes"] == ["requirements.txt"]
+
+
+@pytest.mark.parametrize("line", ["--index-url https://mirror.example/simple", "--extra-index-url https://x.example",
+                                  "--find-links ./wheels", "-e ./local", "-r ../elsewhere.txt",
+                                  "pkg @ https://example.com/pkg.whl", "git+https://example.com/pkg.git"])
+def test_the_audit_refuses_anything_installed_from_elsewhere(monkeypatch, tmp_path, line):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    (tmp_path / "requirements.txt").write_text(f"fastapi==0.1.0\n{line}\n")
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_an_include_of_another_pinned_list_is_accepted(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}, "pytest": {"9.1.1": 100}})
+    (tmp_path / "requirements.txt").write_text("fastapi==0.1.0\n")
+    (tmp_path / "requirements-dev.txt").write_text("-r requirements.txt\npytest==9.1.1\n")
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "allowed" and result["packages"] == 2
+
+
+def test_a_list_that_pins_nothing_is_not_a_pass(monkeypatch, tmp_path):
+    registry(monkeypatch, {})
+    (tmp_path / "requirements.txt").write_text("# nothing here\n")
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "pins nothing" in result["not_pinned"][0]
+
+
+def test_an_old_npm_lockfile_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {})
+    (tmp_path / "package-lock.json").write_text(json.dumps({"lockfileVersion": 1, "dependencies": {"x": {}}}))
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "version 1" in result["not_pinned"][0]
+
+
+def test_an_npm_entry_from_elsewhere_or_under_another_name_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"lodash": {"4.17.21": 100}})
+    (tmp_path / "package-lock.json").write_text(json.dumps({"lockfileVersion": 3, "packages": {
+        "node_modules/lodash": {"version": "4.17.21", "name": "evil-pkg",
+                                "resolved": "https://evil.example/x.tgz", "integrity": "sha512-x"}}}))
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "not from the public registry" in result["not_pinned"][0]
+
+
+def test_requirements_for_some_platforms_are_listed_apart(monkeypatch, tmp_path):
+    registry(monkeypatch, {"click": {"8.3.0": 100}},
+             requires={"click": ["colorama; platform_system == 'Windows'"]})
+    (tmp_path / "requirements.txt").write_text("click==8.3.0\n")
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "allowed"
+    assert result["only_on_some_platforms"] == ["colorama (required by click 8.3.0) when platform_system == 'Windows'"]
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "10.0.0.5", "localhost"])
+def test_the_source_check_never_probes_the_users_network(host):
+    assert REAL_EXISTS(f"https://{host}/repo") is None
 
 
 def test_the_audit_reads_npm_lockfiles(monkeypatch, tmp_path):
     registry(monkeypatch, {"left-pad": {"1.3.0": 100}, "@scope/tool": {"2.0.0": 5, "1.9.0": 100}})
     (tmp_path / "package-lock.json").write_text(json.dumps({"lockfileVersion": 3, "packages": {
         "": {"name": "app"},
-        "node_modules/left-pad": {"version": "1.3.0", "integrity": "sha512-x"},
-        "node_modules/@scope/tool": {"version": "2.0.0", "integrity": "sha512-y"}}}))
+        "node_modules/left-pad": {"version": "1.3.0", "integrity": "sha512-x",
+                                  "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz"},
+        "node_modules/@scope/tool": {"version": "2.0.0", "integrity": "sha512-y",
+                                     "resolved": "https://registry.npmjs.org/@scope/tool/-/tool-2.0.0.tgz"}}}))
     result = deps.audit(tmp_path)
     assert result["packages"] == 2 and result["without_hashes"] == []
     assert [b["package"] for b in result["blocked"]] == ["@scope/tool"]
     assert "two weeks" in result["blocked"][0]["reasons"][0]
 
 
-def test_the_audit_without_pinned_files_is_blocked(tmp_path):
+def test_a_project_without_packages_has_nothing_to_audit(tmp_path):
+    (tmp_path / "index.html").write_text("<p>Hello</p>")
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "app"\ndependencies = []\n')
     result = deps.audit(tmp_path)
-    assert result["verdict"] == "blocked" and "no pinned list" in result["reasons"][0]
+    assert result["verdict"] == "allowed" and "nothing to check" in result["note"]
+
+
+@pytest.mark.parametrize("manifest, text", [
+    ("pyproject.toml", '[project]\nname = "app"\ndependencies = ["fastapi"]\n'),
+    ("package.json", '{"dependencies": {"left-pad": "^1.3.0"}}'),
+    ("requirements.in", "fastapi\n"),
+])
+def test_declared_packages_without_a_pinned_list_are_blocked(tmp_path, manifest, text):
+    (tmp_path / manifest).write_text(text)
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "not pinned" in result["reasons"][0]
 
 
 def test_settings_carry_the_organization_and_project_context(monkeypatch):

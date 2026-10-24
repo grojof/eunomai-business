@@ -7,9 +7,14 @@ then the fix outweighs the risk of a fresh release. IT's exceptions can lift the
 a vulnerability.
 """
 
+import fnmatch
+import ipaddress
 import json
+import os
 import re
+import socket
 import time
+import tomllib
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -23,7 +28,8 @@ _ECOSYSTEMS = {"pypi": "PyPI", "npm": "npm"}
 _PRERELEASE = re.compile(r"(a|b|rc|dev|alpha|beta|pre|preview)\d*|-", re.IGNORECASE)
 _OSV_CHECKS = 10  # mature versions checked for vulnerabilities before giving up on finding a clean one
 _MAX_OSV_CHECKS = 40  # all versions checked at most, newest first
-_SOURCE_HOST = re.compile(r"(^|\.)(github\.com|gitlab\.com|codeberg\.org|bitbucket\.org|sr\.ht)$|^git\.")
+_SOURCE_HOST = re.compile(r"(^|\.)(github\.com|gitlab\.com|codeberg\.org|bitbucket\.org|sr\.ht|heptapod\.net|"
+                          r"sourceforge\.net|launchpad\.net|pagure\.io|gitea\.com)$|^(git|gitlab|forge)\.")
 _SOURCE_SHORT = re.compile(r"^(github|gitlab|bitbucket):[\w.-]+/[\w.-]+$|^git@[\w.-]+:[\w.-]+/")
 # Project links a package labels as its code, wherever it is hosted (foss.heptapod.net, a foundation's own forge...)
 _SOURCE_LABELS = {"source", "source code", "sourcecode", "repository", "code", "github", "gitlab", "git", "scm"}
@@ -89,17 +95,30 @@ def _web_address(url: str) -> str | None:
     return url if urlsplit(url).scheme == "https" else None
 
 
+def _public(host: str) -> bool:
+    """Whether every address of a host is on the public internet: the check never probes the user's network."""
+    try:
+        addresses = {info[4][0] for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)}
+    except OSError:
+        return False
+    return bool(addresses) and all(ipaddress.ip_address(a.split("%")[0]).is_global for a in addresses)
+
+
 def _exists(url: str) -> bool | None:
-    """Whether the source repository answers (None: it could not be reached)."""
+    """Whether the source repository's web address answers (None: it could not be reached). A signal of origin, not
+    proof: only https, only public hosts, no redirect followed (a redirect counts as an answer), body never read."""
     address = _web_address(url)
     if not address:
         return False
+    host = urlsplit(address).hostname or ""
+    if not _public(host):
+        return None
     try:
         with auth.http_client() as client:
-            response = client.get(address, follow_redirects=True)
+            with client.stream("GET", address, follow_redirects=False, timeout=10) as response:
+                return response.status_code < 400
     except Exception:
         return None
-    return response.status_code < 400
 
 
 def _pypi(name: str) -> dict | None:
@@ -145,7 +164,11 @@ def _npm(name: str) -> dict | None:
 
 
 def _excepted(ecosystem: str, name: str) -> bool:
-    return any(e.get("package", "").lower() == f"{ecosystem}:{name}".lower()
+    def key(text: str) -> str:
+        return _normalized(text) if ecosystem == "pypi" else text.lower()
+
+    return any(e.get("package", "").lower().startswith(f"{ecosystem}:")
+               and key(e["package"].split(":", 1)[1]) == key(name)
                for e in settings.load()["dependency_exceptions"])
 
 
@@ -238,19 +261,38 @@ def check(ecosystem: str, name: str, version: str = "") -> dict:
 
 # --- the whole tree a project installs ----------------------------------------------------------------------
 
+def _project_files(folder: Path):
+    """Files of a project, never following a link or junction out of it, skipping environments and archives."""
+    for current, folders, files in os.walk(folder, followlinks=False):
+        here = Path(current)
+        folders[:] = [f for f in folders if f not in _SKIP_FOLDERS
+                      and not (here / f).is_symlink() and not (here / f).is_junction()]
+        for name in files:
+            if not (here / name).is_symlink():
+                yield here / name
+
+
 def _pinned_files(folder: Path) -> list[Path]:
-    found = []
-    for pattern in _PINNED_FILES:
-        found += [f for f in folder.rglob(pattern) if not _SKIP_FOLDERS & set(f.relative_to(folder).parts[:-1])]
-    return sorted(found)
+    return sorted(f for f in _project_files(folder)
+                  if f.name == "package-lock.json" or fnmatch.fnmatch(f.name.lower(), "requirements*.txt"))
 
 
-def _requirements(text: str) -> tuple[list[tuple[str, str]], list[str], bool]:
-    """(name, version) pins, lines that are not pinned exactly, and whether every pin carries a hash."""
+def _requirements(text: str, siblings: set[str]) -> tuple[list[tuple[str, str]], list[str], bool]:
+    """(name, version) pins, lines that are not exact pins of the public index, and whether every pin has a hash.
+    `-r`/`-c` may only name another pinned list in the same folder (audited on its own); every other option, such
+    as another index or a local path, is refused: pins are checked against the registry pip would not use."""
     pins, loose, hashed = [], [], True
     for line in re.sub(r"\\\r?\n", " ", text).splitlines():
         line = line.split(" #")[0].strip()
-        if not line or line.startswith(("#", "-r ", "--")):
+        if not line or line.startswith("#"):
+            continue
+        option = re.match(r"^(-r|-c|--requirement|--constraint)[ =]+(\S+)$", line)
+        if option:
+            if option.group(2) not in siblings:
+                loose.append(f"{line} (only another pinned list in the same folder)")
+            continue
+        if line.startswith("-"):
+            loose.append(f"{line} (options are not allowed in a pinned list)")
             continue
         requirement = line.split(";")[0].split(" --hash")[0].strip()
         match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(\[[^\]]*\])?\s*===?\s*([A-Za-z0-9.+!_-]+)$", requirement)
@@ -263,18 +305,26 @@ def _requirements(text: str) -> tuple[list[tuple[str, str]], list[str], bool]:
 
 
 def _npm_lock(text: str) -> tuple[list[tuple[str, str]], list[str], bool]:
-    packages = json.loads(text).get("packages") or {}
-    pins, hashed = [], True
-    for path, meta in packages.items():
+    """Pins of an npm lockfile (version 2 or 3), each from the public registry under its own name."""
+    data = json.loads(text)
+    if "packages" not in data:
+        return [], ["lockfile version 1 is not supported: regenerate it with npm 7 or later"], False
+    pins, loose, hashed = [], [], True
+    for path, meta in data["packages"].items():
         if not path or meta.get("link") or "version" not in meta:
             continue
-        pins.append((path.rsplit("node_modules/", 1)[-1], meta["version"]))
+        name = meta.get("name") or path.rsplit("node_modules/", 1)[-1]
+        resolved = meta.get("resolved") or ""
+        if not resolved.startswith(f"https://registry.npmjs.org/{name}/-/"):
+            loose.append(f"{path}: not from the public registry under its own name ({resolved or 'no source'})")
+            continue
+        pins.append((name, meta["version"]))
         hashed = hashed and bool(meta.get("integrity"))
-    return pins, [], hashed and bool(pins)
+    return pins, loose, hashed and bool(pins)
 
 
 def _vulnerable(queries: list[tuple[str, str, str]]) -> dict[tuple[str, str, str], list[str]]:
-    """Known vulnerabilities of many exact versions in one request to OSV."""
+    """Known vulnerabilities of many exact versions in one request to OSV; an incomplete answer is no answer."""
     if not queries:
         return {}
     try:
@@ -286,6 +336,8 @@ def _vulnerable(queries: list[tuple[str, str, str]]) -> dict[tuple[str, str, str
         raise Unreachable() from exc
     response.raise_for_status()
     results = response.json().get("results", [])
+    if len(results) != len(queries):
+        raise Unreachable()
     return {query: sorted(v["id"] for v in (result or {}).get("vulns", []))
             for query, result in zip(queries, results)}
 
@@ -294,20 +346,44 @@ def _normalized(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _unpinned_requirements(pins: list[tuple[str, str]]) -> list[str]:
+def _unpinned_requirements(pins: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
     """What the pinned PyPI packages require and the list leaves out, so a list of direct dependencies alone is not
-    taken as the whole tree. Requirements that apply only to an extra or to some platforms are not counted."""
+    taken as the whole tree; and, apart, what they require only on some platforms or Python versions, which the
+    environment that wrote the list may rightly leave out. Requirements of extras not asked for are not counted."""
     pinned = {name for name, _ in pins}
-    missing = []
+    missing, conditional = set(), set()
     for name, version in pins:
         data = _get(f"https://pypi.org/pypi/{name}/{version}/json") or {}
         for requirement in (data.get("info") or {}).get("requires_dist") or []:
-            if ";" in requirement:
+            found = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", requirement)
+            if not found or _normalized(found.group(1)) in pinned:
                 continue
-            needed = _normalized(re.match(r"[A-Za-z0-9._-]+", requirement.strip()).group(0))
-            if needed not in pinned:
-                missing.append(f"{needed} (required by {name} {version})")
-    return sorted(set(missing))
+            marker = requirement.split(";", 1)[1] if ";" in requirement else ""
+            needed = f"{_normalized(found.group(1))} (required by {name} {version})"
+            if "extra" in marker:
+                continue
+            (conditional if marker else missing).add(needed + (f" when{marker}" if marker else ""))
+    return sorted(missing), sorted(conditional)
+
+
+def _declares_packages(folder: Path) -> bool:
+    """Whether a project without a pinned list still declares packages to install."""
+    for file in _project_files(folder):
+        if file.name in ("setup.py", "setup.cfg", "Pipfile", "requirements.in", "poetry.lock", "yarn.lock",
+                         "pnpm-lock.yaml"):
+            return True
+        try:
+            if file.name == "pyproject.toml":
+                data = tomllib.loads(file.read_text(encoding="utf-8"))
+                if (data.get("project") or {}).get("dependencies") or (data.get("tool") or {}).get("poetry"):
+                    return True
+            if file.name == "package.json":
+                data = json.loads(file.read_text(encoding="utf-8"))
+                if data.get("dependencies") or data.get("devDependencies"):
+                    return True
+        except (ValueError, UnicodeDecodeError):
+            return True  # unreadable: treat as declaring, so it is not waved through
+    return False
 
 
 def audit(folder: Path) -> dict:
@@ -318,15 +394,26 @@ def audit(folder: Path) -> dict:
     loose, unhashed = [], []
     for file in files:
         eco = "npm" if file.name == "package-lock.json" else "pypi"
-        found, not_pinned, hashed = (_npm_lock if eco == "npm" else _requirements)(file.read_text(encoding="utf-8"))
         where = file.relative_to(folder).as_posix()
+        try:
+            text = file.read_text(encoding="utf-8")
+            if eco == "npm":
+                found, not_pinned, hashed = _npm_lock(text)
+            else:
+                siblings = {f.name for f in files if f.parent == file.parent and f != file}
+                found, not_pinned, hashed = _requirements(text, siblings)
+        except (ValueError, UnicodeDecodeError):
+            loose.append(f"{where}: not readable as a pinned list")
+            continue
         loose += [f"{where}: {line}" for line in not_pinned]
         if not hashed:
             unhashed.append(where)
+        if not found and not not_pinned:
+            loose.append(f"{where}: pins nothing")
         for name, version in found:
             pins.setdefault((eco, name, version), []).append(where)
-    loose += [f"missing from the pinned list: {item}"
-              for item in _unpinned_requirements([(n, v) for eco, n, v in pins if eco == "pypi"])]
+    missing, conditional = _unpinned_requirements([(n, v) for eco, n, v in pins if eco == "pypi"])
+    loose += [f"missing from the pinned list: {item}" for item in missing]
     vulnerabilities = _vulnerable(list(pins))
     blocked = []
     for (eco, name, version), where in sorted(pins.items()):
@@ -349,6 +436,10 @@ def audit(folder: Path) -> dict:
     result = {"verdict": "allowed" if files and not blocked and not loose else "blocked",
               "files": [f.relative_to(folder).as_posix() for f in files], "packages": len(pins),
               "blocked": blocked, "not_pinned": loose, "without_hashes": unhashed}
-    if not files:
-        result["reasons"] = ["no pinned list found: requirements*.txt or package-lock.json"]
+    if conditional:
+        result["only_on_some_platforms"] = conditional
+    if not files and _declares_packages(folder):
+        result["reasons"] = ["packages are declared but not pinned: requirements*.txt or package-lock.json"]
+    elif not files:
+        result.update(verdict="allowed", note="the project installs no packages: nothing to check")
     return result

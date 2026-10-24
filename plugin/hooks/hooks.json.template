@@ -7,8 +7,8 @@
           {
             "type": "command",
             "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --native-tls --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard",
-            "timeout": 30,
-            "onFailure": "continue"
+            "timeout": 60,
+            "onFailure": "block"
           }
         ]
       }

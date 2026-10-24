@@ -123,10 +123,28 @@ def version_send(workspace: str) -> dict:
     return _safe(gitops.push, workspace)
 
 
+def _checks(workspace: str) -> str:
+    """The connector's own checks, appended to every pull request: what IT reads there was not written by Claude."""
+    try:
+        result = deps.audit(gitops.folder(workspace))
+    except support.Unreachable:
+        lines = ["- Dependency audit: could not be run (a registry or OSV did not answer)"]
+    else:
+        listed = ", ".join(result["files"]) or "no pinned list"
+        lines = [f"- Dependency audit: **{result['verdict']}**, {result['packages']} pinned packages ({listed})"]
+        lines += [f"  - {b['package']} {b['version']}: {'; '.join(b['reasons'])}" for b in result["blocked"][:20]]
+        lines += [f"  - {item}" for item in result["not_pinned"][:20]]
+        if result["without_hashes"]:
+            lines.append(f"  - without hashes: {', '.join(result['without_hashes'])}")
+    return "\n\n---\n**Checks by the connector** (not written by the assistant)\n\n" + "\n".join(lines) + "\n"
+
+
 @mcp.tool()
 def version_propose(workspace: str, title: str, description: str = "") -> dict:
-    """Open a pull request that proposes the current version for the main branch. Send it first (version_send)."""
-    return _safe(gitops.pull_request, workspace, title, description)
+    """Open a pull request that proposes the current version for the main branch, or update the description of the
+    one already open. Send it first (version_send). The connector appends its own checks to the description."""
+    return _safe(lambda name, head, body: gitops.pull_request(name, head, body + _checks(name)),
+                 workspace, title, description)
 
 
 # --- the specialist ---------------------------------------------------------------------------------------
@@ -137,7 +155,10 @@ def _specialist_settings(workspace: str) -> dict:
               "organization": {"context": values["organization_context"], "skills": values["organization_skills"]}}
     if workspace:
         result["development"] = settings.development(gitops.origin(workspace))
-        result["project_context"] = gitops.project_context(workspace)
+        try:
+            result["project_context"] = gitops.project_context(workspace)
+        except support.Unreachable:
+            result["project_context"] = {"unavailable": "the server could not be reached; ask again later"}
     return result
 
 

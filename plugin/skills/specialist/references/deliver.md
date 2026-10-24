@@ -7,15 +7,19 @@ Goal: a pull request a reviewer can judge quickly, where anything not settled is
 Run it now, not from memory. Each line holds, or goes into the summary under *Not settled* or *Skipped*:
 
 - the whole test suite passes in a run made now; every requirement has a scenario, and every scenario a test;
-- `dependency_audit(workspace)` answers `allowed`;
+- the `verdict` of `dependency_audit(workspace)` is `allowed`;
 - review your own changes with two lenses, as a reviewer would: does it do what the specs say, no more and no less;
   and does it meet the table in `build.md`. If the organization provides a code or security review skill, run it
   too;
-- the README, `design.md` and the proposal say what the code does (scope, settings, how to run it), nothing more;
-- the application matches the approved prototype, or the differences are agreed;
+- the README, `design.md` and `proposal.md` say what the code does (scope, settings, how to run it), nothing more;
+- the application matches the approved prototype (if there is one), or the differences are agreed;
 - assumptions confirmed by the user; open questions listed;
 - no secrets, no external resources, no dead code, no debugging leftovers, nothing meant to run on the user's
   computer.
+
+**Code not allowed in this workspace:** check only that the pieces agree and that the open questions are listed;
+do not archive (the change stays open for IT to build); put "not built: needs IT's approval" under *Skipped*; go
+to Propose.
 
 ## Archive the change, in this same version
 
@@ -29,7 +33,8 @@ Run it now, not from memory. Each line holds, or goes into the summary under *No
 ## Propose
 
 `version_send(workspace)`, then `version_propose(workspace, <title>, <summary>)`. If it answers `created: false`,
-the proposal was already open and the version just sent updates it. The summary, in `docs_language`, has these
+the pull request was already open: the version just sent updates it, and its description is replaced. The connector
+appends its own checks (the dependency audit) below your summary; do not repeat them. The summary, in `docs_language`, has these
 sections, each short:
 
 | Section | Content |
