@@ -82,6 +82,35 @@ sequenceDiagram
     Git-->>IT: Review, then merge into main
 ```
 
+## Bringing the latest changes
+
+`workspace_update` decides on its own, and stops whenever it is not certain. The full rules are in
+[barriers.md](barriers.md#bringing-the-latest-changes).
+
+```mermaid
+flowchart TD
+    start([workspace_update]) --> keep["Save unsaved changes<br/>(new version if on main)"]
+    keep --> fetch["Fetch the server's branches"]
+    fetch --> where{"On the main branch?"}
+    where -- yes --> ff{"Fast-forward<br/>possible?"}
+    ff -- yes --> moved["Back up, then move to the<br/>latest main branch"]
+    ff -- no --> stop
+    where -- no --> accepted{"Version accepted?<br/>in main, or its PR merged"}
+    accepted -- yes --> retire["Back up, back to the main<br/>branch, retire the version"]
+    accepted -- no --> clean{"Combines without<br/>conflicts?"}
+    clean -- yes --> combine["Back up, add the latest<br/>main changes to the version"]
+    clean -- no --> stop["Stop: nothing changes<br/>user message + report for IT"]
+
+    classDef action fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef decision fill:#f3e8ff,stroke:#9333ea,color:#581c87
+    classDef safeguard fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef halt fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    class keep,fetch action
+    class where,ff,accepted,clean decision
+    class moved,retire,combine safeguard
+    class stop halt
+```
+
 ## Sign-in
 
 Once per provider, and again only if the stored record is lost or revoked. Refreshing an expired token needs no
@@ -118,7 +147,8 @@ sequenceDiagram
 | `auth` | Sign-in with any OAuth 2.0 provider (authorization code + PKCE, loopback redirect), token refresh | Standard OAuth 2.0; nothing server-specific |
 | `store` | Keeps sign-in records encrypted per user | The operating system (DPAPI on Windows, keyring elsewhere) |
 | `gitops` | Workspaces, versions, save points, sending, pull requests | Standard git over HTTPS (dulwich), except two Gitea-specific parts below |
-| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`; `diag_*` only with diagnostics | MCP |
+| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
+| `support` | The stop: the user's message, IT's report, the e-mail link | — |
 | `hook` | Entry point for the plugin's hooks; today it only logs, with diagnostics on | — |
 | `probe` | Diagnostic measurements (`diag_environment`, `diag_reach`) | — |
 
@@ -138,7 +168,7 @@ sequenceDiagram
 | Clone, send, branches, save points | Standard git over HTTPS | Yes |
 | Git sign-in | OAuth 2.0 public client with PKCE; user endpoint and login field configurable | Yes in principle; tested only with Gitea |
 | Sending the token | HTTP basic auth (login + OAuth token) | Works with Gitea; to be checked per hosting |
-| Pull request and branch link | Gitea API (`/api/v1/repos/.../pulls`) and Gitea web paths | **No**: Gitea only |
+| Pull request, its merged state, and branch link | Gitea API (`/api/v1/repos/.../pulls`) and Gitea web paths | **No**: Gitea only; without it, an accepted version is recognized only by its history (not after a squash merge) |
 | Check that the token only goes to the git host | Compares the repository's origin (scheme, host, port) with the `userinfo_url` origin | Works when both share an origin (Gitea); GitHub uses a separate API host |
 
 **Planned:** a hosting adapter per server type (Gitea first, then GitHub and GitHub Enterprise), chosen in the

@@ -18,6 +18,8 @@ Enterprise, GitLab).
 - **Create the repository with a `main` branch** (a README is enough). eunomai-business refuses to create
   versions in an empty repository.
 - **Protect `main` on the server:** no direct pushes, changes through pull requests. Decide how many approvals.
+- **Delete branches after merging** (Gitea: the repository's *Delete pull request branch after merge by
+  default*; GitHub: *Automatically delete head branches*), so the server does not pile up finished versions.
 - **Give users write access** to the repository: they send versions and open pull requests; they cannot change
   `main` directly once it is protected.
 

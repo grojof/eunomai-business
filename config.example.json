@@ -7,6 +7,8 @@
   "workspaces_root": "~/eunomai-business-workspaces",
   "_diagnostics": "true adds diagnostic tools, validation skills and a hook log. Keep false for users.",
   "diagnostics": false,
+  "_support_email": "Where users send what the connector cannot resolve on its own. Optional, but without it users get the report and no e-mail link.",
+  "support_email": "it-support@example.org",
   "providers": {
     "directory": {
       "authorize_url": "https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/authorize",

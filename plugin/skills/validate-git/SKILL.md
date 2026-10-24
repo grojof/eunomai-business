@@ -40,6 +40,13 @@ every change goes through the connector's `workspace_*` and `version_*` tools. R
     `git -C <your path> log --oneline -3`. Report the output or the error as it is.
 12. `version_save(workspace, "nothing")` again: expected `saved: false` (nothing changed).
 
+## Part C · After the pull request is merged (H8f)
+
+13. When the user says the pull request was merged: `workspace_update(workspace)`. Expected: `status`
+    "updated", `branch` is the main branch, `retired_version` is the version, and the files from the pull request
+    are in the folder. Show the user only `user_message`.
+14. `workspace_update(workspace)` again: expected "up_to_date".
+
 ## Report
 
 One table: step, what was observed, pass / fail. Then a verdict on each part of H8:
@@ -51,5 +58,6 @@ One table: step, what was observed, pass / fail. Then a verdict on each part of 
 | H8c | Text survives intact | accents correct and LF line endings on the server (the user confirms in step 10) |
 | H8d | The sandbox and the host do not trip over each other's `.git` | step 11 output, or "no shell" |
 | H8e | A user joining a repository in progress proposes changes through a pull request | step 2 clones `main` with its files; step 10 opens the pull request against `main` |
+| H8f | After the merge, the user is brought back to the updated main branch on their own | step 13 as expected, step 14 up to date |
 
 Facts only; mark anything inferred as inferred.

@@ -21,12 +21,19 @@ uninstalling. Paths are for Windows; *measured* means observed on a real compute
 | Workspace registry | `%LOCALAPPDATA%\eunomai-business\workspaces.json` | Each workspace's folder and its main branch, so the connector protects it | No | **Yes** |
 | Hook log (only with `diagnostics: true`) | `%LOCALAPPDATA%\eunomai-business\hooks.log`, and `hooks.log.1` after rotation (measured) | One JSON line per tool call: time, event, tool name, computer name, OS, shell, working folder, plugin folder, session ID. No file contents, no tokens | Low: paths include the Windows user name | **Yes**; rotated at 1 MB, so at most about 2 MB (a short session wrote 41 KB) |
 | Workspaces | `workspaces_root`, default `%USERPROFILE%\eunomai-business-workspaces\<name>` (measured) | Clones of the repositories: the user's work, versions not yet sent included | **As sensitive as the repositories** | **Yes, on purpose**: it is the user's work |
+| Backups before an update | Inside each workspace's `.git`, as `refs/eunomai/backup/<time>/<branch>` | Where each branch was before `workspace_update` moved it | As the workspace | With the workspace |
 | uv | `%USERPROFILE%\.local\bin\uv.exe`, `uvx.exe`, `uvw.exe`; `%LOCALAPPDATA%\uv\uv-receipt.json`; user `PATH` entry (measured) | The uv program, installed per user | No | Yes; it is a separate program |
 | uv cache | `%LOCALAPPDATA%\uv\cache` (measured) | Built connector versions and their dependencies (`mcp`, `httpx`, `dulwich`, ...) | No | Yes; shared with any other use of uv |
 | Python, if the computer has none | `%APPDATA%\uv\python` (uv's documented default; not measured, the test computer had Python) | A Python runtime downloaded by uv | No | Yes |
 | Browser sessions | The default browser | Sign-in cookies of Entra ID and the git server | Yes, as any sign-in | Until signing out in the browser |
 
 Nothing is written to the registry or outside the user's profile, and nothing needs administrator rights.
+
+## Reports for IT
+
+When the connector stops, the report the user can send to IT contains the workspace's folder and repository,
+the version, the files involved, the connector version, the computer's OS and the time. It never contains
+tokens. It travels only if the user sends the e-mail.
 
 ## On servers
 

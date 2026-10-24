@@ -1,31 +1,19 @@
 """Workspaces, versions, save points and pull requests against the fake git server, and the barriers around them."""
 
-import io
 import shutil
 import uuid
 from pathlib import Path
 
 import pytest
-from dulwich import porcelain
 from dulwich.object_store import tree_lookup_path
 from dulwich.repo import Repo
 
 from eunomai_business import gitops
+from eunomai_business.support import NeedsIT
 
 
 def initialize(server, name: str, default_branch: str = "main") -> Repo:
-    """What IT does: a repository with a first commit on its main branch."""
-    bare = server.new_repo(name, default_branch)
-    seed = Path(bare.path).parent / f"{name}-seed"
-    with Repo.init(str(seed), mkdir=True) as it:
-        it.refs.set_symbolic_ref(b"HEAD", f"refs/heads/{default_branch}".encode())
-        (seed / "README.md").write_bytes(b"# Sandbox\n\nShared notes.\n")
-        porcelain.add(it)
-        porcelain.commit(it, message=b"Initial commit", author=b"IT <it@example.test>",
-                         committer=b"IT <it@example.test>")
-        porcelain.push(it, bare.path, f"refs/heads/{default_branch}".encode(), outstream=io.BytesIO(),
-                       errstream=io.BytesIO())
-    return bare
+    return server.initialize(name, default_branch)
 
 
 def test_empty_repository_is_cloned_but_refuses_versions(signed_in, workspaces):
@@ -61,7 +49,7 @@ def test_user_joins_saves_sends_and_proposes(signed_in, workspaces):
     with pytest.raises(Exception, match="404"):
         gitops.pull_request("joined", "Proposal")  # not sent yet
     sent = gitops.push("joined")
-    assert sent["pushed"] and sent["errors"] is None
+    assert sent["pushed"]
 
     proposal = gitops.pull_request("joined", "Proposal", "Made in Cowork")
     assert proposal["created"] and proposal["base"] == "main" and proposal["head"] == "ana/first"
@@ -169,5 +157,5 @@ def test_unexpected_git_config_stops_every_operation(signed_in, workspaces, entr
     ws = Path(gitops.clone(f"{signed_in.url}/me/{name}.git")["path"])
     with open(ws / ".git" / "config", "a", encoding="utf-8") as config:
         config.write(entry)
-    with pytest.raises(PermissionError, match="unexpected entry in .git/config"):
+    with pytest.raises(NeedsIT, match="unexpected entry in .git/config"):
         gitops.status(name)

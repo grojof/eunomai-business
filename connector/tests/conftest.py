@@ -48,6 +48,8 @@ if sys.platform != "win32":  # the OS keyring is not available in a test run: ke
 
     keyring.set_keyring(_Memory())
 
+from dulwich.object_store import commit_tree_changes  # noqa: E402
+from dulwich.objects import Blob, Commit, Tree  # noqa: E402
 from dulwich.repo import Repo  # noqa: E402
 from dulwich.server import DictBackend  # noqa: E402
 from dulwich.web import make_wsgi_chain  # noqa: E402
@@ -92,6 +94,62 @@ class FakeServer:
         self.backend.repos[f"/me/{name}.git"] = repo
         return repo
 
+    def initialize(self, name: str, default_branch: str = "main") -> Repo:
+        """What IT does: a repository with a first commit (a README) on its main branch."""
+        repo = self.new_repo(name, default_branch)
+        blob = Blob.from_string(b"# Sandbox\n\nShared notes.\n")
+        repo.object_store.add_object(blob)
+        tree = commit_tree_changes(repo.object_store, Tree(), [(b"README.md", 0o100644, blob.id)])
+        commit = Commit()
+        commit.tree, commit.parents = getattr(tree, "id", tree), []
+        commit.author = commit.committer = b"IT <it@example.test>"
+        commit.commit_time = commit.author_time = int(time.time())
+        commit.commit_timezone = commit.author_timezone = 0
+        commit.message = b"Initial commit"
+        repo.object_store.add_object(commit)
+        repo.refs[f"refs/heads/{default_branch}".encode()] = commit.id
+        return repo
+
+    def server_commit(self, name: str, branch: str, files: dict | None = None, message: str = "Change on the server",
+                      tree_of: bytes | None = None, merge_parent: bytes | None = None) -> bytes:
+        """A commit made on the server by someone else: new file contents, or another commit's tree."""
+        repo = self.repos[name]
+        ref = f"refs/heads/{branch}".encode()
+        parent = repo.refs[ref]
+        if tree_of is not None:
+            tree = repo[tree_of].tree
+        else:
+            changes = []
+            for path, data in (files or {}).items():
+                blob = Blob.from_string(data)
+                repo.object_store.add_object(blob)
+                changes.append((path.encode(), 0o100644, blob.id))
+            result = commit_tree_changes(repo.object_store, repo[repo[parent].tree], changes)
+            tree = getattr(result, "id", result)
+        commit = Commit()
+        commit.tree, commit.parents = tree, [parent] + ([merge_parent] if merge_parent else [])
+        commit.author = commit.committer = b"Someone Else <someone@example.test>"
+        commit.commit_time = commit.author_time = int(time.time())
+        commit.commit_timezone = commit.author_timezone = 0
+        commit.message = message.encode()
+        repo.object_store.add_object(commit)
+        repo.refs[ref] = commit.id
+        return commit.id
+
+    def accept(self, name: str, version: str, squash: bool = False) -> None:
+        """IT merges the version's pull request (merge commit or squash) and deletes the branch."""
+        repo = self.repos[name]
+        head = repo.refs[f"refs/heads/{version}".encode()]
+        main = self.default_branch[name]
+        if squash:
+            self.server_commit(name, main, message=f"{version} (squashed)", tree_of=head)
+        else:
+            self.server_commit(name, main, message=f"Merge {version}", tree_of=head, merge_parent=head)
+        for pull in self.pulls:
+            if pull["repo"] == name and pull["head"]["ref"] == version and pull["state"] == "open":
+                pull.update(state="closed", merged=True)
+        del repo.refs[f"refs/heads/{version}".encode()]
+
     def provider(self, client_id: str = "test-client") -> dict:
         return {"authorize_url": f"{self.url}/login/oauth/authorize",
                 "token_url": f"{self.url}/login/oauth/access_token", "client_id": client_id,
@@ -127,13 +185,20 @@ class FakeServer:
             name = path.split("/")[5]
             if path.endswith("/pulls") and method == "POST":
                 body = json.loads(env["wsgi.input"].read(int(env["CONTENT_LENGTH"])))
-                if any(p["head"] == body["head"] for p in self.pulls):
+                if any(p["repo"] == name and p["head"]["ref"] == body["head"] and p["state"] == "open"
+                       for p in self.pulls):
                     return reply("409 Conflict", {"message": "pull request already exists"})
-                if f"refs/heads/{body['head']}".encode() not in self.repos[name].refs:
+                ref = f"refs/heads/{body['head']}".encode()
+                head = self.repos[name].refs[ref] if ref in self.repos[name].refs else None
+                if head is None:
                     return reply("404 Not Found", {"message": "head not found"})
-                self.pulls.append(body)
-                return reply("201 Created", {"number": len(self.pulls),
-                                             "html_url": f"{self.url}/me/{name}/pulls/{len(self.pulls)}"})
+                number = len(self.pulls) + 1
+                self.pulls.append({"repo": name, "number": number, "state": "open", "merged": False,
+                                   "head": {"ref": body["head"], "sha": head.decode()}, "base": body["base"]})
+                return reply("201 Created", {"number": number, "html_url": f"{self.url}/me/{name}/pulls/{number}"})
+            if path.endswith("/pulls"):
+                return reply("200 OK", [{k: v for k, v in p.items() if k != "repo"} for p in self.pulls
+                                        if p["repo"] == name])
             return reply("200 OK", {"default_branch": self.default_branch[name]})
         if path.startswith("/me/") and ".git" in path:
             user, password = "", ""

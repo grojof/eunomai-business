@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **`workspace_update`:** brings the project's latest changes on its own: saves unsaved work first, backs up
+  before moving anything, returns to the main branch when the user's proposal was accepted (also after a squash
+  merge), and adds new main-branch changes to an open version only when they combine without conflicts.
+- **Stops go to IT, not to the user:** when the connector is not certain, or an unexpected error happens, the user
+  gets one plain sentence and IT a report, with an e-mail link when `support_email` is set.
+- **New setting `support_email`;** new dependency `merge3` (needed by dulwich to combine file contents).
+
 ## 0.1.0 · 2026-10-24
 
 First development version.
