@@ -19,7 +19,7 @@ PowerShell, **without** "Run as administrator":
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-uvx --version
+uv --version
 ```
 
 It installs into `%USERPROFILE%\.local\bin` and adds it to the user `PATH`. **Quit Claude Desktop completely**
@@ -89,7 +89,7 @@ versions and the date.
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | The `eunomai-business` tools do not exist in the task | The connector did not start | Desktop logs in `%LOCALAPPDATA%\Claude\Logs` (search `eunomai-business`); note the error as a result |
-| Log says `uvx` not found | Desktop started before `uv` was installed, or does not read the user `PATH` | Quit and reopen Desktop; if it persists, set `uvx` to the full path of `uvx.exe` in `config.local.json`, rebuild, upload again |
+| Log says `uv` not found | Desktop started before `uv` was installed, or does not read the user `PATH` | Quit and reopen Desktop; if it persists, set `uv` to the full path of `uv.exe` in `config.local.json`, rebuild, upload again |
 | `diag_reach` fails only with `bundled_store` | Expected with an internal CA | Pass: the OS store is what counts |
 | Sign-in never leaves `waiting` | The browser did not open, or the redirect URI differs | Open the `url` the tool returned by hand; check the redirect URI registered on the server |
 | `AADSTS50011` | Redirect URI not registered in Entra | Add `http://localhost` under *Mobile and desktop applications* |

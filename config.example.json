@@ -1,6 +1,6 @@
 {
   "_comment": "Copy to config.local.json (git-ignored), fill in, then run: python tools/build.py. Nothing here is secret: every client is public. Reference: docs/configuration.md",
-  "uvx": "uvx",
+  "uv": "uv",
   "connector_source": "bundled",
   "connector_path": "",
   "_workspaces_root": "Where each user's workspaces (local clones) go. ~ is the user's profile folder; %VAR% works too. Avoid folders synced by OneDrive and anything under AppData (Claude Desktop may redirect it). See docs/configuration.md.",
@@ -15,7 +15,12 @@
   "free_development": false,
   "allowed_technologies": [],
   "projects": {
-    "https://git.example.internal/team/app": {"technologies": ["Python", "HTML, CSS and JavaScript"]}
+    "https://git.example.internal/team/app": {
+      "technologies": [
+        "Python",
+        "HTML, CSS and JavaScript"
+      ]
+    }
   },
   "dependency_exceptions": [],
   "providers": {

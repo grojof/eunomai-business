@@ -1,5 +1,7 @@
-"""eunomai-business's own dependencies follow its rules: every package pinned, the pins match the lock."""
+"""eunomai-business's own dependencies follow its rules: every package pinned, the bill of materials current."""
 
+import json
+import re
 import shutil
 import subprocess
 import tomllib
@@ -16,27 +18,13 @@ def test_direct_dependencies_are_pinned_exactly():
 
 
 @pytest.mark.skipif(shutil.which("uv") is None, reason="needs uv")
-def test_constraints_match_the_lock():
-    """constraints.txt is what users' computers install; it must be exactly what uv.lock says."""
+def test_the_sbom_lists_exactly_the_locked_runtime_tree_with_licenses():
+    """sbom.cdx.json (tools/sbom.py) describes the packages and versions users' computers install from uv.lock."""
     exported = subprocess.run(["uv", "export", "--frozen", "--no-dev", "--no-emit-project", "--no-hashes",
                                "--format", "requirements.txt"], cwd=CONNECTOR, capture_output=True, text=True,
                               check=True).stdout
-    committed = (CONNECTOR / "constraints.txt").read_text(encoding="utf-8")
-
-    def pins(text: str) -> list[str]:
-        return [line for line in text.splitlines() if line and not line.lstrip().startswith("#")]
-
-    assert pins(committed) == pins(exported), "run the uv export command at the top of constraints.txt"
-
-
-def test_the_sbom_lists_exactly_what_is_installed_with_licenses():
-    """sbom.cdx.json (tools/sbom.py) describes the same packages and versions as constraints.txt."""
-    import json
-    import re
-
+    pins = set(re.findall(r"^([A-Za-z0-9_.-]+)==([^\s;]+)", exported, re.M))
     bom = json.loads((CONNECTOR / "sbom.cdx.json").read_text(encoding="utf-8"))
-    pins = set(re.findall(r"^([A-Za-z0-9_.-]+)==([^\s;]+)", (CONNECTOR / "constraints.txt").read_text(
-        encoding="utf-8"), re.M))
     listed = {(c["name"], c["version"]) for c in bom["components"]}
     assert bom["bomFormat"] == "CycloneDX" and listed == pins, "run python tools/sbom.py"
     assert all(c["licenses"] for c in bom["components"])

@@ -23,6 +23,7 @@ uninstalling. Paths are for Windows; *measured* means observed on a real compute
 | Workspaces | `workspaces_root`, default `%USERPROFILE%\eunomai-business-workspaces\<name>` (measured) | Clones of the repositories: the user's work, versions not yet sent included | **As sensitive as the repositories** | **Yes, on purpose**: it is the user's work |
 | Backups before an update | Inside each workspace's `.git`, as `refs/eunomai/backup/<time>/<branch>` | Where each branch was before `workspace_update` moved it | As the workspace | With the workspace |
 | uv | `%USERPROFILE%\.local\bin\uv.exe`, `uvx.exe`, `uvw.exe`; `%LOCALAPPDATA%\uv\uv-receipt.json`; user `PATH` entry (measured) | The uv program, installed per user | No | Yes; it is a separate program |
+| The connector's environment | `connector\.venv` inside the plugin's folder | The locked packages, installed from uv's cache | No | Not yet measured |
 | uv cache | `%LOCALAPPDATA%\uv\cache` (measured) | Built connector versions and their dependencies (`mcp`, `httpx`, `dulwich`, ...) | No | Yes; shared with any other use of uv |
 | Python, if the computer has none | `%APPDATA%\uv\python` (uv's documented default; not measured, the test computer had Python) | A Python runtime downloaded by uv | No | Yes |
 | Browser sessions | The default browser | Sign-in cookies of Entra ID and the git server | Yes, as any sign-in | Until signing out in the browser |

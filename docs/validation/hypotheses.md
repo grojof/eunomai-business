@@ -23,7 +23,7 @@ internet.
 |---|---|---|---|
 | H1 | The local connector runs on the user's computer, not in Claude's sandbox | `validate-setup`, step 1 | Pass · 2026-10-24: Windows 11 host, Python from uv's cache |
 | H2 | It reaches internal HTTPS hosts, trusting an internal CA through the OS certificate store | `validate-setup`, step 2 | Pass · 2026-10-24: 200 on both internal hosts with the OS store; the bundled store fails, as expected with an internal CA |
-| H3 | It starts with no per-user setup: `uvx` found, `${CLAUDE_PLUGIN_ROOT}` expanded | The tools exist; `expansion_ok` | Pass · 2026-10-24 |
+| H3 | It starts with no per-user setup: `uv` found, `${CLAUDE_PLUGIN_ROOT}` expanded, the locked packages installed | The tools exist; `expansion_ok` | Pass · 2026-10-24 |
 | H4 | Sign-in works with every provider (git server and Entra ID): browser, loopback redirect, no secret, tokens stored encrypted | `validate-setup`, step 3 | Pass · 2026-10-24: Gitea (2,084 bytes stored) and Entra ID (5,332 bytes stored), PKCE, loopback redirect |
 | H5 | The sign-in is reused: new task, Desktop restart, refresh after expiry | [Guide, step 8](run-the-validation.md#8--robustness-h5) | Partial · 2026-10-24: reused within a task and in a new task without signing in again; restart and refresh pending |
 | H6 | Plugin hooks run in Cowork, on the user's computer; which shell runs them | `validate-setup`, step 5 | Pass · 2026-10-24: SessionStart and PreToolUse on the host, through Git Bash (Git installed) |

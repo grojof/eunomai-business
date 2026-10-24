@@ -27,7 +27,7 @@ contain internal host names, so keep the built zip inside the organization.
 
 | Key | Default | What it does |
 |---|---|---|
-| `uvx` | `uvx` | Command that starts the connector. Keep the default when possible: hooks run through whichever shell Claude Desktop uses, and the bare command works in all of them. A full path to `uvx.exe` is a fallback; if it contains spaces it is quoted, which PowerShell does not accept. |
+| `uv` | `uv` | Command that starts the connector. Keep the default when possible: hooks run through whichever shell Claude Desktop uses, and the bare command works in all of them. A full path is a fallback; if it contains spaces it is quoted, which PowerShell does not accept. |
 | `connector_source` | `bundled` | `bundled`: the connector ships inside the zip. `path`: it runs from `connector_path` (development only). Any other value is an error. |
 | `connector_path` | — | Folder of the connector source; required when `connector_source` is `path`. |
 | `workspaces_root` | `~/eunomai-business-workspaces` | Where each user's workspaces (local clones) go. `~` is the user's profile; `%VAR%` is expanded. Must be absolute after expansion. |
@@ -123,13 +123,26 @@ See [architecture.md](architecture.md#what-is-tied-to-a-git-hosting).
 
 ## What users need on their computer
 
-- **uv**, installed per user without administrator rights:
-  `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`, then quit Claude Desktop
-  completely and open it again. uv fetches a Python itself if none is installed.
+- **uv**, the only thing to install (see [Installing uv](#installing-uv-in-an-organization)). It fetches Python
+  3.12 and the connector's packages itself.
 - **Nothing else.** Git is not needed: the connector carries its own git implementation and ignores any Git
   installed on the computer ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)).
 - Network access (office or VPN) to the configured hosts. The connector trusts the Windows certificate store, so
   an internal CA works without extra steps.
+
+## Installing uv in an organization
+
+The connector starts with `uv run --frozen --no-dev --no-config --native-tls --python 3.12`: exactly the packages
+of `connector/uv.lock`, each checked against its recorded hash, downloaded with the operating system's
+certificate store, on Python 3.12.
+
+| Topic | Recommendation |
+|---|---|
+| How to install | For tests, the official per-user installer (`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`, then restart Claude Desktop). For users, IT distributes a fixed version with its usual software tools and controls updates. Tested with uv 0.13.5 |
+| Application control | Policies such as AppLocker often block programs in the user's profile, where the per-user installer puts uv. Allow uv explicitly, or install it where policy allows programs |
+| Network | uv downloads packages from `pypi.org` and `files.pythonhosted.org`, and Python from `github.com` when the computer has no Python 3.12. Allow them through the proxy |
+| What uv allows | Installing and running Python packages without administrator rights, like any portable tool. Where that is not acceptable, application control is the place to decide it |
+| Computers that already have uv | Developers and IT keep their own uv: the connector ignores uv's configuration files, uses the plugin's lock and hashes, and a fixed Python. The download cache is shared, which is harmless. Environment variables starting with `UV_` still apply: do not set them globally on business users' computers |
 
 ## Environment variables the plugin sets for its connector
 
