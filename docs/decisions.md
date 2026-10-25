@@ -4,12 +4,13 @@ title: Decisions
 description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, and a project context that belongs to IT."
 tags: [decisions, architecture]
 audience: [it, developers]
-related: [architecture.md]
+related: [architecture.md, sources.md]
 ---
 
 # Decisions
 
-Why eunomai-business is built this way, and what was rejected.
+Why eunomai-business is built this way, and what was rejected. The official sources and measurements behind
+each decision are in [sources and evidence](sources.md).
 
 ## 1 · A local connector on the user's computer
 
