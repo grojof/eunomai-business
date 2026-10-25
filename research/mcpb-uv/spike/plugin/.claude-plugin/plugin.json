@@ -1,0 +1,5 @@
+{
+  "name": "eunomai-mcpb-spike-hooks",
+  "version": "0.0.1",
+  "description": "Research spike: can a plugin's mcp_tool hook call the server of the eunomai MCPB spike extension?"
+}
