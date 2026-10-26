@@ -1,0 +1,44 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash|mcp__workspace__bash",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:eunomai-mcpb-in-plugin:eunomai-mcpb-spike",
+            "tool": "spike_guard",
+            "input": {
+              "tool_name": "${tool_name}",
+              "file_path": "${tool_input.file_path}",
+              "command": "${tool_input.command}",
+              "via": "plugin:<plugin>:<manifest name>"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "plugin:eunomai-mcpb-in-plugin:eunomai MCPB spike (uv runtime)",
+            "tool": "spike_guard",
+            "input": {
+              "tool_name": "${tool_name}",
+              "file_path": "${tool_input.file_path}",
+              "command": "${tool_input.command}",
+              "via": "plugin:<plugin>:<display name>"
+            }
+          },
+          {
+            "type": "mcp_tool",
+            "server": "eunomai MCPB spike (uv runtime)",
+            "tool": "spike_guard",
+            "input": {
+              "tool_name": "${tool_name}",
+              "file_path": "${tool_input.file_path}",
+              "command": "${tool_input.command}",
+              "via": "display name"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -277,11 +277,18 @@ def _pinned_files(folder: Path) -> list[Path]:
                   if f.name == "package-lock.json" or fnmatch.fnmatch(f.name.lower(), "requirements*.txt"))
 
 
-def _requirements(text: str, siblings: set[str]) -> tuple[list[tuple[str, str]], list[str], bool]:
-    """(name, version) pins, lines that are not exact pins of the public index, and whether every pin has a hash.
-    `-r`/`-c` may only name another pinned list in the same folder (audited on its own); every other option, such
-    as another index or a local path, is refused: pins are checked against the registry pip would not use."""
-    pins, loose, hashed = [], [], True
+# A marker that names one platform which is not a computer's (a web browser's "emscripten", for example): the pin
+# is never installed on Windows, macOS or Linux. Anything more complex is audited as usual.
+_ELSEWHERE = re.compile(r"""^\s*(sys_platform|platform_system|os_name)\s*==\s*['"]([^'"]+)['"]\s*$""")
+_COMPUTERS = {"win32", "cygwin", "linux", "darwin", "windows", "nt", "posix"}
+
+
+def _requirements(text: str, siblings: set[str]) -> tuple[list[tuple[str, str]], list[str], bool, list[str]]:
+    """(name, version) pins, lines that are not exact pins of the public index, whether every pin has a hash, and
+    pins that only other platforms install. `-r`/`-c` may only name another pinned list in the same folder (audited
+    on its own); every other option, such as another index or a local path, is refused: pins are checked against
+    the registry pip would not use."""
+    pins, loose, hashed, elsewhere = [], [], True, []
     for line in re.sub(r"\\\r?\n", " ", text).splitlines():
         line = line.split(" #")[0].strip()
         if not line or line.startswith("#"):
@@ -295,20 +302,24 @@ def _requirements(text: str, siblings: set[str]) -> tuple[list[tuple[str, str]],
             loose.append(f"{line} (options are not allowed in a pinned list)")
             continue
         requirement = line.split(";")[0].split(" --hash")[0].strip()
+        marker = line.split(";", 1)[1].split(" --hash")[0] if ";" in line else ""
         match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(\[[^\]]*\])?\s*===?\s*([A-Za-z0-9.+!_-]+)$", requirement)
-        if match:
+        platform_only = _ELSEWHERE.match(marker)
+        if match and platform_only and platform_only.group(2).lower() not in _COMPUTERS:
+            elsewhere.append(f"{requirement} (only on {platform_only.group(2)})")
+        elif match:
             pins.append((_normalized(match.group(1)), match.group(3)))
             hashed = hashed and "--hash=" in line
         else:
             loose.append(requirement)
-    return pins, loose, hashed and bool(pins)
+    return pins, loose, hashed and bool(pins), elsewhere
 
 
-def _npm_lock(text: str) -> tuple[list[tuple[str, str]], list[str], bool]:
+def _npm_lock(text: str) -> tuple[list[tuple[str, str]], list[str], bool, list[str]]:
     """Pins of an npm lockfile (version 2 or 3), each from the public registry under its own name."""
     data = json.loads(text)
     if "packages" not in data:
-        return [], ["lockfile version 1 is not supported: regenerate it with npm 7 or later"], False
+        return [], ["lockfile version 1 is not supported: regenerate it with npm 7 or later"], False, []
     pins, loose, hashed = [], [], True
     for path, meta in data["packages"].items():
         if not path or meta.get("link") or "version" not in meta:
@@ -320,7 +331,7 @@ def _npm_lock(text: str) -> tuple[list[tuple[str, str]], list[str], bool]:
             continue
         pins.append((name, meta["version"]))
         hashed = hashed and bool(meta.get("integrity"))
-    return pins, loose, hashed and bool(pins)
+    return pins, loose, hashed and bool(pins), []
 
 
 def _vulnerable(queries: list[tuple[str, str, str]]) -> dict[tuple[str, str, str], list[str]]:
@@ -391,24 +402,25 @@ def audit(folder: Path) -> dict:
     installs anything pins all of it in requirements*.txt or package-lock.json."""
     files = _pinned_files(folder)
     pins: dict[tuple[str, str, str], list[str]] = {}
-    loose, unhashed = [], []
+    loose, unhashed, elsewhere = [], [], []
     for file in files:
         eco = "npm" if file.name == "package-lock.json" else "pypi"
         where = file.relative_to(folder).as_posix()
         try:
             text = file.read_text(encoding="utf-8")
             if eco == "npm":
-                found, not_pinned, hashed = _npm_lock(text)
+                found, not_pinned, hashed, skipped = _npm_lock(text)
             else:
                 siblings = {f.name for f in files if f.parent == file.parent and f != file}
-                found, not_pinned, hashed = _requirements(text, siblings)
+                found, not_pinned, hashed, skipped = _requirements(text, siblings)
         except (ValueError, UnicodeDecodeError):
             loose.append(f"{where}: not readable as a pinned list")
             continue
         loose += [f"{where}: {line}" for line in not_pinned]
+        elsewhere += [f"{where}: {line}" for line in skipped]
         if not hashed:
             unhashed.append(where)
-        if not found and not not_pinned:
+        if not found and not not_pinned and not skipped:
             loose.append(f"{where}: pins nothing")
         for name, version in found:
             pins.setdefault((eco, name, version), []).append(where)
@@ -438,6 +450,8 @@ def audit(folder: Path) -> dict:
               "blocked": blocked, "not_pinned": loose, "without_hashes": unhashed}
     if conditional:
         result["only_on_some_platforms"] = conditional
+    if elsewhere:
+        result["not_installed_on_computers"] = elsewhere
     if not files and _declares_packages(folder):
         result["reasons"] = ["packages are declared but not pinned: requirements*.txt or package-lock.json"]
     elif not files:

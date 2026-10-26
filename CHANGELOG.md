@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **The runtime is IT's (decision 9):** one plugin carries skills, hooks and the connector; IT deploys uv at a fixed
+  version and absolute path. Researched and rejected for now, with their official sources: a Node.js connector,
+  the connector as a separate MCPB extension, and an MCPB bundle inside the plugin (not run by Cowork).
+- **Launch:** `--system-certs` replaces the deprecated `--native-tls`, and `--managed-python` makes uv use its own
+  Python 3.12, never the computer's. uv 0.13.4 or later is required for security (GHSA-hq85-5cpj-mr62).
+- **Dependency audit:** a pin that only another platform installs (a web browser's `emscripten`) is listed apart
+  instead of blocked; the connector's own locked tree passes its own audit (41 packages, hashed, no known
+  vulnerabilities).
 - **Lessons from the first business-user test:**
   - nothing runs on the user's computer: the specialist never writes launchers or gives commands, and a save point
     refuses files Windows runs on a double click; users try a clickable prototype instead of static mockups;
