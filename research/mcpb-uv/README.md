@@ -51,6 +51,29 @@ hashes the supply-chain protection is lost.
 | File guard | Command hook, blocks if it cannot run | `mcp_tool` hook to the extension: lets the write through if the extension is down (the save still refuses it) |
 | Validated | H1–H9, a business-user test | This spike only: git, sign-in, DPAPI and data paths inside an extension not yet tried |
 
+## What each piece would hold, and if one is missing
+
+| Piece | Holds | Can |
+|---|---|---|
+| Extension (the connector) | The Python connector: sign-in, encrypted tokens, git, save, send, propose, the dependency audit, the guard's rules | Everything that reaches the repository, and every barrier that holds: protected main branch, no force, valid paths, protected files put back, executables refused at save, `.git` configuration checked, the audit appended to pull requests |
+| Plugin | Text and configuration only: the skills and the guard hook; no code | Guide Claude, and stop a dangerous file before it lands on the user's disk |
+
+| Case | Risk | What still protects |
+|---|---|---|
+| Plugin without extension | None added: no tools, no credentials, no git; Claude can write files as in any Cowork session | Nothing leaves the computer |
+| Extension without plugin | Claude uses the tools without the specialist; without the hook a launcher could land on disk | Every save barrier: it never reaches the repository; review on the git server |
+| Hook down or removed | A dangerous file can land on the user's disk | The save refuses it; operating-system controls (Windows Script Host off, AppLocker) |
+
+## Next checks
+
+| # | Must hold | Why |
+|---|---|---|
+| M6 | A **PowerShell** guard hook (`shell: "powershell"`, `onFailure: "block"`, no runtime needed) denies executables and IT's files, and blocks when it cannot run, under execution policy and Constrained Language Mode; its cost per write is acceptable | A guard that fails closed without uv; watch [claude-code#100891](https://github.com/anthropics/claude-code/issues/100891) (`onFailure: "block"` not blocking in one PowerShell case) |
+| M7 | The whole connector works inside the extension: browser sign-in with loopback, DPAPI tokens, git on the workspace folder, its data under MSIX | Only the spike ran so far |
+| M8 | The same in a Cowork session in the cloud | H16 for this variant |
+| M9 | The connector records each guard consultation, and a pull request says so when files changed with no consultation since the last save ("the guard was not active") | IT sees a missing or broken guard, in this variant and in today's |
+| M10 | The specialist checks, at the start, that the extension is there and at the expected version, and stops for IT otherwise; IT can deploy the extension with its own software management | Both pieces required in practice: the plugin through the console, the extension through IT |
+
 ## Running the spike
 
 ```
