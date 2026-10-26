@@ -1,10 +1,5 @@
 # Research: the connector as an MCPB extension of type `uv`
 
-**Conclusion (2026-10-26): no.** M1 fails: Claude Desktop 3.6556.2.0 runs a `uv` extension with the uv it finds
-on the computer and brings none of its own, so users would still need uv installed, as today, and the product
-would be split into an extension and a plugin, with an extension that organizations can only make available, not
-install for members. The plugin with its own local server stays.
-
 **Question.** Can eunomai-business keep its Python connector, unchanged, and ship it as a Claude Desktop extension
 (MCPB) of type `uv`, which Claude Desktop runs managing Python and the dependencies itself, so that business users'
 computers need nothing installed? The product would then be two pieces: the extension (the connector) and the

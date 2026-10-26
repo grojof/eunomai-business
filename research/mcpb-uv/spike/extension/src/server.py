@@ -56,7 +56,19 @@ def runtime(_: dict) -> dict:
         "argv": sys.argv,
         "data_dir": str(DATA),
         "env_uv": {k: v for k, v in os.environ.items() if k.startswith("UV_")},
+        "uv_that_ran_this": os.environ.get("UV"),  # uv sets UV to its own executable for what it runs
+        "uv_version": _version(os.environ.get("UV")),
     }
+
+
+def _version(uv: str | None) -> str | None:
+    if not uv:
+        return None
+    try:
+        return subprocess.run([uv, "--version"], capture_output=True, text=True, timeout=20,
+                              creationflags=0x08000000 if sys.platform == "win32" else 0).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"unknown: {exc}"
 
 
 def guard(args: dict) -> dict:
