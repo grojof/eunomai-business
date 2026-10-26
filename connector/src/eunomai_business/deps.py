@@ -19,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from packaging.markers import InvalidMarker, Marker, UndefinedComparison, UndefinedEnvironmentName
+
 from . import auth, settings
 from .support import Unreachable
 
@@ -357,10 +359,39 @@ def _normalized(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _unpinned_requirements(pins: list[tuple[str, str]]) -> tuple[list[str], list[str]]:
+# Windows, Linux and macOS on the usual processors, with the CPython versions still supported upstream.
+_COMPUTER_ENVIRONMENTS = [
+    {"sys_platform": sys_platform, "platform_system": system, "os_name": os_name, "platform_machine": machine,
+     "python_version": python, "python_full_version": f"{python}.0", "implementation_name": "cpython",
+     "platform_python_implementation": "CPython", "implementation_version": f"{python}.0",
+     "platform_release": "", "platform_version": ""}
+    for sys_platform, system, os_name in (("win32", "Windows", "nt"), ("linux", "Linux", "posix"),
+                                          ("darwin", "Darwin", "posix"))
+    for machine in ("AMD64", "x86_64", "ARM64", "aarch64", "arm64")
+    for python in ("3.10", "3.11", "3.12", "3.13", "3.14", "3.15")]
+
+# The Python a list was compiled for, from the header `uv pip compile` writes.
+_COMPILED_FOR = re.compile(r"^#.*--python-version[ =](\d+)\.(\d+)", re.MULTILINE)
+
+
+def _needed_on_a_computer(marker: str, python_from: tuple[int, int] = (3, 10)) -> bool:
+    """Whether a requirement's marker (PEP 508) holds on Windows, Linux or macOS with a supported Python from
+    `python_from` on: such a computer installs it, so a list without it fails there (`--require-hashes` refuses what
+    is not listed). A marker that cannot be read or evaluated counts as needed."""
+    try:
+        parsed = Marker(marker)
+        return any(parsed.evaluate(environment) for environment in _COMPUTER_ENVIRONMENTS
+                   if tuple(int(n) for n in environment["python_version"].split(".")) >= python_from)
+    except (InvalidMarker, UndefinedComparison, UndefinedEnvironmentName):
+        return True
+
+
+def _unpinned_requirements(pins: list[tuple[str, str]], python_from: tuple[int, int] = (3, 10)
+                           ) -> tuple[list[str], list[str]]:
     """What the pinned PyPI packages require and the list leaves out, so a list of direct dependencies alone is not
-    taken as the whole tree; and, apart, what they require only on some platforms or Python versions, which the
-    environment that wrote the list may rightly leave out. Requirements of extras not asked for are not counted."""
+    taken as the whole tree (a requirement only for Windows, Linux or macOS counts: one of them installs it); and,
+    apart, what they require only on other platforms or Python versions, which the list may rightly leave out.
+    Requirements of extras not asked for are not counted."""
     pinned = {name for name, _ in pins}
     missing, conditional = set(), set()
     for name, version in pins:
@@ -373,7 +404,8 @@ def _unpinned_requirements(pins: list[tuple[str, str]]) -> tuple[list[str], list
             needed = f"{_normalized(found.group(1))} (required by {name} {version})"
             if "extra" in marker:
                 continue
-            (conditional if marker else missing).add(needed + (f" when{marker}" if marker else ""))
+            (conditional if marker and not _needed_on_a_computer(marker, python_from) else missing).add(
+                needed + (f" when{marker}" if marker else ""))
     return sorted(missing), sorted(conditional)
 
 
@@ -402,7 +434,7 @@ def audit(folder: Path) -> dict:
     installs anything pins all of it in requirements*.txt or package-lock.json."""
     files = _pinned_files(folder)
     pins: dict[tuple[str, str, str], list[str]] = {}
-    loose, unhashed, elsewhere = [], [], []
+    loose, unhashed, elsewhere, compiled_for = [], [], [], []
     for file in files:
         eco = "npm" if file.name == "package-lock.json" else "pypi"
         where = file.relative_to(folder).as_posix()
@@ -416,6 +448,7 @@ def audit(folder: Path) -> dict:
         except (ValueError, UnicodeDecodeError):
             loose.append(f"{where}: not readable as a pinned list")
             continue
+        compiled_for += [(int(a), int(b)) for a, b in _COMPILED_FOR.findall(text)]
         loose += [f"{where}: {line}" for line in not_pinned]
         elsewhere += [f"{where}: {line}" for line in skipped]
         if not hashed:
@@ -424,7 +457,10 @@ def audit(folder: Path) -> dict:
             loose.append(f"{where}: pins nothing")
         for name, version in found:
             pins.setdefault((eco, name, version), []).append(where)
-    missing, conditional = _unpinned_requirements([(n, v) for eco, n, v in pins if eco == "pypi"])
+    # a list compiled for a given Python may leave out what only older ones need; without that header, every
+    # supported Python counts
+    missing, conditional = _unpinned_requirements([(n, v) for eco, n, v in pins if eco == "pypi"],
+                                                  min(compiled_for, default=(3, 10)))
     loose += [f"missing from the pinned list: {item}" for item in missing]
     vulnerabilities = _vulnerable(list(pins))
     blocked = []

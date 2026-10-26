@@ -31,8 +31,9 @@ the content is in `docs_language`.
 ## Rules
 
 - A requirement is one sentence; one to three scenarios each, with concrete values. Every scenario will be a test.
-- Cover the edges a reviewer will ask about (who may do it and who may not, wrong or missing input, limits, the
-  same action twice) as scenarios, or as requirements of their own when a requirement would pass three.
+- Cover the edges a reviewer will ask about (who may do it and who may not, nobody on their own record, wrong or
+  missing input, limits, the same action twice) as scenarios, or as requirements of their own when a requirement
+  would pass three.
 - A business rule cites its source. Without one, it goes to `## Open questions` in `proposal.md`; never invent it.
 - State the current decision only. When the user changes their mind, rewrite; add a one-line note only if the
   reason matters to whoever reviews.
@@ -42,7 +43,7 @@ the content is in `docs_language`.
 
 Read `proposal.md`, the prototype (if there is one), the specs and the tasks side by side. Every screen and
 button in the prototype has a requirement; every requirement has a task; the scope in `## What Changes` matches;
-nothing contradicts the project's context. Fix what does not agree before the user sees it.
+no requirement answers an open question; nothing contradicts the project's context. Fix what does not agree before the user sees it.
 
 ## With the user
 

@@ -10,10 +10,21 @@ your sandbox.
 - **Every direct package through `dependency_check`.** Use the version it allows. If it blocks the version asked
   for, use the `recommended` one it returns, if any; if it blocks the package, choose another or do without; never
   insist.
-- **Pin the whole tree.** Install in a clean environment in the sandbox and write every package installed, direct
-  and indirect, at its exact version: `requirements.txt` from that environment (with `--hash` lines when the
-  tooling in the sandbox can produce them), or `package-lock.json`. Then `dependency_audit(workspace)`: its
-  `verdict` must be `allowed`. Repeat after any dependency change.
+- **Pin the whole tree, for every computer.** Python: the direct packages in `requirements.in`, and the
+  development ones in `requirements-dev.in` starting with `-c requirements.txt`. Then, in the sandbox, for each:
+  `uv pip compile <file>.in --universal --generate-hashes --python-version <version> --exclude-newer "14 days"
+  -o <file>.txt` ([`uv pip compile`](https://docs.astral.sh/uv/reference/cli/#uv-pip-compile),
+  [universal resolution](https://docs.astral.sh/uv/concepts/resolution/#universal-resolution); uv itself through
+  `dependency_check`). `<version>` is the Python IT runs, from the project's context or the allowed technologies;
+  if neither says, the sandbox's, and the question goes under *Not settled*. The list holds every package, direct
+  and indirect, at its exact version, with its hashes and the markers of the platforms that need it; `pip freeze`
+  lists only what the sandbox (Linux) installed, and fails on Windows. JavaScript: `package-lock.json`.
+- Then `dependency_audit(workspace)`: its `verdict` must be `allowed`. If it blocks a version, pin the
+  `recommended` one from `dependency_check` in the `.in` file (newer than two weeks only when it fixes a
+  vulnerability: add `--exclude-newer-package <name>=<YYYY-MM-DD of today>`) and compile again. A package it blocks that the
+  tooling needs, such as an indirect one without recent releases, goes to IT, who can vet it once for the
+  organization: list it in the pull request. Repeat after any dependency change.
+- **Open questions:** declared assumptions, as `SKILL.md` says; never a setting the code does not have.
 
 ## Tests first
 
@@ -39,17 +50,22 @@ your sandbox.
 | Forms with cookie sessions | Protection against cross-site requests (a token, or a check of `Origin`); signing out by POST |
 | The same action twice | A double click or two requests at once cannot break a limit (a constraint or a lock, and its test) |
 | Input | Validated at the edges, with limits on size and range; queries parameterized |
-| Secrets and settings | From the environment, with safe defaults; demonstration modes cannot reach production |
+| Secrets and settings | From the environment. Production is the default: development or demonstration only when set explicitly, and the application refuses to start with them in production. Secrets with a minimum strength; sessions with a limited lifetime |
+| Separation of duties | Nobody decides on their own record (approves their own request, signs off their own work), whatever the data says, for example someone loaded as their own manager |
 | External resources | None: fonts, scripts and styles are served by the application |
-| Errors | A clear message to the user, never a raw error page |
+| Errors | A clear message to the user, never a raw error page; no tokens or personal data in logs. "Not found" and "not allowed" answer alike |
 
-- A short `README.md` section on how IT runs it and runs the tests, true to the code.
+- A short `README.md` section on how IT runs it and runs the tests, true to the code. A page in `docs/` starts with
+  frontmatter: `type` (one of `tutorial`, `how-to`, `reference`, `explanation`, `decision`, in English), `title` and
+  `description`; it describes only what the code does.
 
 ## Progress
 
-- One task, one save: tick it in `tasks.md` and `version_save(workspace, <message>)`.
-- Show the user the roadmap moving in one or two lines; show them the application through screenshots taken in
-  the sandbox when the tooling there allows it. Never a launcher for their computer.
+- **One task, one save:** tick it in `tasks.md` and `version_save(workspace, <message>)`, with its tests and code
+  together. IT follows the build save by save; one save for the whole application cannot be reviewed.
+- Show the user the roadmap moving in one or two lines. Show them the application through screenshots taken in the
+  sandbox, as images, saying they are pictures. If the sandbox cannot take one, say so: never a saved copy of the
+  application's pages, which looks usable and is not. Never a launcher for their computer.
 - Something unclear means going back to Specify and asking; never guess.
 
 ## Done

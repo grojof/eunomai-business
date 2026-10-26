@@ -69,6 +69,14 @@ date is when they were checked. When a source and a measurement disagree, the me
 | Claude Desktop prefers a uv installed on the computer and otherwise downloads its own, checked against a checksum (an Anthropic staff answer on the MCPB repository) | [mcpb#203](https://github.com/modelcontextprotocol/mcpb/issues/203) | 2026-10-26 | [MCPB research](../research/mcpb-uv/README.md) |
 | Organization sync from github.com, GitHub Enterprise Server and GitLab only; otherwise a zip upload | [Sync plugins from a repository](https://claude.com/docs/plugins/org-sync) | 2026-10-25 | Distribution (the organization's choice) |
 
+### Outside Claude
+
+| Fact | Official source | Checked | Relied on by |
+|---|---|---|---|
+| A Windows package's new files and folders under `AppData` go to a private per-package location; existing ones are changed in place | [How packaged desktop apps run (MSIX)](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes) | 2026-10-26 | [Data on computers](data-on-computers.md) |
+| `uv pip compile --universal` writes one list for every platform, with markers; `--generate-hashes`, `--python-version`, `--exclude-newer` (dates or durations such as `14 days`) and `--exclude-newer-package` | [Resolution](https://docs.astral.sh/uv/concepts/resolution/#universal-resolution), [CLI reference](https://docs.astral.sh/uv/reference/cli/#uv-pip-compile); checked with uv 0.13.5 | 2026-10-26 | The specialist's Build (pinning the whole tree) |
+| Gitea lists a pull request's reviews (`APPROVED`, `COMMENT`, `REQUEST_CHANGES`; dismissed or stale flags), their line comments (resolved or not) and the conversation | Gitea API 1.27.1, `/swagger.v1.json` of the organization's server | 2026-10-26 | `workspace_status` (`review`) |
+
 ## Measured on real installations
 
 Full status in [validation](validation/hypotheses.md). Facts measured here that no official page states:

@@ -167,7 +167,7 @@ sequenceDiagram
   Claude's file tools and the connector see the same path.
 - **Per-user data lives in `%LOCALAPPDATA%\eunomai-business`**, not in `CLAUDE_PLUGIN_DATA`, which points inside
   each task's folder and does not outlive the task. Claude Desktop installed as a Windows package (MSIX) redirects
-  that folder for the processes it starts ([where](data-on-computers.md)).
+  that folder for the processes it starts unless it already exists ([where](data-on-computers.md)).
 - **Where the session runs.** Since 2026-10-06, new Cowork tasks on Pro and Max plans run on Anthropic's servers;
   on Team and Enterprise an owner decides it ("Run Cowork in the cloud": on by default on Team, off on Enterprise).
   Anthropic states that local connectors work through the open desktop app

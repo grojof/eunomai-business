@@ -78,7 +78,10 @@ through a link. It blocks:
   `--find-links`, and any `-r`/`-c` that does not name another pinned list in the same folder;
 - an npm entry not downloaded from the public registry under its own name;
 - a list that pins nothing, or leaves out a package a pinned one requires (Python; an npm lockfile is complete by
-  construction). What a package requires only on some platforms or Python versions is listed apart, not blocked;
+  construction), including one required only on Windows, Linux or macOS, since `--require-hashes` then fails
+  there (markers are evaluated as PEP 508 says, with `packaging`). What a package requires only on other platforms,
+  or only on Pythons older than the one a list was compiled for (`--python-version` in uv's header), is listed
+  apart, not blocked;
 - declared packages (`pyproject.toml`, `package.json`...) without a pinned list.
 
 A project that installs no packages has nothing to check. Lists without hashes are noted. The specialist runs the
