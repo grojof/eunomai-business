@@ -338,3 +338,14 @@ def test_the_audit_finds_indirect_dependencies_left_out_of_the_list(monkeypatch,
     assert result["verdict"] == "blocked"
     assert result["not_pinned"] == ["missing from the pinned list: anyio (required by starlette 1.0.0)",
                                     "missing from the pinned list: pydantic (required by fastapi 0.1.0)"]
+
+
+def test_pins_only_other_platforms_install_are_listed_apart(monkeypatch, tmp_path):
+    registry(monkeypatch, {"httpx2": {"2.13.1": 100}})
+    (tmp_path / "requirements.txt").write_text(
+        "httpx2==2.13.1 --hash=sha256:aa\n"
+        "httpx2-jsfetch==1.0 ; sys_platform == 'emscripten' --hash=sha256:bb\n"
+        "pywin32-ctypes==0.2.3 ; sys_platform == 'win32' --hash=sha256:cc\n")
+    result = deps.audit(tmp_path)
+    assert result["not_installed_on_computers"] == ["requirements.txt: httpx2-jsfetch==1.0 (only on emscripten)"]
+    assert any(b["package"] == "pywin32-ctypes" for b in result["blocked"])  # a Windows pin is still audited

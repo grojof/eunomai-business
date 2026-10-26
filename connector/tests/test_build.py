@@ -36,7 +36,8 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
     assert mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_DIAGNOSTICS"] == "0"
     args = mcp["mcpServers"]["eunomai-business"]["args"]
-    assert args[:2] == ["run", "--frozen"] and "--no-config" in args and "--native-tls" in args
+    assert args[:2] == ["run", "--frozen"] and "--no-config" in args and "--system-certs" in args
+    assert "--managed-python" in args  # uv's own Python, never whatever the computer has
     assert args[args.index("--project") + 1] == "${CLAUDE_PLUGIN_ROOT}/connector"
     assert "connector/uv.lock" in names and "connector/sbom.cdx.json" in names
 

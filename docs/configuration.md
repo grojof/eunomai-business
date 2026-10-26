@@ -149,8 +149,10 @@ See [architecture.md](architecture.md#what-is-tied-to-a-git-hosting).
 
 ## What users need on their computer
 
-- **uv**, the only thing to install (see [Installing uv](#installing-uv-in-an-organization)). It fetches Python
-  3.12 and the connector's packages itself.
+- **uv**, deployed by IT; users install nothing themselves (see
+  [Installing uv](#installing-uv-in-an-organization) and
+  [decision 9](decisions.md#9--it-provides-the-runtime-the-plugin-carries-everything-else)). It fetches its own
+  Python 3.12 and the connector's packages.
 - **Nothing else.** Git is not needed: the connector carries its own git implementation and ignores any Git
   installed on the computer ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)).
 - Network access (office or VPN) to the configured hosts. The connector trusts the Windows certificate store, so
@@ -158,16 +160,20 @@ See [architecture.md](architecture.md#what-is-tied-to-a-git-hosting).
 
 ## Installing uv in an organization
 
-The connector starts with `uv run --frozen` from the plugin's lock, hashes verified, on Python 3.12
-([barriers](barriers.md#dependencies)).
+The connector starts with `uv run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12`
+from the plugin's lock: hashes verified, uv's configuration files ignored, the operating system's certificates,
+and uv's own Python 3.12, never the computer's ([barriers](barriers.md#dependencies)). Claude Desktop does not
+provide uv to a plugin, so IT deploys it ([decision 9](decisions.md#9--it-provides-the-runtime-the-plugin-carries-everything-else)).
 
 | Topic | Recommendation |
 |---|---|
-| How to install | For tests, the official per-user installer (`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`, then restart Claude Desktop). For users, IT distributes a fixed version with its usual software tools and controls updates. Tested with uv 0.13.5 |
-| Application control | Policies such as AppLocker often block programs in the user's profile, where the per-user installer puts uv. Allow uv explicitly, or install it where policy allows programs |
-| Network | uv downloads packages from `pypi.org` and `files.pythonhosted.org`, and Python from `github.com` when the computer has no Python 3.12. Allow them through the proxy |
-| What uv allows | Installing and running Python packages without administrator rights, like any portable tool. Where that is not acceptable, application control is the place to decide it |
-| Computers that already have uv | Developers and IT keep their own uv: the connector ignores uv's configuration files, uses the plugin's lock and hashes, and a fixed Python. The download cache is shared, which is harmless. Environment variables starting with `UV_` still apply: do not set them globally on business users' computers |
+| How to deploy | uv is one executable. IT distributes the version it has validated with its usual tools (Intune, Group Policy, a software catalogue) to a folder application control allows, such as `C:\Program Files\uv\uv.exe`, and sets that absolute path as `uv` in the build. An absolute path does not depend on the PATH Claude Desktop starts with. **Use uv 0.13.4 or later**: earlier versions are affected by [GHSA-hq85-5cpj-mr62](https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62) (high). Tested with uv 0.13.5 |
+| For a test computer | The official per-user installer (`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`), then restart Claude Desktop |
+| Python | uv downloads its own Python 3.12 the first time, from GitHub (`python-build-standalone`). To avoid that download on users' computers, run `uv python install 3.12` as part of the deployment |
+| Network | uv downloads packages from `pypi.org` and `files.pythonhosted.org`, and Python from `github.com` unless it was installed beforehand. Allow them through the proxy |
+| Application control | Policies such as AppLocker often block programs in the user's profile. Allow uv where it is deployed |
+| Updates | IT updates uv like any other tool, after checking it against the connector's tests. A uv too old for an option the plugin uses fails to start the connector, with the error in Claude Desktop's logs |
+| Computers that already have uv | Developers and IT keep their own uv: with an absolute path in the build, the connector uses IT's. The download cache is shared, which is harmless. Environment variables starting with `UV_` still apply: do not set them globally on business users' computers |
 
 ## Environment variables the plugin sets for its connector
 

@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, and a project context that belongs to IT."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, and a runtime IT provides."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md, sources.md]
@@ -21,11 +21,7 @@ and browser; hence the [barriers](barriers.md).
 - **Rejected:** a remote connector. Claude calls remote connectors from Anthropic's cloud, so internal servers
   would have to be published to the internet.
 - **Requires:** the desktop app open, Cowork tasks on the user's computer until check H16 shows the cloud works
-  too, and `uv` installed once per user.
-- **Considered: a Node.js connector** (2026-10-25), to remove uv and Python from users' computers. Not now: a
-  plugin's local server gets no Node from Claude Desktop (only MCPB extensions do), and the JavaScript git library's
-  package tree fails this project's dependency rules
-  ([research](../research/node-connector/README.md)). To look at again if plugins get Desktop's runtime.
+  too, and uv on every computer, deployed by IT ([decision 9](#9--it-provides-the-runtime-the-plugin-carries-everything-else)).
 
 ## 2 · Public sign-in clients, tokens encrypted per user
 
@@ -106,3 +102,49 @@ and a save point never carries a change to it.
   or from references the sandbox could rewrite. Organizations on Team and Enterprise back this with one line of
   organization instructions, which take precedence over a user's own
   ([configuration](configuration.md#whose-context-counts)).
+
+## 9 · IT provides the runtime; the plugin carries everything else
+
+eunomai-business is one plugin: the specialist and `review-skills` (skills), the file guard (a hook) and the
+connector (a local MCP server). The connector runs on uv, which IT deploys on every computer with its own software
+management, at a version it fixes. uv then runs the locked packages, hashes verified, on its own Python 3.12
+(`--managed-python`), never on whatever Python the computer has. Business users install nothing themselves.
+
+**Why one plugin.** The plugin is the unit Anthropic builds for: plugins "are the main way to build third-party
+extensions for Claude" ([Build plugins for Claude](https://claude.com/blog/build-plugins-for-claude)), and "When you
+build for people who use Claude, you build a plugin"
+([what to build](https://claude.com/docs/connectors/building/what-to-build)). Only a plugin carries skills and hooks,
+and only a plugin gives the organization **Required**, per-group availability (Enterprise), version history and
+rollback ([plugins admin](https://claude.com/docs/plugins/admin)).
+
+**Why IT deploys uv.** Claude Desktop lends a runtime only to standalone desktop extensions (MCPB): their Node, or,
+for the `uv` type, a uv it downloads at installation. A plugin's local server gets none: its command must already be
+on the computer. Measured in Cowork on 2026-10-26: without uv, the plugin's server does not start
+([research](../research/mcpb-uv/README.md)). No organization policy changes that
+([enterprise configuration](https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop)).
+Deploying one executable is routine for IT, keeps its version under IT's control and needs no download from
+GitHub on users' computers.
+
+**Rejected, after testing:**
+
+| Alternative | Why not | Evidence |
+|---|---|---|
+| A Node.js connector, on Claude Desktop's Node | A plugin's server gets no Node from Claude Desktop; the JavaScript git library's tree fails this project's dependency rules | [Node research](../research/node-connector/README.md), 2026-10-25 |
+| The connector as a separate MCPB extension of type `uv`, next to the plugin | It works and needs no uv installed, but: two pieces; the extension can only be made available (allowlist), each member installs it and can turn it off, and "users will need to install updated .mcpb files manually" ([local MCP servers](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)); the guard would become an `mcp_tool` hook, which lets writes through when the extension is down; Desktop picks the uv (a computer's own first, otherwise its 0.9.7, which uv's own advisories list as affected by five vulnerabilities, one high: [GHSA-hq85-5cpj-mr62](https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62)) and nothing can force it ([mcpb#203](https://github.com/modelcontextprotocol/mcpb/issues/203)) | [MCPB research](../research/mcpb-uv/README.md), 2026-10-26 |
+| The MCPB bundle inside the plugin (`"mcpServers": "./server.mcpb"`) | Documented ([manifest reference](https://code.claude.com/docs/en/plugins/manifest-reference)) and listed for Cowork ([platform support](https://claude.com/docs/plugins/platform-support)), but in Cowork the bundle was never extracted or started | [MCPB research](../research/mcpb-uv/README.md), 2026-10-26 |
+
+**Where Anthropic is heading, as of 2026-10-26.** Plugins are the distribution unit: desktop-extension listings in
+the directory "are deprecated, and the directory no longer accepts local servers packaged as MCP Bundles (MCPB). To
+distribute a local server through the directory, include it in a plugin"
+([submission](https://claude.com/docs/connectors/building/submission.md)). MCPB stays for private distribution and
+is, in Anthropic's own skill, "the sanctioned way to distribute local MCP servers", "packaged with its runtime"
+([build-mcpb skill](https://github.com/anthropics/claude-plugins-official/blob/main/plugins/mcp-server-dev/skills/build-mcpb/SKILL.md)).
+The two meet in a plugin that carries a `.mcpb`, which is the variant that does not run in Cowork yet. The MCPB
+repository's last release is v2.1.2 (2025-12-04) and its last commit 2026-04-22.
+
+- **Consequence:** IT's deployment includes uv, at a fixed version and an absolute path in the build
+  ([configuration](configuration.md#installing-uv-in-an-organization)); `--system-certs` and `--managed-python` make
+  its behaviour the same on every computer.
+- **To look at again** when a `.mcpb` inside a plugin runs in Cowork with its runtime managed by Claude Desktop,
+  or when plugins get Desktop's runtime: the connector would then ship as that bundle, unchanged, and IT would no
+  longer deploy uv. Both research spikes stay under `research/` to repeat the tests.

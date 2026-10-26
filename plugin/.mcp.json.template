@@ -2,7 +2,7 @@
   "mcpServers": {
     "eunomai-business": {
       "command": "{{UV}}",
-      "args": ["run", "--frozen", "--no-dev", "--no-config", "--native-tls", "--python", "3.12",
+      "args": ["run", "--frozen", "--no-dev", "--no-config", "--system-certs", "--managed-python", "--python", "3.12",
                "--project", "{{CONNECTOR}}", "eunomai-business"],
       "env": {
         "EUNOMAI_EXPANSION_PROBE": "${CLAUDE_PLUGIN_ROOT}",

@@ -1,9 +1,11 @@
 # Research: the connector as an MCPB extension of type `uv`
 
-**Result (2026-10-26): it works; the decision is pending.** M1–M4 pass on Windows in a local Cowork session:
-Claude Desktop ran the extension with its own uv on a computer without uv, honoured the bundled lockfile, Cowork
-saw its tools, and a plugin's `mcp_tool` hook reached it. What weighs against it is in
-[Trade-offs](#trade-offs).
+**Closed (2026-10-26): not the way, for now.** As a standalone extension it works (M1–M4 pass): Claude Desktop runs
+it with its own uv, honours the lockfile, Cowork sees its tools, and a plugin's hook reaches it. But it splits the
+product in two pieces with less organization control and a guard that fails open, and the variant that would
+unite them, the bundle inside the plugin, does not run in Cowork. The decision, with its official sources, is
+[decision 9](../../docs/decisions.md#9--it-provides-the-runtime-the-plugin-carries-everything-else): one plugin,
+uv deployed by IT.
 
 **Question.** Can eunomai-business keep its Python connector, unchanged, and ship it as a Claude Desktop extension
 (MCPB) of type `uv`, which Claude Desktop runs managing Python and the dependencies itself, so that business users'
@@ -50,6 +52,14 @@ hashes the supply-chain protection is lost.
 | Organization control | One piece: Required, per group on Enterprise, pilots on Team | Two pieces: the plugin as today; the extension only through the allowlist, installed by each user |
 | File guard | Command hook, blocks if it cannot run | `mcp_tool` hook to the extension: lets the write through if the extension is down (the save still refuses it) |
 | Validated | H1–H9, a business-user test | This spike only: git, sign-in, DPAPI and data paths inside an extension not yet tried |
+
+## Other variants tried (2026-10-26, Cowork on Windows, no uv on the computer)
+
+| Variant | Result |
+|---|---|
+| Today's plugin, its server launched with `uv` | Does not start ("Connection closed"); its guard hook cannot run and, set to `onFailure: "block"`, blocks every write and shell command. Claude Desktop lends its uv to standalone `uv` extensions only |
+| The same `uv` bundle **inside** a plugin (`"mcpServers": "./eunomai-mcpb-spike.mcpb"`, documented in the [plugin manifest reference](https://code.claude.com/docs/en/plugins/manifest-reference)) | The plugin installs and creates an empty `.mcpb-cache/`; the server never starts and its tools do not appear. Not usable in Cowork today |
+| The standalone extension, looked at while running | Desktop runs it as `<its uv 0.9.7> run --frozen --no-dev --directory <extension>`: our arguments, its uv. The virtual environment used the computer's Python 3.12 (uv prefers an installed interpreter); `--python-preference only-managed` would make uv use its own |
 
 ## What each piece would hold, and if one is missing
 
