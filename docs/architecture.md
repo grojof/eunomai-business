@@ -231,12 +231,10 @@ rules above.
 
 ## Plugin per project
 
-**Planned:** a base plugin (`eunomai-business`) plus one plugin per project for its own skills and knowledge,
-sharing the base connector. How one plugin relies on another in Cowork is not yet tested (check H10 in
-[validation/hypotheses.md](validation/hypotheses.md)).
-
-A project plugin is also where **project-specific guard rules** would go (for example, "this module is
-maintained by another team"), possibly per group of the organization's directory, using the base plugin's
-guard. That keeps them out of the project's files and out of the base plugin. Like every hook, these rules
-prevent mistakes; they are not permissions (see
-[project-practices.md](project-practices.md#who-can-read-and-change-what)).
+eunomai-business holds what is valid for everyone; a project brings its own capabilities (tools over its data,
+procedures that use them, hooks for its own folders) as a **project plugin** that depends on eunomai-business, and
+its context in `AGENTS.md` ([decision 10](decisions.md#10--a-base-that-holds-for-everyone-projects-bring-their-own-capabilities)).
+A project plugin's hook cannot undo eunomai-business's deny; its own hooks act only on its project's workspaces and
+its tools carry their own limits. Like every hook, its rules prevent mistakes; the permission is the git server's (see
+[project-practices.md](project-practices.md#who-can-read-and-change-what)). How it relies on eunomai-business in
+Cowork is H10 ([research](../research/project-plugin/README.md)).

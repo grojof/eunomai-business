@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__workspace__bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"${CLAUDE_PLUGIN_ROOT}/server\" eunomai-project-spike-guard",
+            "timeout": 60,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}

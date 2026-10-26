@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "project-spike": {
+      "command": "{{UV}}",
+      "args": ["run", "--frozen", "--no-dev", "--no-config", "--system-certs", "--managed-python", "--python", "3.12",
+               "--project", "${CLAUDE_PLUGIN_ROOT}/server", "eunomai-project-spike"]
+    }
+  }
+}
