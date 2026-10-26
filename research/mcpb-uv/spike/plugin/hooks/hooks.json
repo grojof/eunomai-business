@@ -6,15 +6,25 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "eunomai-mcpb-spike",
+            "server": "eunomai MCPB spike (uv runtime)",
             "tool": "spike_guard",
-            "input": {"tool_name": "${tool_name}", "file_path": "${tool_input.file_path}", "command": "${tool_input.command}", "via": "server name"}
+            "input": {
+              "tool_name": "${tool_name}",
+              "file_path": "${tool_input.file_path}",
+              "command": "${tool_input.command}",
+              "via": "display name, as Cowork names the tools"
+            }
           },
           {
             "type": "mcp_tool",
-            "server": "eunomai-mcpb-spike (uv runtime)",
+            "server": "eunomai-mcpb-spike",
             "tool": "spike_guard",
-            "input": {"tool_name": "${tool_name}", "file_path": "${tool_input.file_path}", "command": "${tool_input.command}", "via": "display name"}
+            "input": {
+              "tool_name": "${tool_name}",
+              "file_path": "${tool_input.file_path}",
+              "command": "${tool_input.command}",
+              "via": "manifest name"
+            }
           }
         ]
       }

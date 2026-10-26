@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "eunomai-mcpb-spike",
   "display_name": "eunomai MCPB spike (uv runtime)",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Research spike: can eunomai-business's Python connector ship as an MCPB extension of type uv, run by Claude Desktop without uv or Python installed, honouring its lockfile?",
   "author": {
     "name": "eunomai-business"

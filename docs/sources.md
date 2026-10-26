@@ -60,7 +60,9 @@ date is when they were checked. When a source and a measurement disagree, the me
 | "Use Skills only from trusted sources"; audit every file of a third-party skill | [Agent Skills: security considerations](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview#security-considerations) | 2026-10-25 | `review-skills` |
 | The review checklist for skills in organizations; scanning "complements, but doesn't replace" it; coexistence of skills | [Skills for enterprise](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/enterprise) | 2026-10-25 | `review-skills` |
 | Skill authoring: concise, under 500 lines, references one level deep, third-person descriptions | [Skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) | 2026-10-25 | The `specialist` skill |
-| Plugin availability per organization (Not available, Available, Installed by default, Required), skill and plugin scanning, publishing that requires review | [Manage plugins for your organization](https://claude.com/docs/plugins/admin), [Skill and plugin scanning](https://support.claude.com/en/articles/15927065) | 2026-10-25 | [Configuration](configuration.md#whose-context-counts) |
+| Plugin availability per organization (Not available, Available, Installed by default, Required), per group on Enterprise, a pilot with chosen people on Team; skill and plugin scanning; publishing that requires review (Team default: Open) | [Manage plugins for your organization](https://claude.com/docs/plugins/admin), [Skill and plugin scanning](https://support.claude.com/en/articles/15927065) | 2026-10-26 | [Configuration](configuration.md#whose-context-counts) |
+| Desktop extensions: Owners enable an allowlist and upload their own `.mcpb`, available to every member to install; machine-level policy (`isDesktopExtensionEnabled`, `isLocalDevMcpEnabled`…) overrides it; no policy forces Desktop's own uv | [Desktop extension allowlist](https://support.claude.com/en/articles/12592343-enabling-and-using-the-desktop-extension-allowlist), [Enterprise configuration for Claude Desktop](https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop) | 2026-10-26 | [MCPB research](../research/mcpb-uv/README.md) |
+| Claude Desktop prefers a uv installed on the computer and otherwise downloads its own, checked against a checksum (an Anthropic staff answer on the MCPB repository) | [mcpb#203](https://github.com/modelcontextprotocol/mcpb/issues/203) | 2026-10-26 | [MCPB research](../research/mcpb-uv/README.md) |
 | Organization sync from github.com, GitHub Enterprise Server and GitLab only; otherwise a zip upload | [Sync plugins from a repository](https://claude.com/docs/plugins/org-sync) | 2026-10-25 | Distribution (the organization's choice) |
 
 ## Measured on real installations
@@ -73,6 +75,8 @@ Full status in [validation](validation/hypotheses.md). Facts measured here that 
 | Cowork hands hooks the tools `Write`, `Edit`, `Read` and `mcp__workspace__bash` | 2026-10-24, hook log |
 | A plugin's `"command": "node"` server does not get Claude Desktop's Node: without Node on the PATH it does not start | 2026-10-25 ([Node research](../research/node-connector/README.md), N1) |
 | An `mcp_tool` hook calling the plugin's own server denies a `Write` in Cowork | 2026-10-25 (N4) |
+| An MCPB extension of type `uv` runs, on a computer without uv, on the uv 0.9.7 Claude Desktop downloads at installation (`Claude-Data\claude_<id>\uv-runtime\`); with a uv on the computer, that one is used; the lockfile is honoured either way | 2026-10-26 ([MCPB research](../research/mcpb-uv/README.md), M1–M2) |
+| Cowork names an extension's server, for tools and for `mcp_tool` hooks, by its display name | 2026-10-26 (M3–M4) |
 | The first business-user test went from a vague request to a pull request through every stage; its departures drove decisions 7 and 8 | 2026-10-24 (H11–H14) |
 
 ## Research done
@@ -85,7 +89,7 @@ Full status in [validation](validation/hypotheses.md). Facts measured here that 
 | Anthropic's official skills and plugins | 2026-10-24 | What to reuse rather than rebuild | Anthropic's review checklist became `review-skills`; document skills are proprietary (recommend, never bundle) |
 | A Node.js connector | 2026-10-25 | Remove uv and Python from users' computers? | Not now: plugins get no Node from Claude Desktop, and the JavaScript git library's tree fails the dependency rules ([research](../research/node-connector/README.md)) |
 | Viability: official guidance, GitHub issues, community | 2026-10-25 | Is the approach supported, safe and lasting? | Governance flow is mainstream (it mirrors GitHub's Copilot coding agent); the local server plus hooks in Cowork is a supported but fragile layer, so enforcement belongs on the git server too. Follow-ups in [project practices](project-practices.md#checks-on-the-server) |
-| MCPB extension of type `uv` | 2026-10-25 | Ship the same Python connector with nothing installed by users? | Spike ready, pending a Cowork run ([research](../research/mcpb-uv/README.md)) |
+| MCPB extension of type `uv` | 2026-10-26 | Ship the same Python connector with nothing installed by users? | Technically yes: Claude Desktop ran it with its own uv, honouring the lockfile, and a plugin's hook reached it. Decision pending on the trade-offs: two pieces, less organization control, a guard that lets writes through if the extension is down ([research](../research/mcpb-uv/README.md)) |
 
 ## Platform issues to watch
 
