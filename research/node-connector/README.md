@@ -3,7 +3,7 @@
 **Conclusion (2026-10-25): not now.** N1 and N7 fail: a plugin's server gets no Node from Claude Desktop, so
 users would still need a runtime installed, and isomorphic-git's package tree breaks the project's own dependency
 rules. Only an MCPB extension gets Desktop's Node, which would split the product into a plugin and a separately
-installed extension, and still leave N7. The Python connector stays. What carries over: N4, a guard served by
+installed extension, and still leave N7. The Python connector stays ([decision 9](../../docs/decisions.md#9--it-provides-the-runtime-the-plugin-carries-everything-else)). What carries over: N4, a guard served by
 the connector through an `mcp_tool` hook; and N5, isomorphic-git runs no commands at all.
 
 **Question.** Should eunomai-business's connector move from Python (started with `uv run`) to Node.js, running on

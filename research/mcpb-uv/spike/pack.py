@@ -18,3 +18,12 @@ def pack(source: Path, target: Path) -> None:
 
 pack(HERE / "extension", HERE / "dist" / "eunomai-mcpb-spike.mcpb")
 pack(HERE / "plugin", HERE / "dist" / "eunomai-mcpb-spike-hooks.zip")
+
+# Variant 3: the same bundle inside one plugin ("mcpServers": "./eunomai-mcpb-spike.mcpb"), with its hook.
+bundled = HERE / "plugin-with-bundle"
+with zipfile.ZipFile(HERE / "dist" / "eunomai-mcpb-in-plugin.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+    for path in sorted(bundled.rglob("*")):
+        if path.is_file():
+            archive.write(path, path.relative_to(bundled).as_posix())
+    archive.write(HERE / "dist" / "eunomai-mcpb-spike.mcpb", "eunomai-mcpb-spike.mcpb")
+print(f"built {HERE / 'dist' / 'eunomai-mcpb-in-plugin.zip'}")

@@ -1,0 +1,6 @@
+{
+  "name": "eunomai-mcpb-in-plugin",
+  "version": "0.0.1",
+  "description": "Research spike: the uv-type MCPB bundle inside a plugin. Does Claude Desktop run it with its own uv when the computer has none, and can the plugin's hook reach it?",
+  "mcpServers": "./eunomai-mcpb-spike.mcpb"
+}

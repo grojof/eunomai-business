@@ -30,6 +30,10 @@ date is when they were checked. When a source and a measurement disagree, the me
 | Fact | Official source | Checked | Relied on by |
 |---|---|---|---|
 | A plugin can reference remote and local MCP servers; a local one "runs in Claude Code and in a Cowork session that runs on the user's computer", so "most plugins reference remote servers" | [Decide what to include in your plugin](https://claude.com/docs/connectors/building/what-to-build) | 2026-10-25 | Decision 1 |
+| Plugins "are the main way to build third-party extensions for Claude" | [Build plugins for Claude](https://claude.com/blog/build-plugins-for-claude) | 2026-10-26 | [Decision 9](decisions.md#9--it-provides-the-runtime-the-plugin-carries-everything-else) |
+| Desktop-extension directory listings "are deprecated… To distribute a local server through the directory, include it in a plugin" | [Submit a connector](https://claude.com/docs/connectors/building/submission.md) | 2026-10-26 | Decision 9 |
+| MCPB is "the sanctioned way to distribute local MCP servers", "packaged with its runtime" (Anthropic's own skill) | [build-mcpb skill](https://github.com/anthropics/claude-plugins-official/blob/main/plugins/mcp-server-dev/skills/build-mcpb/SKILL.md) | 2026-10-26 | Decision 9 (weighed against) |
+| A plugin's `mcpServers` can name a `.mcpb` bundle, extracted into `.mcpb-cache/` | [Plugin manifest reference](https://code.claude.com/docs/en/plugins/manifest-reference) | 2026-10-26 | Decision 9 |
 | Local servers are the choice for "systems behind your firewall" and "Direct filesystem access for code editing and Git operations"; Node.js "Included with Claude Desktop"; desktop-extension directory listings are deprecated: "include it in a plugin" | [Build a desktop extension with MCPB](https://claude.com/docs/connectors/building/mcpb) | 2026-10-25 | Decision 1; [Node research](../research/node-connector/README.md); [MCPB research](../research/mcpb-uv/README.md) |
 | MCPB server type `uv` (manifest 0.4): dependencies "installed by the host application using UV", "No user Python installation required" | [MCPB manifest specification](https://github.com/modelcontextprotocol/mcpb/blob/main/MANIFEST.md) | 2026-10-25 | [MCPB research](../research/mcpb-uv/README.md) |
 | What each surface loads: hooks in Cowork and Claude Code; local MCP "when the Cowork session runs on your computer"; `settings` ignored; `${user_config.*}` without default ignored; a top-level `bin/` cannot be installed | [Plugin feature support across platforms](https://claude.com/docs/plugins/platform-support) | 2026-10-25 | [Configuration](configuration.md) (build-time settings), plugin layout |
@@ -77,6 +81,9 @@ Full status in [validation](validation/hypotheses.md). Facts measured here that 
 | An `mcp_tool` hook calling the plugin's own server denies a `Write` in Cowork | 2026-10-25 (N4) |
 | An MCPB extension of type `uv` runs, on a computer without uv, on the uv 0.9.7 Claude Desktop downloads at installation (`Claude-Data\claude_<id>\uv-runtime\`); with a uv on the computer, that one is used; the lockfile is honoured either way | 2026-10-26 ([MCPB research](../research/mcpb-uv/README.md), M1–M2) |
 | Cowork names an extension's server, for tools and for `mcp_tool` hooks, by its display name | 2026-10-26 (M3–M4) |
+| A plugin's local server launched with `uv` does not start without uv on the computer; the guard hook, set to block, then blocks every write and shell command | 2026-10-26 ([MCPB research](../research/mcpb-uv/README.md)) |
+| A `.mcpb` bundle declared inside a plugin is not extracted or started in Cowork (empty `.mcpb-cache/`) | 2026-10-26 ([MCPB research](../research/mcpb-uv/README.md)) |
+| Claude Desktop runs a `uv` extension as `<its uv> run <the manifest's arguments>`; uv then prefers a Python installed on the computer unless told `--managed-python` | 2026-10-26 ([MCPB research](../research/mcpb-uv/README.md)) |
 | The first business-user test went from a vague request to a pull request through every stage; its departures drove decisions 7 and 8 | 2026-10-24 (H11–H14) |
 
 ## Research done
@@ -89,7 +96,7 @@ Full status in [validation](validation/hypotheses.md). Facts measured here that 
 | Anthropic's official skills and plugins | 2026-10-24 | What to reuse rather than rebuild | Anthropic's review checklist became `review-skills`; document skills are proprietary (recommend, never bundle) |
 | A Node.js connector | 2026-10-25 | Remove uv and Python from users' computers? | Not now: plugins get no Node from Claude Desktop, and the JavaScript git library's tree fails the dependency rules ([research](../research/node-connector/README.md)) |
 | Viability: official guidance, GitHub issues, community | 2026-10-25 | Is the approach supported, safe and lasting? | Governance flow is mainstream (it mirrors GitHub's Copilot coding agent); the local server plus hooks in Cowork is a supported but fragile layer, so enforcement belongs on the git server too. Follow-ups in [project practices](project-practices.md#checks-on-the-server) |
-| MCPB extension of type `uv` | 2026-10-26 | Ship the same Python connector with nothing installed by users? | Technically yes: Claude Desktop ran it with its own uv, honouring the lockfile, and a plugin's hook reached it. Decision pending on the trade-offs: two pieces, less organization control, a guard that lets writes through if the extension is down ([research](../research/mcpb-uv/README.md)) |
+| MCPB extension of type `uv`, standalone and inside the plugin | 2026-10-26 | Ship the same Python connector with nothing installed by users? | Standalone: works, but two pieces, less organization control and a guard that fails open. Inside the plugin: does not run in Cowork. Decided: one plugin, uv deployed by IT ([decision 9](decisions.md#9--it-provides-the-runtime-the-plugin-carries-everything-else), [research](../research/mcpb-uv/README.md)) |
 
 ## Platform issues to watch
 
