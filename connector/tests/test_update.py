@@ -210,6 +210,93 @@ def test_the_status_shows_the_versions_proposal(signed_in, workspaces):
     proposed(signed_in, "with-proposal", "draft/x", {"x.md": b"x\n"})
     status = tools._safe(tools._status, "with-proposal")
     assert status["proposal"]["state"] == "open" and status["proposal"]["merged"] is False
+    assert status["proposal"]["review"] == {"decision": "none", "complete": True, "requests": []}
+
+
+def review(id, who, state, body="", at="2026-10-26T10:00:00Z", **more):
+    return {"id": id, "user": {"login": who}, "state": state, "body": body, "submitted_at": at,
+            "comments_count": len(more.get("inline", [])), **more}
+
+
+def line_comment(who, body, path, position, at, resolved=False):
+    return {"user": {"login": who}, "body": body, "path": path, "position": position, "created_at": at,
+            "resolver": {"login": who} if resolved else None}
+
+
+def review_of(server, name, reviews, comments=()):
+    """The review `workspace_status` reports once the fake server holds these reviews and comments."""
+    if name not in server.repos:
+        proposed(server, name, f"draft/{name}", {"x.md": b"x\n"})
+    pull = next(p for p in server.pulls if p["repo"] == name)
+    pull["reviews"], pull["comments"] = list(reviews), list(comments)
+    return tools._safe(tools._status, name)["proposal"]["review"]
+
+
+def test_the_status_brings_the_changes_reviewers_ask_for(signed_in, workspaces):
+    result = review_of(signed_in, "reviewed", [
+        review(1, "it-one", "APPROVED"),
+        review(2, "it-two", "REQUEST_CHANGES", "Production must be the default.", "2026-10-26T11:00:00Z", official=True,
+               inline=[line_comment("it-two", "No one approves their own request.", "app/x.py", 12,
+                                    "2026-10-26T11:00:01Z"),
+                       line_comment("it-two", "Already fixed.", "app/y.py", 3, "2026-10-26T11:00:02Z", True)]),
+        review(3, "it-three", "REQUEST_CHANGES", "Old remark", "2026-10-26T09:00:00Z", dismissed=True)],
+        [{"user": {"login": "it-one"}, "body": "x" * 3000, "created_at": "2026-10-26T12:00:00Z"},
+         {"user": {"login": "tester"}, "body": "I am the author", "created_at": "2026-10-26T12:30:00Z"}])
+    assert result["decision"] == "changes_requested" and result["complete"] is True
+    texts = [r["text"] for r in result["requests"]]
+    assert texts[:2] == ["Production must be the default.", "No one approves their own request."]
+    assert "Old remark" not in texts and "Already fixed." not in texts  # dismissed and resolved are not asked
+    assert "I am the author" not in texts  # the author's own comments are not requests
+    assert result["requests"][0]["official"] is True and result["requests"][0]["earlier_version"] is False
+    assert result["requests"][1]["file"] == "app/x.py" and result["requests"][1]["line"] == 12
+    assert len(texts[2]) == 2000 and result["requests"][2]["truncated"] is True
+
+
+def test_a_long_review_note_reaches_the_specialist_whole(signed_in, workspaces):
+    note = "Point. " * 1200  # a long review, as IT writes them
+    result = review_of(signed_in, "long-note", [review(1, "it", "REQUEST_CHANGES", note)])
+    assert result["requests"][0]["text"] == note[:10_000] and len(note) > 8_000
+
+
+def test_each_reviewers_latest_decision_counts(signed_in, workspaces):
+    asked_then_approved = [review(1, "it", "REQUEST_CHANGES", "Fix A"), review(2, "it", "APPROVED", "Thanks")]
+    assert review_of(signed_in, "approved-later", asked_then_approved)["decision"] == "approved"
+    asked_then_commented = [review(1, "it", "REQUEST_CHANGES", "Fix A"), review(2, "it", "COMMENT", "Also B")]
+    result = review_of(signed_in, "commented-later", asked_then_commented)
+    assert result["decision"] == "changes_requested"  # a plain comment does not undo a request for changes
+    assert [r["text"] for r in result["requests"]] == ["Also B"]  # only each reviewer's latest note
+    only_dismissed = [review(1, "it", "REQUEST_CHANGES", "Fix A", dismissed=True,
+                             inline=[line_comment("it", "Line remark", "a.py", 1, "2026-10-26T10:00:01Z")])]
+    result = review_of(signed_in, "dismissed", only_dismissed)
+    assert result["decision"] == "none" and result["requests"] == []  # nor its line comments
+
+
+def test_line_comments_the_same_reviewer_approved_afterwards_are_settled(signed_in, workspaces):
+    result = review_of(signed_in, "approved-lines", [
+        review(1, "it", "REQUEST_CHANGES", "", inline=[line_comment("it", "Fix this line", "a.py", 1,
+                                                                    "2026-10-26T10:00:01Z")]),
+        review(2, "it", "APPROVED", "", "2026-10-26T11:00:00Z")])
+    assert result == {"decision": "approved", "complete": True, "requests": []}
+
+
+def test_requests_made_before_the_version_was_sent_again_wait_for_a_new_review(signed_in, workspaces):
+    result = review_of(signed_in, "sent-again", [review(1, "it", "REQUEST_CHANGES", "Fix A", commit_id="0" * 40)])
+    assert result["decision"] == "updated_since_requests" and result["requests"][0]["earlier_version"] is True
+    pull = next(p for p in signed_in.pulls if p["repo"] == "sent-again")
+    marked_stale = [review(1, "it", "REQUEST_CHANGES", "Fix A", commit_id=pull["head"]["sha"], stale=True)]
+    assert review_of(signed_in, "sent-again", marked_stale)["decision"] == "updated_since_requests"
+
+
+def test_a_review_read_in_part_says_so(signed_in, workspaces):
+    result = review_of(signed_in, "partial", [review(1, "it", "REQUEST_CHANGES", "See lines", inline_status="500 Error",
+                                                     inline=[line_comment("it", "x", "a.py", 1, "2026-10-26T10:00:01Z")])])
+    assert result["complete"] is False and result["decision"] == "changes_requested"
+
+
+def test_a_closed_proposal_has_no_review(signed_in, workspaces):
+    proposed(signed_in, "closed-one", "draft/c", {"x.md": b"x\n"})
+    next(p for p in signed_in.pulls if p["repo"] == "closed-one")["state"] = "closed"
+    assert "review" not in tools._safe(tools._status, "closed-one")["proposal"]
 
 
 def test_sending_never_overwrites_the_server(signed_in, workspaces):

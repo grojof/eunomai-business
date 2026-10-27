@@ -12,10 +12,14 @@ related: [barriers.md, configuration.md]
 Everything eunomai-business creates, where it lives, whether it is sensitive, and what is left after
 uninstalling. Paths are for Windows; *measured* means observed on a real computer on the date given.
 
-**`<data>`** below is the connector's folder. It is `%LOCALAPPDATA%\eunomai-business`, but Claude Desktop
-installed as a Windows package (MSIX, as from the Microsoft Store) redirects it for the processes it starts to
+**`<data>`** below is the connector's folder, `%LOCALAPPDATA%\eunomai-business`. Claude Desktop installed as a
+Windows package (MSIX, as from the Microsoft Store) redirects *new* folders under `AppData\Local` to
 `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\eunomai-business` (measured 2026-10-24,
-`Claude_pzs8sxrjxfjjc`). Folders outside `AppData`, such as the workspaces, are not redirected.
+`Claude_pzs8sxrjxfjjc`); if the folder already exists in the real location, for example from an earlier run
+outside Claude Desktop, it is used there, new files inside it included (measured 2026-10-26; Windows
+[redirects new files and folders](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes#appdata-operations-on-windows-10-version-1903-and-later), and allows changing existing ones).
+Look in both. Folders outside
+`AppData`, such as the workspaces, are not redirected.
 
 ## On the user's computer
 

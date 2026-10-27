@@ -44,7 +44,7 @@ contain internal host names, so keep the built zip inside the organization.
 | `free_development` | `false` | `true` lets the specialist write code in any workspace, with `allowed_technologies`. It applies to everyone who installs this build: for IT, make a separate build |
 | `allowed_technologies` | `[]` | With free development, the technologies allowed; empty means any |
 | `projects` | `{}` | Repository address (https) → `{"technologies": [...]}`: the projects where code may be written, and with what. Matched against the address a workspace was cloned from, ignoring case, a trailing `/` and `.git` |
-| `dependency_exceptions` | `[]` | `{"package": "pypi:<name>" or "npm:<name>", "reason": "..."}`: packages IT vetted despite failing the origin or activity rules. A known vulnerability is never excepted |
+| `dependency_exceptions` | `[]` | `{"package": "pypi:<name>" or "npm:<name>", "reason": "..."}`: packages IT vetted despite failing the origin or activity rules. A known vulnerability is never excepted. A common case: `colorama`, which `pytest` and `click` need on Windows, has had no release in over three years |
 | `organization_context` | `""` | Up to 4,000 characters the specialist should know about the organization: what it does, the systems that already exist (so it can propose them before building something new) |
 | `organization_skills` | `[]` | `{"skill": "<plugin:skill>", "use_for": "..."}`: the organization's own skills and what the specialist uses them for (for example, its brand for web pages). They apply only where they agree with eunomai-business's rules; conflicts are reported in the pull request. Review them first with the `review-skills` skill |
 

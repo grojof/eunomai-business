@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Second business-user test:** the specialist saves per task, runs its readiness check last, never changes
+  what the user approved without asking them, keeps open questions open, makes production the default and
+  forbids deciding on one's own record, pins dependencies for every computer (`uv pip compile --universal`),
+  and shows screenshots only as images. Pages in `docs/` get a valid `type`.
+- **IT's review reaches the specialist:** `workspace_status` brings an open pull request's review decision and
+  the reviewers' open requests; the specialist reworks them as a small change in the same version.
+- **Audit:** a requirement for Windows, Linux or macOS left out of the pinned list now blocks; markers are
+  evaluated with `packaging` (PEP 508), a new direct dependency of the connector, for the Python a list was
+  compiled for.
 - **The runtime is IT's (decision 9):** one plugin carries skills, hooks and the connector; IT deploys uv at a fixed
   version and absolute path. Researched and rejected for now, with their official sources: a Node.js connector,
   the connector as a separate MCPB extension, and an MCPB bundle inside the plugin (not run by Cowork).

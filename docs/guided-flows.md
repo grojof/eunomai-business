@@ -55,7 +55,11 @@ flowchart LR
 | **4 Build** | Progress along the roadmap, and screenshots from the sandbox | Tests first from the scenarios, never bent to the code; the whole dependency tree pinned and audited; a save point per task | Every scenario has a passing test, shown by a fresh run |
 | **5 Deliver** | "Sent for review" | A readiness check run now (tests, dependency audit, a review of its own changes, docs true to the code), the version sent, the pull request opened with the reviewer's summary | The pull request is open |
 
-After the review, the specialist brings the accepted work back on its own and suggests the next step.
+After the review, the specialist brings the accepted work back on its own and suggests the next step. When IT
+asks for changes, `workspace_status` brings the reviewers' requests (decision, notes, line comments not resolved);
+the specialist explains them to the user in plain words, asks them about anything that changes what they approved,
+reworks in the same version as a small change, and proposes again with a *Review* section: each request and what
+was done.
 
 ## What the reviewer receives
 

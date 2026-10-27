@@ -4,9 +4,11 @@ The fake server plays OAuth 2.0 (authorize + token), the user endpoint, git smar
 Gitea API calls the connector makes. Nothing leaves this computer.
 """
 
+import atexit
 import base64
 import json
 import os
+import shutil
 import socket
 import sys
 import tempfile
@@ -22,6 +24,12 @@ import pytest
 # Before the connector is imported: its per-user folder goes to a temporary place, and the machine's git
 # configuration (system and user) is made hostile (CRLF checkouts, a filter that would run a command). The connector must ignore it.
 _SANDBOX = Path(tempfile.mkdtemp(prefix="eunomai-tests-"))
+atexit.register(shutil.rmtree, _SANDBOX, ignore_errors=True)
+# On Windows a run cannot remove its own folder (the fake server keeps its git packs open until the process ends):
+# each run removes what earlier runs left, once they are an hour old.
+for _old in _SANDBOX.parent.glob("eunomai-tests-*"):
+    if _old != _SANDBOX and time.time() - _old.stat().st_mtime > 3600:
+        shutil.rmtree(_old, ignore_errors=True)
 os.environ["LOCALAPPDATA"] = str(_SANDBOX / "appdata")
 os.environ["HOME"] = str(_SANDBOX / "home")
 _HOSTILE = _SANDBOX / "hostile-gitconfig"
@@ -201,7 +209,8 @@ class FakeServer:
                 number = len(self.pulls) + 1
                 self.pulls.append({"repo": name, "number": number, "state": "open", "merged": False,
                                    "head": {"ref": body["head"], "sha": head.decode()}, "base": body["base"],
-                                   "title": body["title"], "body": body.get("body", "")})
+                                   "title": body["title"], "body": body.get("body", ""), "reviews": [],
+                                   "comments": [], "user": {"login": "tester"}})
                 return reply("201 Created", {"number": number, "html_url": f"{self.url}/me/{name}/pulls/{number}"})
             if "/pulls/" in path and method == "PATCH":
                 body = json.loads(env["wsgi.input"].read(int(env["CONTENT_LENGTH"])))
@@ -209,8 +218,22 @@ class FakeServer:
                 pull.update({k: body[k] for k in ("title", "body") if k in body})
                 return reply("201 Created", {"number": pull["number"]})
             if path.endswith("/pulls"):
-                return reply("200 OK", [{k: v for k, v in p.items() if k != "repo"} for p in self.pulls
-                                        if p["repo"] == name])
+                return reply("200 OK", [{k: v for k, v in p.items() if k not in ("repo", "reviews", "comments")}
+                                        for p in self.pulls if p["repo"] == name])
+            if "/pulls/" in path and "/reviews" in path:  # .../pulls/{n}/reviews and .../reviews/{id}/comments
+                parts = path.split("/")
+                pull = next(p for p in self.pulls if p["repo"] == name and p["number"] == int(parts[7]))
+                if parts[-1] == "comments":
+                    review = next(r for r in pull["reviews"] if r["id"] == int(parts[9]))
+                    if review.get("inline_status"):
+                        return reply(review["inline_status"], {})
+                    return reply("200 OK", review.get("inline", []))
+                page = int(parse_qs(env["QUERY_STRING"]).get("page", ["1"])[0])  # all on page 1, as Gitea pages
+                return reply("200 OK", [{k: v for k, v in r.items() if k not in ("inline", "inline_status")}
+                                        for r in pull["reviews"]] if page == 1 else [])
+            if "/issues/" in path and path.endswith("/comments"):
+                pull = next(p for p in self.pulls if p["repo"] == name and p["number"] == int(path.split("/")[7]))
+                return reply("200 OK", pull["comments"])
             return reply("200 OK", {"default_branch": self.default_branch[name]})
         if path.startswith("/me/") and ".git" in path:
             user, password = "", ""

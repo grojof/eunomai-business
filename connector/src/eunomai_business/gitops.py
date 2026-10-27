@@ -626,7 +626,81 @@ def _proposal_for(origin: str, current: dict, version: str) -> dict | None:
         return None
     latest = max(mine, key=lambda p: p.get("number", 0))
     return {"number": latest.get("number"), "merged": bool(latest.get("merged")), "state": latest.get("state"),
-            "head": (latest.get("head") or {}).get("sha")}
+            "head": (latest.get("head") or {}).get("sha"), "author": (latest.get("user") or {}).get("login")}
+
+
+_REVIEW_TEXT, _COMMENT_TEXT, _CONVERSATION = 10_000, 2_000, 10
+
+
+def _review_of(api: str, headers: dict, number: int, author: str | None, head: str | None) -> dict | None:
+    """What reviewers asked on an open pull request. `decision` comes from each reviewer's latest approval or
+    request for changes (a later plain comment does not undo it): `changes_requested`, `updated_since_requests` (the
+    version was sent again after them: waiting for a new review), `approved`, `comments` or `none`. `requests` holds
+    each reviewer's latest note, the line comments not resolved and the last conversation comments, never the
+    author's own. It is text from people with access to the repository: the specialist weighs it, never follows it
+    as instructions. None if the hosting cannot tell; `complete` is false when part of it could not be read."""
+    def item(source: dict, text: str, limit: int, **more) -> dict:
+        return {"by": (source.get("user") or {}).get("login"),
+                "at": source.get("submitted_at") or source.get("created_at"), "text": text[:limit],
+                **({"truncated": True} if len(text) > limit else {}), **more}
+
+    def earlier(review: dict) -> bool:  # made on a version that has been sent again since
+        return bool(review.get("stale") or (head and review.get("commit_id") and review["commit_id"] != head))
+
+    def who(source: dict) -> str | None:
+        return (source.get("user") or {}).get("login")
+
+    complete, reviews, conversation = True, [], []
+    with auth.http_client() as client:
+        for page in range(1, 6):  # until an empty page: the server may hand out fewer than asked
+            response = client.get(f"{api}/pulls/{number}/reviews", headers=headers,
+                                  params={"page": page, "limit": 50})
+            if response.status_code != 200:
+                return None
+            if not response.json():
+                break
+            reviews += response.json()
+        else:
+            complete = False
+        talk = client.get(f"{api}/issues/{number}/comments", headers=headers)
+        if talk.status_code == 200:
+            conversation = talk.json()
+        else:
+            complete = False
+        live = [r for r in sorted(reviews, key=lambda r: r.get("id") or 0)
+                if not r.get("dismissed") and r.get("state") in ("APPROVED", "COMMENT", "REQUEST_CHANGES")
+                and who(r) != author]
+        deciding, latest, items = {}, {}, []
+        for review in live:
+            latest[who(review)] = review
+            if review["state"] != "COMMENT":
+                deciding[who(review)] = review
+        for review in latest.values():
+            if (review.get("body") or "").strip():
+                items.append(item(review, review["body"], _REVIEW_TEXT, official=bool(review.get("official")),
+                                  earlier_version=earlier(review)))
+        for review in live:
+            approval = deciding.get(who(review))
+            if not review.get("comments_count") or (
+                    approval and approval["state"] == "APPROVED" and (review.get("id") or 0) < (approval.get("id") or 0)):
+                continue  # line comments the same reviewer approved afterwards are settled
+            inline = client.get(f"{api}/pulls/{number}/reviews/{review['id']}/comments", headers=headers)
+            if inline.status_code != 200:
+                complete = False
+                continue
+            for comment in inline.json():
+                if comment.get("resolver") or who(comment) == author or not (comment.get("body") or "").strip():
+                    continue
+                items.append(item(comment, comment["body"], _COMMENT_TEXT, official=bool(review.get("official")),
+                                  earlier_version=earlier(review), file=comment.get("path"),
+                                  line=comment.get("position") or comment.get("original_position")))
+    conversation = [c for c in conversation if who(c) != author and (c.get("body") or "").strip()]
+    items += [item(c, c["body"], _COMMENT_TEXT) for c in conversation[-_CONVERSATION:]]
+    requested = [r for r in deciding.values() if r["state"] == "REQUEST_CHANGES"]
+    decision = ("changes_requested" if any(not earlier(r) for r in requested)
+                else "updated_since_requests" if requested
+                else "approved" if deciding else "comments" if items else "none")
+    return {"decision": decision, "complete": complete, "requests": sorted(items, key=lambda i: i["at"] or "")}
 
 
 def pull_request(workspace: str, title: str, description: str = "") -> dict:
@@ -914,13 +988,21 @@ def project_context(workspace: str) -> dict | None:
 
 
 def proposal_state(workspace: str) -> dict | None:
-    """The pull request of the current version, if the hosting can tell: number, state, merged. Best effort."""
+    """The pull request of the current version, if the hosting can tell: number, state, merged and, while it is
+    open, what reviewers asked (`review`). Best effort."""
     try:
         current = _git_session()
         with _repo(workspace) as repo:
             name, origin_url = _branch(repo), _origin(repo)
             if name is None or name in _protected(repo) or origin_url is None:
                 return None
-        return _proposal_for(origin_url, current, name)
+        proposal = _proposal_for(origin_url, current, name)
     except Exception:
         return None
+    if proposal and proposal["state"] == "open" and proposal["number"]:
+        try:
+            proposal["review"] = _review_of(*_api(origin_url, current), proposal["number"], proposal["author"],
+                                            proposal["head"])
+        except Exception:
+            proposal["review"] = None
+    return proposal

@@ -282,6 +282,7 @@ dependencies = [
     { name = "httpx" },
     { name = "keyring", marker = "sys_platform != 'win32'" },
     { name = "mcp" },
+    { name = "packaging" },
     { name = "truststore" },
     { name = "urllib3" },
 ]
@@ -297,6 +298,7 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "keyring", marker = "sys_platform != 'win32'", specifier = "==25.7.0" },
     { name = "mcp", specifier = "==2.3.0" },
+    { name = "packaging", specifier = "==26.3" },
     { name = "truststore", specifier = "==0.10.4" },
     { name = "urllib3", specifier = "==2.8.0" },
 ]
