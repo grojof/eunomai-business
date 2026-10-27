@@ -315,6 +315,34 @@ def test_a_list_compiled_for_a_python_need_not_pin_what_only_older_ones_install(
     assert result["only_on_some_platforms"] == ["tomli (required by pytest 9.1.1) when python_version < '3.11'"]
 
 
+@pytest.mark.parametrize("pyproject, verdict", [
+    ('[project]\nrequires-python = ">=3.12"\n', "allowed"),
+    ('[project]\nrequires-python = ">=3.11.4"\n', "allowed"),  # still runs on 3.11, which needs no tomli
+    ('[project]\nrequires-python = ">3.11"\n', "allowed"),
+    ('[project]\nrequires-python = "~=3.11"\n', "allowed"),
+    ('[project]\nrequires-python = "==3.12.*"\n', "allowed"),
+    ('[project]\nrequires-python = ">=3.9"\n', "blocked"),
+    ('[project]\nrequires-python = ""\n', "blocked"),
+    ('[project]\nrequires-python = "not a range"\n', "blocked"),
+    ('[project]\nrequires-python = 3.12\n', "blocked"),  # not text: ignored, never a crash
+    ('project = "x"\n', "blocked"),
+])
+def test_a_projects_declared_python_counts_for_its_list(monkeypatch, tmp_path, pyproject, verdict):
+    # `uv export` writes no --python-version: the project's own pyproject.toml says which Pythons it runs on
+    registry(monkeypatch, {"pytest": {"9.1.1": 100}}, requires={"pytest": ["tomli>=1; python_version < '3.11'"]})
+    (tmp_path / "pyproject.toml").write_text(pyproject)
+    (tmp_path / "requirements.txt").write_text("# uv export --frozen --no-dev\npytest==9.1.1\n")
+    assert deps.audit(tmp_path)["verdict"] == verdict
+
+
+def test_a_list_that_says_nothing_counts_with_every_supported_python(monkeypatch, tmp_path):
+    registry(monkeypatch, {"pytest": {"9.1.1": 100}}, requires={"pytest": ["tomli>=1; python_version < '3.11'"]})
+    (tmp_path / "requirements.txt").write_text("#    uv pip compile x.in --python-version 3.12\npytest==9.1.1\n")
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "requirements.txt").write_text("pytest==9.1.1\n")  # no header, no pyproject beside it
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
 def test_requirements_for_other_platforms_or_pythons_are_listed_apart(monkeypatch, tmp_path):
     registry(monkeypatch, {"click": {"8.3.0": 100}}, requires={"click": [
         "importlib-metadata; python_version < '3.8'", "jsfetch; sys_platform == 'emscripten'"]})

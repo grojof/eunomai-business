@@ -1,0 +1,21 @@
+[project]
+name = "eunomai-project-spike"
+version = "0.1.0"
+description = "H10 spike: a project plugin's own local server and hook, next to eunomai-business."
+requires-python = ">=3.12"
+dependencies = ["mcp==2.3.0"]
+
+[project.scripts]
+eunomai-project-spike = "eunomai_project_spike.server:main"
+eunomai-project-spike-guard = "eunomai_project_spike.guard:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eunomai_project_spike"]
+
+[tool.uv]
+# The same rule as the connector: nothing younger than two weeks.
+exclude-newer = "14 days"

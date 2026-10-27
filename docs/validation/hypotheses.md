@@ -43,4 +43,4 @@ internet.
 
 | # | Must hold | For |
 |---|---|---|
-| H10 | A project plugin's skills use the base plugin's connector; both plugins' hooks run; the organization can offer a plugin to some users only | Plugin per project ([architecture.md](../architecture.md#plugin-per-project)) |
+| H10 | A project plugin that declares `dependencies: ["eunomai-business"]` installs in Cowork; its skills use the base connector; its own server starts; both plugins' hooks run and either deny blocks; it does not run without the base | [Research and spike](../../research/project-plugin/README.md) (checks P1–P6), [decision 10](../decisions.md#10--a-base-that-holds-for-everyone-projects-bring-their-own-capabilities) |

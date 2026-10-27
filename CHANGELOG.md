@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Decision 10:** eunomai-business holds what is valid for everyone; a project brings its own capabilities as a
+  project plugin that depends on it, and its context in `AGENTS.md`. Per-project path rules in the base were
+  rejected. H10 has a spike ready to run (`research/project-plugin/`).
+- **Audit:** the `requires-python` of a `pyproject.toml` beside a list also sets the Pythons it must cover; each
+  list counts with its own.
 - **Second business-user test:** the specialist saves per task, runs its readiness check last, never changes
   what the user approved without asking them, keeps open questions open, makes production the default and
   forbids deciding on one's own record, pins dependencies for every computer (`uv pip compile --universal`),

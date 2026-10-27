@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, and a runtime IT provides."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, and projects that bring their own capabilities."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md, sources.md]
@@ -147,4 +147,59 @@ repository's last release is v2.1.2 (2025-12-04) and its last commit 2026-04-22.
   its behaviour the same on every computer.
 - **To look at again** when a `.mcpb` inside a plugin runs in Cowork with its runtime managed by Claude Desktop,
   or when plugins get Desktop's runtime: the connector would then ship as that bundle, unchanged, and IT would no
-  longer deploy uv. Both research spikes stay under `research/` to repeat the tests.
+  longer deploy uv. The research spikes stay under `research/` to repeat the tests.
+
+## 10 · A base that holds for everyone; projects bring their own capabilities
+
+eunomai-business carries only what holds for every organization and every project: the specialist and its rules,
+the connector (sign-in, workspaces, versions and their barriers, proposals, IT's review, the dependency audit) and
+the file guard (executables, the project's context, the repository's configuration). IT configures what varies by
+organization: languages, the organization's context and skills, sign-in providers, allowed technologies. It holds
+no project's rules (one setting per repository remains for now: see the consequences).
+
+What a project needs beyond that belongs to the project:
+
+| Need | Where | Why there |
+|---|---|---|
+| Context, domain rules and limits; which project skills and tools to use, and for what | The project's `AGENTS.md` on the main branch, kept by IT ([decision 8](#8--the-projects-context-belongs-to-it)) | The specialist already reads it from the server and puts it before everything but its own rules |
+| Who may approve which changes | The git server: protected branch, required reviews, code owners | The only real permission: it holds for everyone, inside Cowork or not |
+| Tools and data (query, simulate, create a field in a test database), procedures that use them, hooks for its own folders | A **project plugin** that depends on eunomai-business, made from a template | Capabilities are code: they cannot live in a text file, and they are not every organization's |
+
+**Why this split.**
+- A capability is made safe by the capability itself: a tool that changes data enforces its own limits (test
+  environment only, allowed operations, a simulation first, a versioned change that IT reviews). A hook prevents
+  mistakes; it does not make a dangerous tool safe.
+- A project plugin's hook cannot turn eunomai-business's deny into an allow: "When multiple PreToolUse hooks return
+  different decisions, precedence is `deny` > `defer` > `ask` > `allow`"
+  ([hooks reference](https://code.claude.com/docs/en/hooks)).
+- On Team a plugin cannot be limited to a group ("Group access…" is Enterprise only,
+  [plugins admin](https://claude.com/docs/plugins/admin#limit-to-user-groups-on-enterprise)), so whoever has a
+  project plugin may work on other projects too.
+
+**Rules for a project plugin**, checked by IT before it is published (`review-skills` covers skills and hooks):
+- its hooks act only in its own project's workspaces, judged by the repository, not by who has the plugin;
+- its hooks only deny: never `allow` with a rewritten input (`updatedInput`), which the documentation does not say
+  the other hooks check again;
+- its tools enforce their own limits, because eunomai-business's guard does not watch them;
+- it declares eunomai-business in `dependencies`.
+- Plugins declare the plugins they need (`dependencies`,
+  [manifest reference](https://code.claude.com/docs/en/plugins/manifest-reference#dependencies)). How Cowork
+  resolves one for a plugin uploaded to an organization is not documented: H10
+  ([research](../research/project-plugin/README.md)).
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| Per-project path rules in eunomai-business's configuration, applied by its guard and its save | One rule in two homes (prose in `AGENTS.md`, a list in the build), a new base version for every project change, and still not a permission: the git server is |
+| One self-contained plugin per project, without eunomai-business | Each would repeat sign-in, git, barriers and the specialist, and drift from them |
+
+- **Consequence:** the `projects` setting (code allowed and technologies per repository) is the base's last
+  project-specific setting. It stays until H10 shows how a project can say it allows code without the base
+  listing it.
+- **Consequence:** on Team, a project plugin is either Required for everyone (every user loads every project's
+  plugin) or one members can turn off. Turning it off removes the project's capabilities and its extra hooks, not
+  safety: eunomai-business stays Required, the tools carry their own limits and the git server keeps the
+  permission.
+- **To look at again** with H10's results: the template for project plugins, and where a project's permission
+  to write code is declared.
