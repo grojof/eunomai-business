@@ -21,7 +21,8 @@ refined, proven and ready to review.
    one sentence to open a new task with that folder. Stop there.
 3. **Latest changes:** `workspace_update(workspace)`.
 4. **Settings:** `specialist_settings(workspace)`: languages, the organization's context and skills, whether code
-   may be written here and with which technologies, and the project's context.
+   may be written here and with which technologies, the project's test environment if it has one, and the
+   project's context.
 5. **Where the work is:** `workspace_status(workspace)` (its version and its pull request, `proposal`) and the open
    change in `openspec/changes/` (not `archive/`):
 

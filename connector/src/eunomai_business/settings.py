@@ -3,7 +3,9 @@ project declares for itself on its main branch (.eunomai/project.toml)."""
 
 import json
 import os
+import re
 import tomllib
+from urllib.parse import urlsplit
 
 DEFAULTS = {"docs_language": "en", "code_language": "", "free_development": False, "allowed_technologies": [],
             "dependency_exceptions": [], "organization_context": "", "organization_skills": []}
@@ -60,3 +62,38 @@ def development(declaration: dict | None) -> dict:
         return {"code_allowed": True, "technologies": values["allowed_technologies"],
                 "reason": "free development is enabled"}
     return _no_code("the project declares no development and free development is off")
+
+
+_BRANCH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _branch_name(name) -> bool:
+    """A plain branch name, as the connector names versions: parts of letters, digits, . _ - separated by /, each
+    starting with a letter or digit and not ending in . or .lock; never main, master, HEAD or a full ref."""
+    if not isinstance(name, str) or not 0 < len(name) <= 100 or ".." in name:
+        return False
+    if name.casefold() in {"main", "master", "head"} or name.casefold().startswith("refs/"):
+        return False
+    return all(_BRANCH_PART.match(part) and not part.endswith((".", ".lock")) for part in name.split("/"))
+
+
+def test(declaration: dict | None) -> dict | None:
+    """The project's test environment, if it declares one: the branch its CI applies to that environment, and where
+    to see it. None when it declares none; {"invalid": reason} when IT must correct it."""
+    if declaration is None:
+        return None
+    try:
+        declared = tomllib.loads(declaration.get("text", ""))
+    except tomllib.TOMLDecodeError:
+        return {"invalid": "the project's declaration is not valid TOML; IT corrects it"}
+    if "test" not in declared:
+        return None
+    section = declared["test"]
+    if not isinstance(section, dict) or set(section) - {"branch", "url"}:
+        return {"invalid": "[test] takes branch and url only; IT corrects it"}
+    branch, url = section.get("branch"), section.get("url", "")
+    if not _branch_name(branch):
+        return {"invalid": "[test] needs branch, the name of a branch other than the main one; IT corrects it"}
+    if not isinstance(url, str) or (url and (urlsplit(url).scheme != "https" or not urlsplit(url).netloc)):
+        return {"invalid": "[test] url must be an https address; IT corrects it"}
+    return {"branch": branch, "url": url}

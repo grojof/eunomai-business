@@ -35,7 +35,8 @@ project and its git server. See [project-practices.md](project-practices.md).
 | Barrier | Why |
 |---|---|
 | No save points on the main branch: `main`, `master`, and the server's main branch, recorded at clone time in the connector's own folder (not in `.git`, which Claude's sandbox can write) | Changes reach it only through a pull request |
-| The main branch is never sent; nothing is ever force-sent | The shared history cannot be overwritten from a computer |
+| The main branch is never sent; nothing is force-sent, except a version to the project's declared test branch | The shared history cannot be overwritten from a computer |
+| To the test branch goes only a saved version that has everything on the main branch, never onto the main branch or the version's own, and checked against the main branch by the same rules as a save; the git server decides who may | The test environment never loses others' work nor gets a file only IT changes, and production still takes a pull request |
 | Pull requests only from a version (branch) | Same rule, from the other side |
 | No versions until the repository has its main branch | A version must start from the shared history, not from nothing |
 | Workspace names are plain folder names, under `workspaces_root` only, never a Windows device name (`con`, `nul`, `com1`...) | No path tricks (`..`, absolute paths) |
@@ -125,7 +126,7 @@ computer itself. These barriers keep that from becoming a way to run commands on
 | Content is never filtered: no filter driver, no line-ending conversion, no LFS, whatever `.gitattributes` says | A filter is a command; files go in and out exactly as they are |
 | The repository's address and main branch come from the connector's own registry, recorded at clone time; an address changed in `.git/config` stops the operation | Otherwise the sandbox could send the user's work to another repository |
 | A repository that points to another folder (`commondir`, `alternates`) is refused | Reads and writes must stay in the workspace |
-| One operation at a time per workspace, across connector processes: creating a version, saving, sending, bringing the latest changes and reading the project's context | Two updates or saves at once could undo each other |
+| One operation at a time per workspace, across connector processes: creating a version, saving, sending (to review or to the test environment), bringing the latest changes and reading the project's context | Two updates or saves at once could undo each other |
 | The computer's Git configuration (system and user) is ignored | Same behaviour with or without Git installed; a global filter cannot apply ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)) |
 | Each clone gets `core.autocrlf=false` | A Git on the computer, if any, sees the files exactly as the connector does |
 | Clones never fetch submodules (dulwich's default, not exposed as an option) | A submodule could bring code from another server |

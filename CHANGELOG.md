@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A test environment without waiting for IT:** a project may declare a test branch (`[test]` in
+  `.eunomai/project.toml`). `version_to_test` replaces it with the user's saved version, which must already have
+  everything on main; the project's CI applies it. The git server decides who may (a protected branch limited to a
+  team); for anyone else the version goes through IT's review as usual. The specialist offers it after a save whose
+  tests pass. To validate on a real Gitea: H18.
 - **Decision 11 and the project-plugin template** (`templates/project-plugin/`): a local server for the
   project's tools, a hook that only denies the paths the project protects in its own workspaces (told by
   eunomai-business's register of workspaces, with Python's standard library only), a skill, and a build that

@@ -167,6 +167,7 @@ def _specialist_settings(workspace: str) -> dict:
                 "code_allowed": False, "technologies": [],
                 "reason": "the project's main branch could not be read on the server, so neither could its declaration"}
             result["project_context"] = files["context"]
+            result["test"] = settings.test(files["declaration"])
     return result
 
 
@@ -174,9 +175,33 @@ def _specialist_settings(workspace: str) -> dict:
 def specialist_settings(workspace: str = "") -> dict:
     """The organization's choices for the specialist: languages; the organization's context and the skills it
     provides for given purposes; and, for a workspace, whether code may be written there and with which technologies
-    (empty list: any), as the project declares it, and the project's context, both as IT keeps them on the main
-    branch. For the work, these come before anything personal in the session."""
+    (empty list: any), as the project declares it, the project's test environment if it declares one (`test`:
+    branch and url), and the project's context, all as IT keeps them on the main branch. For the work, these come
+    before anything personal in the session."""
     return _safe(_specialist_settings, workspace)
+
+
+def _to_test(workspace: str) -> dict:
+    files = gitops.project_files(workspace)
+    declared = settings.test(files["declaration"]) if files["read"] else None
+    if not declared or "invalid" in declared:
+        reason = (declared["invalid"] if declared else "the project declares no test environment") if files["read"] \
+            else "the project's main branch could not be read on the server"
+        return {"workspace": workspace, "status": "no_test_environment", "reason": reason,
+                "user_message": "This project has no test environment to try versions in; your version goes "
+                                "through IT's review as usual."}
+    result = gitops.to_test(workspace, declared["branch"])
+    return {**result, "url": declared["url"]} if result["status"] == "sent" else result
+
+
+@mcp.tool()
+def version_to_test(workspace: str) -> dict:
+    """Try the current version, as last saved, in the project's test environment without waiting for IT: the
+    project's test branch on the server is replaced with it, and the project's CI applies it. Only where the project
+    declares a test environment, and only for those the git server lets update that branch (a team IT keeps); for
+    everyone else the answer says so and the version goes through IT's review as usual. One version at a time: it
+    replaces whatever was being tried there. Production always takes IT's review."""
+    return _safe(_to_test, workspace)
 
 
 @mcp.tool()

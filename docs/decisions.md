@@ -239,12 +239,17 @@ Decided 2026-10-27.
   permission has one home, the project's repository, changed by IT through the git server.
 - **Real changes travel through the git server.** A project's tool prepares and checks a change in the workspace
   (a migration, a field's definition); the user saves it as a version; IT reviews it; the project's CI applies it.
-- **Next: a profile that works in the test environment without waiting for IT.** A user whom IT puts in a team of
-  the git server updates the project's test branch with their version; the project's CI applies it to the test
-  environment at once, with credentials only the server holds; production still takes IT's review. Gitea limits
-  who may push, and who may force-push, to a protected branch by team (`push_whitelist_teams`,
-  `force_push_allowlist_teams`, Gitea 1.27.1 API). It will be declared in a `[test]` section of the same file, and
-  blocks only clear cases: production, deleting data, secrets, another project.
+- **A profile that works in the test environment without waiting for IT.** A project may declare a test branch
+  (`[test]`: `branch`, and `url` to see it). `version_to_test` replaces that branch with the user's version as last
+  saved, and it is applied to the test environment at once, with credentials that never reach users' computers
+  (best kept on the test server itself: a git server's workflows share the repository's secrets).
+  Who may do it is the git server's to say: Gitea limits who may push, and who may force-push, to a protected
+  branch by team (`push_whitelist_teams`, `force_push_allowlist_teams`, Gitea 1.27.1 API); for anyone else the push
+  is refused and the version goes through IT's review as usual. Production always takes IT's review. The
+  connector sends only a saved version that already has everything on main, so the test environment never loses
+  others' work, and checks it against main by the same rules as a save; the branch shows one version at a time, the
+  last one sent. Setting it up:
+  [project practices](project-practices.md#a-test-environment-without-waiting-for-it).
 
 **Rejected:**
 
