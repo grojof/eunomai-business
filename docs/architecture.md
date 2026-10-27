@@ -168,12 +168,16 @@ sequenceDiagram
 - **Per-user data lives in `%LOCALAPPDATA%\eunomai-business`**, not in `CLAUDE_PLUGIN_DATA`, which points inside
   each task's folder and does not outlive the task. Claude Desktop installed as a Windows package (MSIX) redirects
   that folder for the processes it starts unless it already exists ([where](data-on-computers.md)).
-- **Where the session runs.** Since 2026-10-06, new Cowork tasks on Pro and Max plans run on Anthropic's servers;
-  on Team and Enterprise an owner decides it ("Run Cowork in the cloud": on by default on Team, off on Enterprise).
-  Anthropic states that local connectors work through the open desktop app
-  ([Anthropic](https://support.claude.com/en/articles/15520349)), but whether this connector and the shared
-  workspace folder work when the sandbox is in the cloud is not yet validated (check H16 in
-  [validation](validation/hypotheses.md)). Until it is, organizations keep Cowork tasks on users' computers.
+- **Only tasks on the user's computer.** Cowork tasks may run on Anthropic's servers (Pro and Max always; Team and
+  Enterprise as the owner decides). There the sandbox cannot reach private addresses, so internal git servers are
+  out of reach, and the two official sources disagree on whether local MCP servers still work through the open
+  desktop app ([sources](sources.md#where-cowork-runs-and-local-connectors)). Either way the sandbox would work on
+  other files than the ones the connector saves, so the plugin refuses such a task: at the start of the session
+  Claude is told, every prompt is blocked with the reason, and every write, shell command and connector call is
+  denied. The guard knows it from `CLAUDE_CODE_REMOTE` and `CLAUDE_CODE_REMOTE_SESSION_ID`, which Claude Code sets
+  in its cloud sessions for hooks to read, and a tool-call guard that cannot start there blocks anyway
+  (`onFailure: "block"`). That Cowork sets them too, and the names of the connector's tools in Cowork, are checked
+  by H16.
 
 ## What is tied to a git hosting
 

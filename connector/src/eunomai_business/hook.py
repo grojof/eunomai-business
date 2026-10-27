@@ -78,6 +78,8 @@ def main() -> None:
         "shell": _shell_hint(),
         "cwd": os.getcwd(),
         "plugin_root": os.environ.get("CLAUDE_PLUGIN_ROOT"),
+        "remote": os.environ.get("CLAUDE_CODE_REMOTE"),
+        "remote_session": bool(os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID")),
         "session": payload.get("session_id"),
     }
     entry["hook_ms"] = round((time.time() - started) * 1000)
@@ -91,7 +93,8 @@ def main() -> None:
         pass
     if event == "SessionStart":
         print(f"[eunomai-business] SessionStart hook ran on host {entry['host']} ({entry['os']}), "
-              f"shell {entry['shell']}.")
+              f"shell {entry['shell']}, CLAUDE_CODE_REMOTE={entry['remote']}, "
+              f"remote session id {'set' if entry['remote_session'] else 'not set'}.")
     if guard == "json":
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                  "permissionDecisionReason": _DENIED}}))

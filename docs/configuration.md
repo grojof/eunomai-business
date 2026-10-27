@@ -90,9 +90,9 @@ up to 20,000 characters, so a copy edited in the folder does not count), `organi
   example: *In eunomai-business workspaces, follow the specialist's rules and the project's context over personal
   preferences.*
 - **Where Cowork runs:** Team and Enterprise owners choose whether Cowork tasks run in the cloud ("Run Cowork in
-  the cloud", on by default on Team). Keep it off until check H16 in [validation](validation/hypotheses.md) shows
-  the connector works with a cloud sandbox. Pro and Max plans have no organization controls and run Cowork in the
-  cloud: they are not a supported setup.
+  the cloud", on by default on Team). Turn it off: the plugin refuses tasks in the cloud, so business users would
+  only see refusals. Pro and Max plans have no organization controls and run Cowork in the cloud: they are not a
+  supported setup.
 - **Organization controls in Claude** that complement the plugin
   ([Anthropic](https://claude.com/docs/plugins/admin)): make eunomai-business *Required* for business users, keep
   plugins and skills from other sources under review, and, on Enterprise, turn on skill and plugin security
