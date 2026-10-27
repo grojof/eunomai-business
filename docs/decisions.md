@@ -184,8 +184,9 @@ What a project needs beyond that belongs to the project:
 - it declares eunomai-business in `dependencies`.
 - Plugins declare the plugins they need (`dependencies`,
   [manifest reference](https://code.claude.com/docs/en/plugins/manifest-reference#dependencies)). How Cowork
-  resolves one for a plugin uploaded to an organization is not documented: H10
-  ([research](../research/project-plugin/README.md)).
+  resolves one for a plugin uploaded to an organization is not documented. With a member's own upload, a bare name
+  works and the project plugin does not load while eunomai-business is off (H10, 2026-10-27,
+  [research](../research/project-plugin/README.md)); the organization's upload is still to check.
 
 **Rejected:**
 
@@ -195,11 +196,10 @@ What a project needs beyond that belongs to the project:
 | One self-contained plugin per project, without eunomai-business | Each would repeat sign-in, git, barriers and the specialist, and drift from them |
 
 - **Consequence:** the `projects` setting (code allowed and technologies per repository) is the base's last
-  project-specific setting. It stays until H10 shows how a project can say it allows code without the base
-  listing it.
+  project-specific setting. It stays until the template for project plugins shows how a project can say it
+  allows code without the base listing it.
 - **Consequence:** on Team, a project plugin is either Required for everyone (every user loads every project's
   plugin) or one members can turn off. Turning it off removes the project's capabilities and its extra hooks, not
   safety: eunomai-business stays Required, the tools carry their own limits and the git server keeps the
   permission.
-- **To look at again** with H10's results: the template for project plugins, and where a project's permission
-  to write code is declared.
+- **Next:** the template for project plugins, and where a project's permission to write code is declared.

@@ -4,7 +4,9 @@
 
 - **Decision 10:** eunomai-business holds what is valid for everyone; a project brings its own capabilities as a
   project plugin that depends on it, and its context in `AGENTS.md`. Per-project path rules in the base were
-  rejected. H10 has a spike ready to run (`research/project-plugin/`).
+  rejected. H10 (`research/project-plugin/`): a project plugin with `dependencies: ["eunomai-business"]` loads
+  next to it in Cowork and stays off without it, and both plugins' hooks run on the same call (a member's own
+  upload; the organization's upload pending).
 - **Audit:** the `requires-python` of a `pyproject.toml` beside a list also sets the Pythons it must cover; each
   list counts with its own.
 - **Second business-user test:** the specialist saves per task, runs its readiness check last, never changes

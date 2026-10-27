@@ -1,6 +1,6 @@
 # Research: a project plugin next to eunomai-business (H10)
 
-**Status (2026-10-26): ready to run.** The spike is built; the checks below are pending in Cowork. The design it
+**Status (2026-10-27): P1–P6 pass with a member's own upload.** The organization's upload is still to check. The design it
 tests is [decision 10](../../docs/decisions.md#10--a-base-that-holds-for-everyone-projects-bring-their-own-capabilities).
 
 **Question.** Can a project bring its own capabilities as a separate plugin (skills, a local server with its
@@ -24,12 +24,12 @@ anything about the project?
 
 | # | Must hold | How | Status |
 |---|---|---|---|
-| P1 | The project plugin, declaring eunomai-business in `dependencies`, installs and loads in Cowork next to it | Upload one variant at a time; note any error on *Customize → Plugins* | Pending |
-| P2 | Without eunomai-business on, the project plugin does not run unguarded. Expected from the documentation: it is disabled, with a message that ends "is disabled — enable it or remove the dependency" | Turn eunomai-business off, open a new task, ask for the spike test, and ask to create `prueba.bat` | Pending |
-| P3 | The project's own local server starts with IT's uv and uv's own Python 3.12 | `project_ping`: `python` 3.12.x and `python_installation` under uv's own Pythons, not a Python installed on the computer | Pending |
-| P4 | A project skill calls eunomai-business's connector | `whoami`, `workspace_list` and `specialist_settings` answer when called from the `project-spike` skill. Tools are shared by the whole session, so this shows availability, not a link between the plugins | Pending |
-| P5 | Both plugins' hooks run on the same call, and either one's deny blocks it | The project hook denies `eunomai-project-spike-guard.txt`; the base guard still denies `prueba.bat` in a workspace; `project_guard_log` shows the project hook was consulted for both | Pending |
-| P6 | The specialist and the project's skill coexist: each answers only its own requests | In the same task, "Necesito una aplicación para…" starts the specialist, and only the spike request starts `project-spike` | Pending |
+| P1 | The project plugin, declaring eunomai-business in `dependencies`, installs and loads in Cowork next to it | Upload one variant at a time; note any error on *Customize → Plugins* | Pass · 2026-10-27: the bare name (`eunomai-project-spike.zip`) installed and loaded; the other variants were not needed |
+| P2 | Without eunomai-business on, the project plugin does not run unguarded. Expected from the documentation: it is disabled, with a message that ends "is disabled — enable it or remove the dependency" | Turn eunomai-business off, open a new task, ask for the spike test, and ask to create `prueba.bat` | Pass · 2026-10-27: "The plugin "eunomai-project-spike" did not load in this session (unmet dependency)"; its hook did not run either (no log entry). `prueba.bat` was written: the base's guard was off too |
+| P3 | The project's own local server starts with IT's uv and uv's own Python 3.12 | `project_ping`: `python` 3.12.x and `python_installation` under uv's own Pythons, not a Python installed on the computer | Pass · 2026-10-27: 3.12.15 from `%APPDATA%\uv\python`; the server's environment inside the plugin's folder |
+| P4 | A project skill calls eunomai-business's connector | `whoami`, `workspace_list` and `specialist_settings` answer when called from the `project-spike` skill. Tools are shared by the whole session, so this shows availability, not a link between the plugins | Pass · 2026-10-27: all three answered (`whoami` and `specialist_settings` with `unreachable` while the git server was down); `project_context` came back once it was up |
+| P5 | Both plugins' hooks run on the same call, and either one's deny blocks it | The project hook denies `eunomai-project-spike-guard.txt`; the base guard still denies `prueba.bat` in a workspace; `project_guard_log` shows the project hook was consulted for both | Pass · 2026-10-27: the project hook denied its file and allowed `prueba.bat`, which eunomai-business's guard denied; the log has both |
+| P6 | The specialist and the project's skill coexist: each answers only its own requests | In the same task, "Necesito una aplicación para…" starts the specialist, and only the spike request starts `project-spike` | Pass · 2026-10-27: the request for an application started `eunomai-business:specialist` |
 
 Three variants, the same except for `dependencies`:
 
@@ -42,6 +42,13 @@ Three variants, the same except for `dependencies`:
 Install one at a time: they share the hook's log and the same skill and server names. Each log entry records
 the plugin's folder (`plugin`). What the rules for project plugins in decision 10 require of a real one (hooks
 limited to its project's workspaces, no `updatedInput`) is for the template, not for this spike.
+
+**What it means (2026-10-27).**
+- A project plugin relies on eunomai-business with a bare name, `dependencies: ["eunomai-business"]`, at least
+  when a member uploads it. A real project plugin goes through the organization's upload: P1 and P2 there are
+  still to check.
+- Turning eunomai-business off turns the project plugin off with it, but then nothing guards the workspace: the
+  base plugin must be Required in the organization, so that members cannot turn it off.
 
 ## Running it
 
