@@ -82,6 +82,19 @@ date is when they were checked. When a source and a measurement disagree, the me
 | Remote MCP servers (custom connectors) are reached "from Anthropic's cloud infrastructure, rather than from your local device", on every client including Cowork, and must be reachable from the public internet; in Cowork a plugin's remote server is connected from its *Connectors* tab, and a local one loads "when the Cowork session runs on your computer" | [Custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp), [Plugin platform support](https://claude.com/docs/plugins/platform-support) | 2026-10-27 | [Decision 11](decisions.md#11--project-plugins-from-a-template-a-project-declares-its-own-development) |
 | Organization sync from github.com, GitHub Enterprise Server and GitLab only; otherwise a zip upload | [Sync plugins from a repository](https://claude.com/docs/plugins/org-sync) | 2026-10-25 | Distribution (the organization's choice) |
 
+### Recommended stack
+
+| Fact | Official source | Checked | Relied on by |
+|---|---|---|---|
+| 84 malicious versions of 42 `@tanstack/*` packages were published on 2026-05-11 through the project's trusted-publisher binding, and removed 3 to 4.5 hours later | [TanStack postmortem](https://tanstack.com/blog/npm-supply-chain-compromise-postmortem) | 2026-10-27 | [Decision 13](decisions.md#13--one-recommended-stack-pages-made-on-the-server) |
+| htmx 2 "will continue to be supported indefinitely"; 4.0 stays on npm's `next` tag until early 2027 | [htmx 4.0.0 announcement](https://four.htmx.org/announcements/2026-08-28-htmx-4.0.0-is-released) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
+| Row grouping, aggregation, Excel export and the server-side row model are AG Grid Enterprise features | [AG Grid: community vs enterprise](https://www.ag-grid.com/javascript-data-grid/community-vs-enterprise/) | 2026-10-27 | Recommended stack |
+| Pydantic v2 serialises `Decimal` as a string in JSON | [Pydantic: standard library types](https://pydantic.dev/docs/validation/latest/api/pydantic/standard_library_types/) | 2026-10-27 | Recommended stack |
+| psycopg 3 returns `numeric` as `Decimal`; pyodbc returns `decimal` as `Decimal` | [psycopg: adaptation](https://www.psycopg.org/psycopg3/docs/advanced/adapt.html), [pyodbc: data types](https://github.com/mkleehammer/pyodbc/wiki/Data-Types) | 2026-10-27 | Recommended stack |
+| GitHub Packages hosts npm, RubyGems, Maven, Gradle, NuGet and containers, not Python | [Introduction to GitHub Packages](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages) | 2026-10-27 | Recommended stack |
+| Gitea's package registry includes PyPI and npm | [Gitea packages](https://docs.gitea.com/usage/packages/overview) | 2026-10-27 | Recommended stack |
+| Securing htmx: escaping, no user content in attributes or scripts, CSP | [Web security basics with htmx](https://htmx.org/essays/web-security-basics-with-htmx/) | 2026-10-27 | Recommended stack |
+
 ### Outside Claude
 
 | Fact | Official source | Checked | Relied on by |

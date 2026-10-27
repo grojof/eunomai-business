@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Decision 13, one recommended stack:** Python with FastAPI, PostgreSQL, and pages made on the server with Jinja2
+  and htmx; exact decimals end to end; an organization's layer of brand variables and Jinja macros; React only for
+  IT. New page: [recommended stack](docs/recommended-stack.md). The templates follow.
 - **Deny rules by configuration** (decision 12): `deny` in the build's configuration, in Claude Code's permission
   syntax (`Bash(<command>)`, `Edit(<path>)`), with examples the build checks. eunomai-business's guard applies them
   after the file guard (Bash rules anywhere, Edit rules in workspaces); a project plugin applies its own in its
