@@ -236,5 +236,5 @@ procedures that use them, hooks for its own folders) as a **project plugin** tha
 its context in `AGENTS.md` ([decision 10](decisions.md#10--a-base-that-holds-for-everyone-projects-bring-their-own-capabilities)).
 A project plugin's hook cannot undo eunomai-business's deny; its own hooks act only on its project's workspaces and
 its tools carry their own limits. Like every hook, its rules prevent mistakes; the permission is the git server's (see
-[project-practices.md](project-practices.md#who-can-read-and-change-what)). How it relies on eunomai-business in
-Cowork is H10 ([research](../research/project-plugin/README.md)).
+[project-practices.md](project-practices.md#who-can-read-and-change-what)). In Cowork it loads only while eunomai-business is
+on (H10, [research](../research/project-plugin/README.md)).
