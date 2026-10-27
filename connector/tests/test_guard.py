@@ -11,6 +11,12 @@ import pytest
 from eunomai_business import gitops, guard
 
 
+@pytest.fixture(autouse=True)
+def on_the_users_computer(monkeypatch):
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE_SESSION_ID", raising=False)
+
+
 @pytest.mark.parametrize("path, kind", [
     ("AGENTS.md", "context"), ("docs/CLAUDE.md", "context"), ("/sessions/x/mnt/app/agents.md", "context"),
     ("AGENTS.md.", "context"), (".claude/settings.json", "config"), ("app/.mcp.json", "config"),
@@ -78,6 +84,48 @@ def test_the_hook_denies_with_a_reason_claude_can_act_on(monkeypatch, capsys):
 def test_the_hook_lets_everything_else_through(monkeypatch, capsys, payload):
     monkeypatch.setattr(guard, "_workspace_names", lambda: {"ws"})
     assert run_hook(monkeypatch, capsys, payload) is None
+
+
+@pytest.mark.parametrize("payload", [
+    {"tool_name": "Write", "tool_input": {"file_path": "/mnt/ws/app/main.py"}},
+    {"tool_name": "mcp__workspace__bash", "tool_input": {"command": "ls"}},
+    {"tool_name": "mcp__plugin_eunomai-business_eunomai-business__workspace_status", "tool_input": {}},
+])
+def test_a_task_in_the_cloud_is_refused_whatever_it_does(monkeypatch, capsys, payload):
+    monkeypatch.setattr(guard, "_workspace_names", lambda: {"ws"})
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+    decision = run_hook(monkeypatch, capsys, payload)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny" and "in the cloud" in decision["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize("event, key", [("UserPromptSubmit", "decision"), ("SessionStart", "hookSpecificOutput")])
+def test_in_the_cloud_the_prompt_is_blocked_and_the_session_told(monkeypatch, capsys, event, key):
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE_SESSION_ID", "session_1")
+    answer = run_hook(monkeypatch, capsys, {"hook_event_name": event, "prompt": "hola"})
+    assert key in answer and "in the cloud" in json.dumps(answer)
+    if event == "UserPromptSubmit":
+        assert answer["decision"] == "block"
+
+
+@pytest.mark.parametrize("event", ["UserPromptSubmit", "SessionStart"])
+def test_on_the_users_computer_prompts_and_sessions_are_left_alone(monkeypatch, capsys, event):
+    assert run_hook(monkeypatch, capsys, {"hook_event_name": event, "prompt": "write start.bat"}) is None
+
+
+def test_the_hooks_cover_the_connectors_tools_and_nothing_else():
+    import re
+    hooks = json.loads((Path(__file__).parents[2] / "plugin" / "hooks" / "hooks.json.template").read_text())["hooks"]
+    matcher = hooks["PreToolUse"][0]["matcher"]
+    # Claude Code tests a matcher like this one as an unanchored JavaScript regular expression: re.search
+    for tool in ("Write", "Edit", "Bash", "mcp__workspace__bash", "mcp__eunomai-business__version_save",
+                 "mcp__plugin_eunomai-business_eunomai-business__workspace_status"):
+        assert re.search(matcher, tool), tool
+    for tool in ("TodoWrite", "BashOutput", "Read", "mcp__workspace__bash_read", "mcp__plugin_other_db__export",
+                 "mcp__plugin_eunomai-business-ventas_x__y", "mcp__plugin_otro_eunomai-business__x"):
+        assert not re.search(matcher, tool), tool
+    assert hooks["PreToolUse"][0]["hooks"][0]["onFailure"] == "block"
+    for event in ("SessionStart", "UserPromptSubmit"):  # a broken uv on the computer must not stop all of Cowork
+        assert hooks[event][0]["hooks"][0]["onFailure"] == "continue"
 
 
 def test_the_hook_knows_the_workspaces_the_connector_registered(workspaces, monkeypatch):

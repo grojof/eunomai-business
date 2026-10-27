@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Only tasks on the user's computer:** a Cowork task in the cloud is refused. Claude is told at the start, prompts
+  are blocked, and every write, shell command and connector call is denied, from the variables Claude Code sets in
+  cloud sessions. The hook's matcher is anchored, so it covers exactly the file tools, the shell and the plugin's
+  own tools; the project-plugin template does the same for its tools. To validate in Cowork: H16.
 - **The test environment pulls its branch:** a branch-following agent for any Linux server with systemd
   (`templates/test-environment-agent/`): a read-only deploy key handed over as a credential, each commit fetched
   into a throwaway repository, IT's own apply command without the key, the previous release kept live when an apply

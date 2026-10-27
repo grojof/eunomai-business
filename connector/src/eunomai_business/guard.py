@@ -12,6 +12,7 @@ the plugin does not get in the way of Cowork's own files elsewhere.
 """
 
 import json
+import os
 import re
 import sys
 
@@ -112,26 +113,57 @@ def _inside(text: str, names: set[str]) -> bool:
     return any(part.lower() in names for part in _parts(text.replace(" ", "/")))
 
 
+# The connector, the workspace folders and the git servers are on the user's computer and its network, which a
+# Cowork task in the cloud cannot reach: such a task is refused outright, prompt by prompt and tool by tool. Claude
+# Code sets these variables in cloud sessions for hooks to read; the PreToolUse hook's onFailure also blocks when
+# the hook cannot start there.
+CLOUD = ("this Cowork task runs in the cloud, and eunomai-business only works with tasks on the user's computer. "
+         "Ask the user to start a new task on this computer; if Cowork offers no way to, IT has to turn off running "
+         "tasks in the cloud for the organization")
+
+
+def in_the_cloud() -> bool:
+    return (os.environ.get("CLAUDE_CODE_REMOTE", "").strip().lower() == "true"
+            or bool(os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID", "").strip()))
+
+
 def decide(payload: dict) -> str | None:
+    if in_the_cloud():
+        return CLOUD
     tool = payload.get("tool_name")
     tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
-    names = _workspace_names()
     if tool in _WRITE_TOOLS:
         path = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
-        return reason(path, _inside(path, names))
+        return reason(path, _inside(path, _workspace_names()))
     if tool in _SHELL_TOOLS:
         command = str(tool_input.get("command") or "")
-        return shell_reason(command, _inside(command + " " + str(payload.get("cwd") or ""), names))
+        return shell_reason(command, _inside(command + " " + str(payload.get("cwd") or ""), _workspace_names()))
     return None
 
 
+def _refuse_the_cloud(event: str | None) -> None:
+    if event == "UserPromptSubmit":
+        print(json.dumps({"decision": "block", "reason": f"eunomai-business: {CLOUD}."}))
+    elif event == "SessionStart":
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                                 "additionalContext": f"eunomai-business: {CLOUD}."}}))
+    else:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                                 "permissionDecisionReason": f"eunomai-business: {CLOUD}."}}))
+    sys.exit(0)
+
+
 def main() -> None:
-    """PreToolUse hook. Input it cannot read is let through: version_save still holds for workspaces."""
+    """SessionStart, UserPromptSubmit and PreToolUse hook. In the cloud everything is refused. Otherwise only tool
+    calls are checked, and input it cannot read is let through: version_save still holds for workspaces."""
     try:
         payload = json.load(sys.stdin)
     except Exception:
-        sys.exit(0)
-    found = decide(payload) if isinstance(payload, dict) else None
+        payload = None
+    event = payload.get("hook_event_name") if isinstance(payload, dict) else None
+    if in_the_cloud():
+        _refuse_the_cloud(event)
+    found = decide(payload) if isinstance(payload, dict) and event in (None, "PreToolUse") else None
     if found:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                  "permissionDecisionReason": f"eunomai-business: {found}."}}))

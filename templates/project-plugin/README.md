@@ -57,7 +57,7 @@ From decision 10, checked by IT before every publish:
 
 | Part | How | Why |
 |---|---|---|
-| The server | Runs on the user's computer, started by IT's uv with its own Python 3.12 | It reaches internal servers without putting them on the internet. A Cowork session in the cloud has no local servers, so no project tools |
+| The server | Runs on the user's computer, started by IT's uv with its own Python 3.12 | It reaches internal servers without putting them on the internet. A Cowork task in the cloud has no local servers: its hook refuses the task's tool calls, and eunomai-business refuses the task |
 | Real changes | A tool prepares and checks a change in the workspace; the user saves it as a version; IT reviews it | No credentials to databases or deployments on users' computers |
 | The project's workspaces | Those eunomai-business registered as cloned from the project's repositories (its register, out of the sandbox's reach) | Never `.git/config`, which the sandbox can rewrite |
 | The hook | The file tools always; the sandbox shell best effort (writing, moving, removing or unpacking into a protected path). A folder is protected as `folder/**` | Rules prevent mistakes; the permissions are the git server's |

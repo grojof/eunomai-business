@@ -1,8 +1,32 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard",
+            "timeout": 60,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard",
+            "timeout": 60,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__workspace__bash",
+        "matcher": "^(Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__workspace__bash)$|^mcp__(plugin_eunomai-business_)?eunomai-business__",
         "hooks": [
           {
             "type": "command",
