@@ -19,6 +19,8 @@ def on_the_users_computer(monkeypatch):
 
 def test_the_template_carries_the_connectors_rules_unchanged():
     connector = Path(__file__).parents[4] / "connector" / "src" / "eunomai_business" / "rules.py"
+    if not connector.exists():
+        pytest.skip("copied into a project: eunomai-business's repository is not next to it")
     assert Path(rules.__file__).read_bytes() == connector.read_bytes()
 
 

@@ -1,82 +1,81 @@
-"""Deny rules that IT writes in a build's configuration, in the syntax of Claude Code's permission rules, so they
-read the same as Anthropic's and could move to `permissions.deny` unchanged (docs/hooks.md).
+"""Deny rules that IT writes in a build's configuration, in the syntax of Claude Code's permission rules, so they read
+like Anthropic's (docs/hooks.md lists where they differ).
 
-Two forms: `Bash(<command>)` and `Edit(<path>)`, or a bare `Bash` for every command. `Bash` covers Cowork's shell
-(mcp__workspace__bash) too; `Edit` covers every tool that writes a file. A `*` in a command stands for any text, and
-a trailing ` *` also matches the bare command; a command is split at shell operators and each part is checked, past
-leading variable assignments and the wrappers Claude Code strips. A path is relative to the workspace, with
-gitignore patterns: * inside one folder, ** at any depth, a bare name or `folder/**` at any depth, a leading / at the
-workspace's root.
+Two forms: `Bash(<command>)`, or a bare `Bash` for every command, and `Edit(<path>)`. `Bash` covers Cowork's shell
+(mcp__workspace__bash) too; `Edit` covers every tool that writes a file and, best effort, the files a shell command
+writes, moves or removes. A `*` in a command stands for any text, and a trailing ` *` also matches the bare command.
+A path is relative to the workspace, with gitignore patterns: * inside one folder, ** at any depth, a bare name or
+`folder/**` at any depth, a leading / at the workspace's root.
+
+A deny rule errs on the side of denying: a command is looked for wherever one can start (after an operator, a
+bracket, a quote or a keyword, inside substitutions and loops), without trusting quotes, so a quote cannot hide one.
+Text that only mentions a command (a quoted message, a heredoc) can be denied too; Claude then writes it with the
+file tools.
 
 Standard library only: the project-plugin template carries an identical copy (a test keeps them equal).
 """
 
 import re
+import shlex
 
-TOOLS = {"Bash", "Edit"}
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 SHELL_TOOLS = {"Bash", "mcp__workspace__bash"}
 
 _RULE = re.compile(r"\A(Bash|Edit)(?:\((.+)\))?\Z", re.DOTALL)
-_SEPARATORS = ("&&", "||", "|&", ";", "|", "&", "\n")
-_ASSIGNMENT = re.compile(r"\A[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|\"[^\"]*\"|\S*)\s+")
-# The wrappers Claude Code strips before matching, with the options and values they take.
-_WRAPPERS = re.compile(r"\A(?:timeout(?:\s+-\S+)*\s+\S+|time|nice(?:\s+-n\s+\S+|\s+-\S+)*|nohup|stdbuf(?:\s+-\S+)*"
-                       r"|command|builtin|noglob|xargs)\s+")
-_SUBSTITUTIONS = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
+# Where a command can start, and where it ends.
+_START = re.compile(r"\A|[;&|\n({`!'\"]|\$\(|[<>]\(|\b(?:then|do|else|elif|if|while|until)\b")
+_END = re.compile(r"[;&|\n)`]")
+_ASSIGNMENT = re.compile(r"\A[A-Za-z_][A-Za-z0-9_]*=\S*\s+")
+# The wrappers Claude Code strips before matching, with the options and values they take; xargs only without options.
+_WRAPPER = re.compile(r"\A(?:timeout(?:\s+(?:-s|-k|--signal|--kill-after)\s+\S+|\s+-\S+)*\s+\S+|time(?:\s+-\S+)*"
+                      r"|nice(?:\s+-n\s*\S+|\s+-\S+)*|nohup|stdbuf(?:\s+-[ioe]\s*\S+|\s+--\S+)*|command|builtin"
+                      r"|noglob|xargs(?=\s+[^-\s]))\s+")
 
 
 def parse(rule: str) -> tuple[str, str | None]:
     """("Bash" or "Edit", the pattern or None for the whole tool). ValueError for anything else."""
-    found = _RULE.match((rule or "").strip())
+    found = _RULE.match(rule if isinstance(rule, str) else "")
     if not found:
         raise ValueError(f"{rule!r} is not Bash(<command>), Edit(<path>) or Bash")
     tool, spec = found.group(1), found.group(2)
-    if tool == "Edit" and not spec:
-        raise ValueError(f"{rule!r}: Edit needs a path; deny every write with the plugin's own guard instead")
-    if tool == "Edit" and spec.startswith(("//", "~")):
-        raise ValueError(f"{rule!r}: paths are relative to the workspace (no // or ~)")
+    if tool == "Edit":
+        if not spec:
+            raise ValueError(f"{rule!r}: Edit needs a path")
+        if spec != spec.strip() or spec.startswith(("//", "~", "!")) or "\\" in spec \
+                or ".." in spec.split("/") or "." in spec.split("/")[1:]:
+            raise ValueError(f"{rule!r}: a path relative to the workspace, with /, without spaces around it, ./ "
+                             "inside, .., // , ~ or !")
     return tool, spec
 
 
-def _split(command: str) -> list[str]:
-    """A command's parts at shell operators outside quotes, with what $(...) and `...` run."""
-    parts, current, quote, i = [], "", None, 0
-    while i < len(command):
-        char = command[i]
-        if quote:
-            current += char
-            if char == quote:
-                quote = None
-            i += 1
-            continue
-        if char in "'\"":
-            quote, current, i = char, current + char, i + 1
-            continue
-        separator = next((s for s in _SEPARATORS if command.startswith(s, i)), None)
-        if separator:
-            parts.append(current)
-            current, i = "", i + len(separator)
-            continue
-        current, i = current + char, i + 1
-    parts.append(current)
-    for match in _SUBSTITUTIONS.finditer(command):
-        parts.extend(_split(match.group(1) if match.group(1) is not None else match.group(2)))
-    return [part for part in parts if part.strip()]
+# --- commands ------------------------------------------------------------------------------------------------------
 
-
-def _bare(part: str) -> str:
-    """A part without grouping, leading assignments and wrappers: the command Claude Code matches."""
-    text = part.strip().lstrip("({").rstrip(")}").strip()
+def _forms(candidate: str) -> list[str]:
+    """A candidate command and each form left after stripping a leading assignment or wrapper."""
+    text = re.sub(r"[ \t]+", " ", candidate.strip().strip("'\""))
+    forms = [text]
     while True:
-        stripped = _ASSIGNMENT.sub("", text, count=1)
-        stripped = _WRAPPERS.sub("", stripped, count=1)
+        stripped = _WRAPPER.sub("", _ASSIGNMENT.sub("", text, count=1), count=1).strip()
         if stripped == text:
-            return text
-        text = stripped.strip()
+            return forms
+        text = stripped
+        forms.append(text)
+
+
+def _candidates(command: str) -> list[str]:
+    """Every place a command may start, up to where it ends."""
+    found = []
+    for start in _START.finditer(command):
+        rest = command[start.end():]
+        end = _END.search(rest)
+        piece = (rest[:end.start()] if end else rest).strip()
+        if piece:
+            found.append(piece)
+    return found
 
 
 def _command_pattern(spec: str) -> re.Pattern:
+    spec = re.sub(r"[ \t]+", " ", spec)
     if spec.endswith(":*"):  # the legacy form of a trailing wildcard
         spec = spec[:-2] + " *"
     if spec.endswith(" *") and spec.count("*") == 1:  # also the bare command
@@ -88,16 +87,26 @@ def command_matches(spec: str | None, command: str) -> bool:
     if spec is None or spec == "*":
         return True
     pattern = _command_pattern(spec)
-    return any(pattern.match(_bare(part)) for part in _split(command or ""))
+    return any(pattern.match(form) for candidate in _candidates(command or "") for form in _forms(candidate))
+
+
+# --- paths ---------------------------------------------------------------------------------------------------------
+
+def _glob(spec: str) -> tuple[str, bool]:
+    """The pattern relative to the workspace's root, and whether it is anchored there."""
+    glob = spec[2:] if spec.startswith("./") else spec
+    if glob.endswith("/"):
+        glob += "**"  # a folder: everything in it
+    if glob.startswith("/"):
+        return glob.lstrip("/"), True
+    if "/" not in glob or re.fullmatch(r"[^/]+/\*\*", glob):
+        return glob, False  # a bare name, or one folder and everything in it, at any depth
+    return glob, True
 
 
 def _path_pattern(spec: str) -> re.Pattern:
-    glob = spec[2:] if spec.startswith("./") else spec
-    if glob.startswith("/"):
-        glob = glob.lstrip("/")
-    elif "/" not in glob.rstrip("/") or re.fullmatch(r"[^/]+/\*\*", glob):
-        glob = "**/" + glob  # a bare name, or one folder and everything in it, at any depth
-    out, i = "", 0
+    glob, anchored = _glob(spec)
+    out, i = "" if anchored else "(?:.*/)?", 0
     while i < len(glob):
         if glob.startswith("**/", i):
             out, i = out + "(?:.*/)?", i + 3
@@ -114,6 +123,22 @@ def _path_pattern(spec: str) -> re.Pattern:
 
 def path_matches(spec: str, relative: str) -> bool:
     return bool(_path_pattern(spec).match(relative.replace("\\", "/").strip("/")))
+
+
+def _holds(spec: str, target: str) -> bool:
+    """Whether removing or moving `target` would take what the rule protects with it."""
+    glob, anchored = _glob(spec)
+    fixed = []
+    for part in glob.split("/"):
+        if any(c in part for c in "*?["):
+            break
+        fixed.append(part.lower())
+    target_parts = [p.lower() for p in target.replace("\\", "/").strip("/").split("/") if p]
+    if not fixed:
+        return not target_parts
+    if anchored:
+        return fixed[:len(target_parts)] == target_parts
+    return not target_parts or target_parts[-1] == fixed[0]  # a folder of that name, wherever it is
 
 
 def parts(path: str) -> list[str]:
@@ -152,26 +177,33 @@ def relative(path: str, folders: list[str]) -> str | None:
     return None
 
 
-# Commands that write, move or remove files: the targets of these are checked against Edit rules, best effort.
-_WRITES = re.compile(r"(?:>|\btee\b|\bcp\b|\bmv\b|\bln\b|\btouch\b|\bmkdir\b|sed\s+-i|Set-Content|Add-Content"
-                     r"|Out-File|New-Item|\brm\b|\brmdir\b|\btruncate\b|\bdd\b|\bunzip\b|\btar\b|Remove-Item)",
-                     re.IGNORECASE)
-_TOKENS = re.compile(r"""[^\s'"<>|;&]+""")
+_REMOVERS = {"rm", "rmdir", "unlink", "mv"}
+_ALL_ARGUMENTS = {"rm", "rmdir", "unlink", "touch", "mkdir", "truncate", "tee", "mv"}
+_LAST_ARGUMENT = {"cp", "mv", "ln", "install", "sed"}
 
 
-def shell_targets(command: str, cwd: str, folders: list[str]) -> list[str]:
-    """Workspace-relative paths a command that writes may touch: absolute ones in a workspace, and relative ones when
-    it runs in a workspace."""
-    if not _WRITES.search(command or ""):
-        return []
-    here = relative(cwd or "", folders)
-    found = []
-    for token in _TOKENS.findall(command):
-        inside = relative(token, folders)
-        if inside is None and here is not None and not re.match(r"^([\\/~]|[A-Za-z]:)", token):
-            inside = "/".join(parts("/".join(filter(None, [here, token]))))
-        if inside:
-            found.append(inside)
+def _words(text: str) -> list[str]:
+    try:
+        return shlex.split(text, comments=False, posix=True)
+    except ValueError:
+        return text.split()
+
+
+def shell_writes(command: str) -> list[tuple[str, str]]:
+    """(verb, path) for each file a command writes, moves or removes, best effort: the target of > and >>, the
+    arguments of rm, rmdir, unlink, touch, mkdir, truncate, tee and mv, and the last one of cp, ln, install and sed."""
+    found = [(">", target) for target in re.findall(r">>?\s*([^\s;&|<>()]+)", command or "")]
+    for candidate in _candidates(command or ""):
+        words = _words(_forms(candidate)[-1])
+        if not words:
+            continue
+        verb, arguments = words[0].rsplit("/", 1)[-1], [w for w in words[1:] if not w.startswith("-")]
+        if verb == "sed" and not any(w.startswith("-i") or w == "--in-place" for w in words[1:]):
+            continue
+        if verb in _ALL_ARGUMENTS:
+            found += [(verb, argument) for argument in arguments]
+        elif verb in _LAST_ARGUMENT and arguments:
+            found.append((verb, arguments[-1]))
     return found
 
 
@@ -180,15 +212,23 @@ def deny_reason(rules: list[dict], tool: str, tool_input: dict, cwd: str, folder
     Edit rules nowhere; otherwise only inside those workspace folders."""
     if tool in SHELL_TOOLS:
         command = str(tool_input.get("command") or "")
-        in_scope = folders is None or relative(cwd or "", folders) is not None or \
-            any(relative(token, folders) is not None for token in _TOKENS.findall(command))
-        targets = shell_targets(command, cwd, folders) if folders else []
+        here = relative(cwd or "", folders) if folders else None
+        targets = []
+        for verb, target in shell_writes(command) if folders else []:
+            inside = relative(target, folders)
+            if inside is None and here is not None and not re.match(r"^([\\/~]|[A-Za-z]:)", target):
+                inside = "/".join(parts("/".join(filter(None, [here, target]))))
+            if inside is not None:
+                targets.append((verb, inside))
+        in_scope = folders is None or here is not None or bool(targets)
         for rule in rules:
             name, spec = parse(rule["rule"])
             if name == "Bash" and in_scope and command_matches(spec, command):
                 return rule["reason"]
-            if name == "Edit" and any(path_matches(spec, target) for target in targets):
-                return f"{rule['reason']} ({next(t for t in targets if path_matches(spec, t))})"
+            if name == "Edit":
+                for verb, inside in targets:
+                    if path_matches(spec, inside) or (verb in _REMOVERS and _holds(spec, inside)):
+                        return f"{rule['reason']} ({inside or 'the workspace'})"
         return None
     if tool in WRITE_TOOLS and folders:
         inside = relative(str(tool_input.get("file_path") or tool_input.get("notebook_path") or ""), folders)
@@ -201,13 +241,18 @@ def deny_reason(rules: list[dict], tool: str, tool_input: dict, cwd: str, folder
     return None
 
 
-def problems(rules: object) -> list[str]:
-    """What is wrong with a configuration's deny rules, examples included: the build refuses to package them."""
+def problems(rules: object, examples: bool = True) -> list[str]:
+    """What is wrong with a configuration's deny rules: the build refuses to package them. With examples, each
+    rule must also deny what it says it denies and let through what it says it allows."""
     if not isinstance(rules, list):
         return ["deny must be a list of {rule, reason, examples}"]
     found = []
     for index, item in enumerate(rules):
         where = f"deny[{index}]"
+        if isinstance(item, dict) and "paths" in item:
+            found.append(f"{where}: {{paths, reason}} is the old form; write each path as "
+                         "{\"rule\": \"Edit(/<path>)\", \"reason\": ...} (a leading / keeps it at the root)")
+            continue
         if not isinstance(item, dict) or not {"rule", "reason"} <= set(item) or set(item) - {"rule", "reason",
                                                                                               "examples"}:
             found.append(f"{where} must have rule and reason, and optionally examples")
@@ -220,17 +265,19 @@ def problems(rules: object) -> list[str]:
         if not isinstance(item["reason"], str) or not item["reason"].strip() or "\n" in item["reason"] \
                 or len(item["reason"]) > 300:
             found.append(f"{where}.reason must be one line of at most 300 characters")
-        examples = item.get("examples", {})
-        if not isinstance(examples, dict) or set(examples) - {"denied", "allowed"} or \
-                not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in examples.values()):
+        cases = item.get("examples", {})
+        if not isinstance(cases, dict) or set(cases) - {"denied", "allowed"} or \
+                not all(isinstance(v, list) and all(isinstance(x, str) for x in v) for v in cases.values()):
             found.append(f"{where}.examples must be {{\"denied\": [...], \"allowed\": [...]}} with strings")
+            continue
+        if not examples:
             continue
         check = (lambda text: command_matches(spec, text)) if tool == "Bash" else (lambda text: path_matches(spec,
                                                                                                              text))
-        for text in examples.get("denied", []):
+        for text in cases.get("denied", []):
             if not check(text):
                 found.append(f"{where}: {item['rule']} does not deny its example {text!r}")
-        for text in examples.get("allowed", []):
+        for text in cases.get("allowed", []):
             if check(text):
                 found.append(f"{where}: {item['rule']} denies {text!r}, which its examples allow")
     return found

@@ -11,9 +11,10 @@ related: [barriers.md, configuration.md, decisions.md, sources.md]
 
 A hook is a command Claude runs before or after an action. eunomai-business uses one, the **guard**, and lets IT add
 **deny rules** by configuration, without writing code. Rules are written like
-[Claude Code's permission rules](https://code.claude.com/docs/en/permissions), so they read the same and could
-move to Anthropic's own `permissions.deny` if that ever reaches every Cowork task
-([decision 12](decisions.md#12--organization-rules-in-claude-codes-permission-syntax-applied-by-the-guard)).
+[Claude Code's permission rules](https://code.claude.com/docs/en/permissions), so they read the same and would move
+to Anthropic's own `permissions.deny` with little change if that ever reaches every Cowork task
+([decision 12](decisions.md#12--organization-rules-in-claude-codes-permission-syntax-applied-by-the-guard));
+[where they differ](#where-they-differ-from-claude-codes-rules) is below.
 
 ## What ships
 
@@ -52,15 +53,31 @@ plugin), add an entry to `deny` and build again:
 
 | Form | Matches | Where |
 |---|---|---|
-| `Bash(npm *)` | `npm`, `npm ci`, `cd app && npm ci`, `echo $(npm ls)`, `timeout 30 npm test`; not `npmx`, not `/usr/bin/npm` | eunomai-business: anywhere. A project: in its workspaces |
+| `Bash(npm *)` | `npm`, `npm ci`, `cd app && npm ci`, `echo $(npm ls)`, `for x in a; do npm ci; done`, `timeout 30 npm test`, `sh -c 'npm ci'`; not `npmx`, not `/usr/bin/npm` | eunomai-business: anywhere. A project: commands run in its workspaces |
 | `Bash(npm run build)` | That exact command | Same |
 | `Edit(/data/raw/**)` | `data/raw/` at the workspace's root and everything under it | In workspaces (the project's own, for a project plugin) |
 | `Edit(*.lock)`, `Edit(secrets/**)` | A bare name, or one folder and its content, at any depth | Same |
 
-`Bash` rules also cover Cowork's shell (`mcp__workspace__bash`). `Edit` rules cover every tool that writes a file,
-and, best effort, the targets of shell commands that write. Paths are relative to the workspace; `//` and `~` are
-refused. A command is split at `&&`, `||`, `;`, `|` and `&` outside quotes, and each part is checked past leading
-variable assignments and the wrappers Claude Code strips (`timeout`, `nice`, `nohup`...).
+`Bash` rules also cover Cowork's shell (`mcp__workspace__bash`). A command is looked for wherever one can start
+(after an operator, a bracket, a quote or a keyword such as `then` or `do`, inside substitutions), past leading
+variable assignments and the wrappers Claude Code strips (`timeout`, `nice`, `nohup`...). Quotes are not trusted,
+so they cannot hide a command; the price is that a mention can be denied too (a quoted message or a heredoc that
+says `npm install`), and Claude then writes that text with the file tools.
+
+`Edit` rules cover every tool that writes a file and, best effort, what a shell command writes, moves or removes:
+the target of `>` and `>>`, the arguments of `rm`, `mv`, `touch`, `mkdir`, `tee` and similar, the last argument of
+`cp`, `ln` and `sed -i`. Removing or moving a folder that holds a protected path is denied too. Paths are relative
+to the workspace; `//`, `~`, `..`, `\` and `!` are refused, and a trailing `/` means everything in the folder.
+
+## Where they differ from Claude Code's rules
+
+| Point | Claude Code | Here |
+|---|---|---|
+| Quotes and heredocs | Parsed: a quoted mention is not a command | Not trusted: a mention can be denied (never a hidden command let through) |
+| Leading `/` in a path | The folder of the settings file that holds the rule | The workspace's root |
+| A relative path | The current directory | The workspace (in Cowork the current directory is the sandbox's, not the workspace) |
+| `!` negation, `[...]` classes | Supported | Refused or read literally: write the rule without them |
+| Rule kinds | Every tool, `Read`, `WebFetch`, `mcp__…`, parameters | `Bash` and `Edit` only |
 
 ## How rules combine
 
@@ -75,7 +92,7 @@ variable assignments and the wrappers Claude Code strips (`timeout`, `nice`, `no
 | Control | Reaches | Use it for |
 |---|---|---|
 | Admin console: eunomai-business **Required**, Cowork in the cloud **off**, network egress, connector approval | Every Cowork task | The plugin cannot be turned off; the network is the real boundary |
-| Managed settings on the computers (MDM or `managed-settings.json`): `permissions.deny`, sandbox | Claude Code and Cowork tasks on that computer | A second layer for the same rules where IT manages the computers |
+| Managed settings on the computers (MDM or `managed-settings.json`): `permissions.deny`, sandbox | Claude Code and Cowork tasks on that computer, except with `requireCoworkFullVmSandbox`, where neither the device policy nor the file is inside the VM ([managed settings](https://code.claude.com/docs/en/managed-settings)) | A second layer for the same rules where IT manages the computers |
 | Server-managed settings from the console | Claude Code only: Cowork does not read them | Not for Cowork |
 
 Be careful with `allowManagedHooksOnly` on the computers: it stops the hooks of plugins that the managed settings do
@@ -89,6 +106,9 @@ it.
   so `/usr/bin/npm` or `sh -c 'npm ci'` are not stopped. The boundaries are the connector's
   [barriers](barriers.md), IT's review of every version, and the network.
 - **Only `Bash` and `Edit`.** Reads, web fetches and other tools are not ruled here; use the console's controls.
+- **The shell's folder.** A project's `Bash` rules, and relative paths in `Edit` rules, rely on the folder the hook
+  receives being the shell's current one; if Cowork's shell keeps a `cd` from one call to the next, a rule may not
+  see it. To validate: H19.
 - **No scripts of IT's own, no prompt or agent hooks.** Each script brings its interpreter, paths and shell
   differences between Windows and the cloud; prompt and agent hooks are not deterministic. If a need does not fit a
   rule, it is a change to the guard, reviewed and tested like any other.

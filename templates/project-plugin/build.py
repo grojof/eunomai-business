@@ -50,13 +50,6 @@ def _rules():
     return module
 
 
-def _relative_glob(value) -> bool:
-    """A path relative to the workspace, with / only: the guard compares it to paths written that way."""
-    if not _text(value, 200) or "\\" in value or re.match(r"^(/|[A-Za-z]:|\./)", value):
-        return False
-    return ".." not in value.split("/")
-
-
 def validate(cfg: dict) -> list[str]:
     """Every problem in the configuration, so IT fixes them in one pass. Keys starting with "_" are comments."""
     errors = [f"unknown setting {key!r}" for key in cfg if not key.startswith("_") and key not in KEYS]
@@ -77,12 +70,7 @@ def validate(cfg: dict) -> list[str]:
         for url in repositories:
             if not _text(url, 300) or urlsplit(url).scheme != "https" or SECRET_VALUE.search(url):
                 errors.append(f"repositories: {url!r} must be an https address without credentials")
-    deny = cfg.get("deny", [])
-    errors += _rules().problems(deny)  # each rule parses, has a reason, and meets its examples
-    for index, rule in enumerate(deny if isinstance(deny, list) else []):
-        spec = rule.get("rule", "") if isinstance(rule, dict) and isinstance(rule.get("rule"), str) else ""
-        if spec.startswith("Edit(") and not _relative_glob(spec[5:-1].removeprefix("/")):
-            errors.append(f"deny[{index}]: Edit paths are relative to the workspace, with / and without ./ or ..")
+    errors += _rules().problems(cfg.get("deny", []))  # each rule parses, has a reason, and meets its examples
     settings = cfg.get("settings", {})
     if not isinstance(settings, dict):
         errors.append("settings must be an object")

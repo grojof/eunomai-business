@@ -48,7 +48,14 @@ def decide(payload: dict, config: dict) -> str | None:
         target = rules.relative(str(tool_input.get("file_path") or tool_input.get("notebook_path") or ""), folders)
         targets = [target] if target else []
     else:
-        targets = rules.shell_targets(str(tool_input.get("command") or ""), cwd, folders)
+        here = rules.relative(cwd, folders)
+        targets = []
+        for _verb, path in rules.shell_writes(str(tool_input.get("command") or "")):
+            inside = rules.relative(path, folders)
+            if inside is None and here is not None and not re.match(r"^([\\/~]|[A-Za-z]:)", path):
+                inside = "/".join(rules.parts("/".join(filter(None, [here, path]))))
+            if inside:
+                targets.append(inside)
     for target in targets:
         if any(_SHORT_NAME.match(part) for part in target.split("/")):
             return f"{_SHORT_NAME_REASON} ({target})"

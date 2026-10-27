@@ -156,12 +156,12 @@ def decide(payload: dict, policy: list[dict] | None = None) -> str | None:
 
 def load_policy(path: str | None) -> list[dict]:
     """The organization's deny rules the build packaged (policy.json). Unreadable rules are an error, which the
-    tool-call hook's onFailure turns into a block."""
+    tool-call hook's onFailure turns into a block; their examples were checked by the build."""
     if not path:
         return []
     with open(path, encoding="utf-8") as handle:
         policy = json.load(handle).get("deny", [])
-    errors = rules.problems(policy)
+    errors = rules.problems(policy, examples=False)
     if errors:
         raise ValueError("eunomai-business: the packaged deny rules are invalid: " + "; ".join(errors))
     return policy

@@ -233,7 +233,7 @@ How each part holds against misuse is in the template's and the agent's pages, a
 | Decided | How | Why |
 |---|---|---|
 | IT adds deny rules by **configuration**, in the base and in each project plugin | `deny`: `{rule, reason, examples}` in the build's configuration, packaged as data the guard reads ([how](hooks.md)) | No code to write or review for a common need; the build checks every rule against its examples |
-| Rules use **Claude Code's permission syntax**, `Bash(<command>)` and `Edit(<path>)` | The same wildcard and path semantics as [Anthropic's rules](https://code.claude.com/docs/en/permissions), tested against its own examples | One way to read a rule; they could move to `permissions.deny` unchanged if that ever reaches every Cowork task |
+| Rules use **Claude Code's permission syntax**, `Bash(<command>)` and `Edit(<path>)` | [Anthropic's](https://code.claude.com/docs/en/permissions) wildcards and gitignore paths, tested against its own examples; a deny errs on the side of denying, and the few differences are listed ([hooks and rules](hooks.md#where-they-differ-from-claude-codes-rules)) | One way to read a rule; they would move to `permissions.deny` with little change if that ever reaches every Cowork task |
 | The **plugin's guard** applies them | `PreToolUse`, with `onFailure: "block"`, in a plugin made Required | It is the one control that reaches every Cowork task: managed settings reach only computers IT manages, server-managed settings are not read by Cowork, a plugin cannot carry permission rules, and policy mods are Claude Code only ([sources](sources.md#hooks)) |
 
 **Rejected:**
