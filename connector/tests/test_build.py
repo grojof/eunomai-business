@@ -24,7 +24,9 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     names = zipfile.ZipFile(archive).namelist()
     assert [n for n in names if n.startswith("hooks/")] == ["hooks/hooks.json"]
     hooks = json.loads((tmp_path / "eunomai-business" / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
-    assert list(hooks) == ["PreToolUse"] and len(hooks["PreToolUse"]) == 1
+    assert list(hooks) == ["SessionStart", "UserPromptSubmit", "PreToolUse"]  # the guard alone, on three events
+    assert all(len(entries) == 1 for entries in hooks.values())
+    assert all(e[0]["hooks"][0]["command"].endswith("eunomai-business-guard") for e in hooks.values())
     guard = hooks["PreToolUse"][0]
     assert "Write" in guard["matcher"] and "mcp__workspace__bash" in guard["matcher"]
     assert guard["hooks"][0]["command"].endswith("eunomai-business-guard")

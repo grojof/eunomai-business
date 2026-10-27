@@ -14,6 +14,7 @@ from eunomai_project import guard
 @pytest.fixture(autouse=True)
 def on_the_users_computer(monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE_SESSION_ID", raising=False)
 
 
 @pytest.mark.parametrize("glob, path, matches", [
@@ -106,6 +107,16 @@ def test_a_task_in_the_cloud_is_refused_whatever_it_does(monkeypatch, capsys, tm
         reason = run_hook(monkeypatch, capsys, tmp_path, config, payload)["hookSpecificOutput"]
         assert "in the cloud" in reason["permissionDecisionReason"]
     assert guard.decide(write("/sessions/x/mnt/Ventas/app.py"), dict(config, deny=[])) is not None
+
+
+def test_the_hook_covers_the_projects_tools_and_nothing_else():
+    import re
+    text = (Path(__file__).parents[2] / "plugin" / "hooks" / "hooks.json.template").read_text(encoding="utf-8")
+    matcher = json.loads(text.replace("{{NAME}}", "data"))["hooks"]["PreToolUse"][0]["matcher"]
+    for tool in ("Write", "mcp__workspace__bash", "mcp__data__ask", "mcp__plugin_data_data__ask"):
+        assert re.search(matcher, tool), tool
+    for tool in ("TodoWrite", "mcp__plugin_other_db__export_data", "mcp__plugin_data-x_y__z", "mcp__database__q"):
+        assert not re.search(matcher, tool), tool
 
 
 def test_an_unreadable_configuration_fails_so_the_hook_blocks(monkeypatch, tmp_path):

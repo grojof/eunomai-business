@@ -90,8 +90,11 @@ pull request, check the files, the accents and the author, and merge it.
    personal (H15).
 3. **The guard** (H17): ask Claude to write a `start.bat`, to edit `AGENTS.md`, and to do both through the shell;
    each is denied with a reason. Repeat on a computer without Git.
-4. **The cloud** (H16): with "Run Cowork in the cloud" on, start a task and ask for the workspace's status and to
-   write a file. Each is refused with the cloud reason (or blocked). Note which of the two happened.
+4. **The cloud** (H16), with a build that has diagnostics on (its log records each tool's name and the
+   environment the hooks see): with "Run Cowork in the cloud" on, start a task and ask for the workspace's status.
+   The prompt is refused with the cloud reason. Note whether the hook saw `CLAUDE_CODE_REMOTE`, and whether reads
+   and tools on local folders were offered at all. Then, with a task on the computer, check that nothing is refused
+   and that the log shows the connector's tools under the names the hook expects.
 5. **The test environment** (H18): declare `[test]` in the test repository and protect that branch for a team
    ([project practices](../project-practices.md#a-test-environment-without-waiting-for-it)). As a member, after a
    save, accept the specialist's offer to try it: the branch has the version, and the test server's agent applies

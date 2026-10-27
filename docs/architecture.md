@@ -169,11 +169,15 @@ sequenceDiagram
   each task's folder and does not outlive the task. Claude Desktop installed as a Windows package (MSIX) redirects
   that folder for the processes it starts unless it already exists ([where](data-on-computers.md)).
 - **Only tasks on the user's computer.** Cowork tasks may run on Anthropic's servers (Pro and Max always; Team and
-  Enterprise as the owner decides). There the sandbox cannot reach private addresses and local MCP servers do not
-  run ([sources](sources.md#where-cowork-runs-and-local-connectors)), so the connector, the workspace folders and
-  internal git servers are out of reach. The guard refuses such a task outright: Claude Code sets
-  `CLAUDE_CODE_REMOTE=true` in cloud sessions for hooks to read, and a guard that cannot start there blocks anyway
-  (`onFailure: "block"`). Its hook also covers the connector's tools, so nothing of the plugin runs in the cloud.
+  Enterprise as the owner decides). There the sandbox cannot reach private addresses, so internal git servers are
+  out of reach, and the two official sources disagree on whether local MCP servers still work through the open
+  desktop app ([sources](sources.md#where-cowork-runs-and-local-connectors)). Either way the sandbox would work on
+  other files than the ones the connector saves, so the plugin refuses such a task: at the start of the session
+  Claude is told, every prompt is blocked with the reason, and every write, shell command and connector call is
+  denied. The guard knows it from `CLAUDE_CODE_REMOTE` and `CLAUDE_CODE_REMOTE_SESSION_ID`, which Claude Code sets
+  in its cloud sessions for hooks to read, and a tool-call guard that cannot start there blocks anyway
+  (`onFailure: "block"`). That Cowork sets them too, and the names of the connector's tools in Cowork, are checked
+  by H16.
 
 ## What is tied to a git hosting
 
