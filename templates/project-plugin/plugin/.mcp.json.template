@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "{{NAME}}": {
+      "command": "{{UV}}",
+      "args": ["run", "--frozen", "--no-dev", "--no-config", "--system-certs", "--managed-python", "--python", "3.12",
+               "--project", "${CLAUDE_PLUGIN_ROOT}/server", "eunomai-project",
+               "--config", "${CLAUDE_PLUGIN_ROOT}/project.json"]
+    }
+  }
+}

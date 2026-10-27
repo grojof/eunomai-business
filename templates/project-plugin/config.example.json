@@ -1,0 +1,25 @@
+{
+  "_comment": "Copy to config.json, fill in, version it with the project, then run: python build.py. Nothing here is secret: the build refuses obvious secrets. Reference: README.md",
+  "_name": "The plugin's name: lowercase letters, digits and hyphens. It also names the local server, so the project's tools appear as mcp__plugin_<name>_<name>__<tool>.",
+  "name": "example-project",
+  "display_name": "Example project",
+  "description": "Tools and rules of the Example project, next to eunomai-business.",
+  "version": "0.1.0",
+  "_uv": "The same uv as eunomai-business's build: IT deploys it at a fixed version and absolute path.",
+  "uv": "uv",
+  "_repositories": "The project's repositories (https). A workspace eunomai-business cloned from one of them is the project's.",
+  "repositories": [
+    "https://git.example.internal/team/example-project"
+  ],
+  "_deny": "Paths the project protects in its workspaces, relative to the workspace and with /: * inside one folder, ** at any depth (folder/** for everything in a folder). The reason is what Claude tells the user.",
+  "deny": [
+    {
+      "paths": ["data/raw/**"],
+      "reason": "raw data comes from the nightly import; change the import, not the copy"
+    }
+  ],
+  "_settings": "Values the project's tools read (addresses, names). Never a secret.",
+  "settings": {
+    "example_folder": "docs"
+  }
+}

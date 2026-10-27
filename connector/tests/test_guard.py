@@ -16,6 +16,7 @@ from eunomai_business import gitops, guard
     ("AGENTS.md.", "context"), (".claude/settings.json", "config"), ("app/.mcp.json", "config"),
     (".git/config", "config"), (".claude.\\settings.json", "config"), (".github/workflows/ci.yml", "config"),
     (".gitea/workflows/build.yaml", "config"), (".gitlab-ci.yml", "config"), ("AGENTS~1.MD", "config"),
+    (".eunomai/project.toml", "config"),
     ("probar.bat", "executable"), ("C:\\Users\\me\\run.CMD", "executable"), ("tools/setup.ps1", "executable"),
     ("shortcut.lnk", "executable"), ("run.bat.", "executable"), ("run.bat ", "executable"),
     ("run.bat::$DATA", "executable"), ("tool.jar", "executable"), ("help.chm", "executable"),
@@ -37,6 +38,7 @@ def test_outside_workspaces_only_executables_are_refused(path, kind):
     ("cat > probar.bat <<'EOF'", True), ("echo x | tee run.ps1", True), ("cp template.txt start.cmd", True),
     ("echo hi > AGENTS.md", True), ("sed -i 's/a/b/' CLAUDE.md", True), ("echo {} > .claude/settings.json", True),
     ("echo x > .mcp.json", True), ("cp a .git/hooks/post-commit", True), ("mkdir -p .github/workflows", True),
+    ("echo '[development]' > .eunomai/project.toml", True),
     ("cat AGENTS.md", False), ("rm probar.bat", False), ("curl -s https://example.com > page.html", False),
     ("pip install -r requirements.txt > log.txt", False), ("pytest -q", False), ("echo x > .gitignore", False),
     ("cat .claude/settings.json", False),
@@ -134,6 +136,69 @@ def test_a_project_without_context_says_so(signed_in, workspaces):
     signed_in.initialize(name)
     gitops.clone(f"{signed_in.url}/me/{name}.git")
     assert gitops.project_context(name) is None
+
+
+DECLARED = b'[development]\ncode = true\ntechnologies = ["Python"]\n'
+
+
+def test_the_project_declaration_comes_from_the_server_not_the_folder(signed_in, workspaces):
+    name, ws = workspace_with_context(signed_in)
+    signed_in.server_commit(name, "main", {".eunomai/project.toml": DECLARED})
+    (ws / ".eunomai").mkdir()
+    (ws / ".eunomai" / "project.toml").write_bytes(b"[development]\ncode = true\n")
+    files = gitops.project_files(name)
+    assert files["declaration"]["text"] == DECLARED.decode()
+    assert files["context"]["text"] == "# Project\n\nWritten by IT.\n"
+    from eunomai_business import server as tools
+    development = tools._specialist_settings(name)["development"]
+    assert development == {"code_allowed": True, "technologies": ["Python"], "reason": "the project declares it"}
+
+
+def test_a_folder_where_the_declaration_should_be_is_no_declaration(signed_in, workspaces):
+    name, _ = workspace_with_context(signed_in)
+    signed_in.server_commit(name, "main", {".eunomai/project.toml/x": b"x"})
+    assert gitops.project_files(name)["declaration"] is None
+
+
+def test_a_file_where_the_declarations_folder_should_be_keeps_the_settings_working(signed_in, workspaces):
+    from eunomai_business import server as tools
+    name, _ = workspace_with_context(signed_in)
+    signed_in.server_commit(name, "main", {".eunomai": b"not a folder"})
+    result = tools._specialist_settings(name)
+    assert result["project_context"]["file"] == "AGENTS.md"
+    assert result["development"]["reason"] == "the project declares no development and free development is off"
+
+
+def test_without_its_main_branch_the_project_allows_no_code(signed_in, workspaces, monkeypatch):
+    from eunomai_business import server as tools
+    name, _ = workspace_with_context(signed_in)
+    monkeypatch.setenv("EUNOMAI_SPECIALIST", '{"free_development": true}')
+    monkeypatch.setattr(gitops, "project_files", lambda workspace: {"context": None, "declaration": None,
+                                                                    "read": False})
+    development = tools._specialist_settings(name)["development"]
+    assert development["code_allowed"] is False and "main branch could not be read" in development["reason"]
+
+
+def test_without_the_server_no_code_is_allowed(signed_in, workspaces, monkeypatch):
+    from eunomai_business import server as tools, support
+    name, _ = workspace_with_context(signed_in)
+    monkeypatch.setenv("EUNOMAI_SPECIALIST", '{"free_development": true}')
+
+    def unreachable(workspace):
+        raise support.Unreachable("down")
+    monkeypatch.setattr(gitops, "project_files", unreachable)
+    result = tools._specialist_settings(name)
+    assert result["development"]["code_allowed"] is False and "unavailable" in result["project_context"]
+
+
+def test_a_save_puts_the_declaration_back(signed_in, workspaces):
+    name, ws = workspace_with_context(signed_in)
+    (ws / ".eunomai").mkdir()
+    (ws / ".eunomai" / "project.toml").write_bytes(b"[development]\ncode = true\n")
+    (ws / "notes.md").write_bytes(b"Real work.\n")
+    saved = gitops.save(name, "Work")
+    assert saved["files"] == ["notes.md"] and saved["restored"] == [".eunomai/project.toml"]
+    assert not (ws / ".eunomai" / "project.toml").exists()
 
 
 def test_notes_an_editor_adds_to_a_branch_are_accepted(signed_in, workspaces):

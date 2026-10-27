@@ -1,0 +1,18 @@
+---
+name: project
+description: Tools and rules of the {{DISPLAY_NAME}} project, for its own workspaces. Use when working in a {{DISPLAY_NAME}} workspace and the project's AGENTS.md or eunomai-business's specialist calls for the project's tools, or when a write there is denied by the project's rules.
+---
+
+# {{DISPLAY_NAME}}
+
+This plugin adds the {{DISPLAY_NAME}} project's tools and rules to eunomai-business. It does not lead the work:
+eunomai-business's specialist does, and the project's `AGENTS.md` (from `specialist_settings`) says which of these
+tools to use, and for what.
+
+1. **Confirm the workspace is this project's:** `project_workspaces`. If the current one is not listed, this
+   plugin has nothing to do there.
+2. **Know the rules before writing:** `project_rules` lists the paths the project protects and why.
+3. **When a write is denied,** tell the user the reason in plain words and change the work. Never work around a
+   denial (another tool, another path, the shell).
+4. **Use the project's tools** only as `AGENTS.md` describes. Each one acts on this project's workspaces only and
+   enforces its own limits; an error from one is an answer to explain, not a step to retry another way.
