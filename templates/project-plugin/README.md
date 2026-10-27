@@ -9,9 +9,9 @@ work, and sign-in, versions and the file guard are its own. Why this split:
 | Part | What it does | Who changes it |
 |---|---|---|
 | `server/src/eunomai_project/project_tools.py` | The project's tools | The project |
-| `config.json` (from `config.example.json`) | Name, repositories, protected paths, settings for the tools | IT, per project |
+| `config.json` (from `config.example.json`) | Name, repositories, deny rules, settings for the tools | IT, per project |
 | `plugin/skills/project/SKILL.md.template` | When and how Claude uses the project's tools | The project |
-| Everything else (`project.py`, `guard.py`, `hook.py`, `server.py`, `build.py`) | Finds the project's workspaces, denies protected paths, serves the tools, builds the zip | The template: keep it as it comes, to take its updates |
+| Everything else (`project.py`, `guard.py`, `rules.py`, `hook.py`, `server.py`, `build.py`) | Finds the project's workspaces, applies the deny rules (`rules.py`, identical to eunomai-business's), serves the tools, builds the zip | The template: keep it as it comes, to take its updates |
 
 ## Make a project's plugin
 
@@ -60,7 +60,7 @@ From decision 10, checked by IT before every publish:
 | The server | Runs on the user's computer, started by IT's uv with its own Python 3.12 | It reaches internal servers without putting them on the internet. A Cowork task in the cloud has no local servers: its hook refuses the task's tool calls, and eunomai-business refuses the task |
 | Real changes | A tool prepares and checks a change in the workspace; the user saves it as a version; IT reviews it | No credentials to databases or deployments on users' computers |
 | The project's workspaces | Those eunomai-business registered as cloned from the project's repositories (its register, out of the sandbox's reach) | Never `.git/config`, which the sandbox can rewrite |
-| The hook | The file tools always; the sandbox shell best effort (writing, moving, removing or unpacking into a protected path). A folder is protected as `folder/**` | Rules prevent mistakes; the permissions are the git server's |
+| The hook | The project's `deny` rules, in Claude Code's permission syntax: `Edit(<path>)` for the file tools always and the sandbox shell best effort, `Bash(<command>)` for commands run in the project's workspaces ([hooks and rules](../../docs/hooks.md)) | Rules prevent mistakes; the permissions are the git server's |
 | The hook's runtime | `hook.py` with Python's standard library only, set to block if it cannot run | It never waits for installing anything; a damaged plugin stops writes until IT fixes it, never lets them through |
 
 ## Settings and dependencies

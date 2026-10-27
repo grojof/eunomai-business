@@ -100,6 +100,10 @@ pull request, check the files, the accents and the author, and merge it.
    save, accept the specialist's offer to try it: the branch has the version, and the test server's agent applies
    it within a couple of minutes. Remove the user from the team and try again: refused, and the answer says the version goes
    through review.
+6. **Deny rules** (H19): build with the example configuration's `deny` (`Bash(npm *)`) and a project plugin with
+   `Edit(/data/raw/**)`. Ask Claude to run `npm install x`, and to write `data/raw/a.csv` in the project's workspace;
+   each is denied with its reason. Then ask it to `cd` into the workspace in one command and write
+   `data/raw/b.csv` with `echo` in the next: note whether that is denied too.
 
 ## 10 · Write down the results
 

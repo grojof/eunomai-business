@@ -11,11 +11,12 @@
   "repositories": [
     "https://git.example.internal/team/example-project"
   ],
-  "_deny": "Paths the project protects in its workspaces, relative to the workspace and with /: * inside one folder, ** at any depth (folder/** for everything in a folder). The reason is what Claude tells the user.",
+  "_deny": "What the project denies in its own workspaces, written like Claude Code's permission rules: Edit(<path relative to the workspace>) or Bash(<command>, * for any text). The reason is what Claude tells the user; the examples are checked by the build. Reference: eunomai-business docs/hooks.md",
   "deny": [
     {
-      "paths": ["data/raw/**"],
-      "reason": "raw data comes from the nightly import; change the import, not the copy"
+      "rule": "Edit(/data/raw/**)",
+      "reason": "raw data comes from the nightly import; change the import, not the copy",
+      "examples": {"denied": ["data/raw/2026/a.csv"], "allowed": ["data/clean/a.csv", "docs/data/raw/a.md"]}
     }
   ],
   "_settings": "Values the project's tools read (addresses, names). Never a secret.",

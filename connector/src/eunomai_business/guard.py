@@ -11,12 +11,13 @@ Executables are refused everywhere Claude writes. Context and configuration rule
 the plugin does not get in the way of Cowork's own files elsewhere.
 """
 
+import argparse
 import json
 import os
 import re
 import sys
 
-from . import data_dir
+from . import data_dir, rules
 
 CONTEXT_FILES = {"agents.md", "claude.md"}
 # Claude's configuration, the repository's, the project's declaration, and continuous integration, which runs on
@@ -100,13 +101,17 @@ def shell_reason(command: str, in_workspace: bool = True) -> str | None:
     return None
 
 
-def _workspace_names() -> set[str]:
-    """The folder names of the workspaces the connector registered (the sandbox sees the same names)."""
+def _workspace_folders() -> list[str]:
+    """The folders of the workspaces the connector registered."""
     try:
-        registry = json.loads((data_dir() / "workspaces.json").read_text(encoding="utf-8"))
+        return list(json.loads((data_dir() / "workspaces.json").read_text(encoding="utf-8")))
     except (OSError, ValueError):
-        return set()
-    return {_parts(folder)[-1].lower() for folder in registry if _parts(folder)}
+        return []
+
+
+def _workspace_names() -> set[str]:
+    """Their folder names (the sandbox sees the same names)."""
+    return {_parts(folder)[-1].lower() for folder in _workspace_folders() if _parts(folder)}
 
 
 def _inside(text: str, names: set[str]) -> bool:
@@ -127,18 +132,39 @@ def in_the_cloud() -> bool:
             or bool(os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID", "").strip()))
 
 
-def decide(payload: dict) -> str | None:
+def decide(payload: dict, policy: list[dict] | None = None) -> str | None:
+    """Why a tool call may not run, or None: the file guard first, then the organization's deny rules (Bash rules
+    anywhere, Edit rules in workspaces)."""
     if in_the_cloud():
         return CLOUD
     tool = payload.get("tool_name")
     tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
+    found = None
     if tool in _WRITE_TOOLS:
         path = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
-        return reason(path, _inside(path, _workspace_names()))
-    if tool in _SHELL_TOOLS:
+        found = reason(path, _inside(path, _workspace_names()))
+    elif tool in _SHELL_TOOLS:
         command = str(tool_input.get("command") or "")
-        return shell_reason(command, _inside(command + " " + str(payload.get("cwd") or ""), _workspace_names()))
-    return None
+        found = shell_reason(command, _inside(command + " " + str(payload.get("cwd") or ""), _workspace_names()))
+    if found or not policy or tool not in _WRITE_TOOLS | _SHELL_TOOLS:
+        return found
+    cwd = str(payload.get("cwd") or "")
+    return (rules.deny_reason([r for r in policy if rules.parse(r["rule"])[0] == "Bash"], tool, tool_input, cwd, None)
+            or rules.deny_reason([r for r in policy if rules.parse(r["rule"])[0] == "Edit"], tool, tool_input, cwd,
+                                 _workspace_folders()))
+
+
+def load_policy(path: str | None) -> list[dict]:
+    """The organization's deny rules the build packaged (policy.json). Unreadable rules are an error, which the
+    tool-call hook's onFailure turns into a block; their examples were checked by the build."""
+    if not path:
+        return []
+    with open(path, encoding="utf-8") as handle:
+        policy = json.load(handle).get("deny", [])
+    errors = rules.problems(policy, examples=False)
+    if errors:
+        raise ValueError("eunomai-business: the packaged deny rules are invalid: " + "; ".join(errors))
+    return policy
 
 
 def _refuse_the_cloud(event: str | None) -> None:
@@ -153,9 +179,12 @@ def _refuse_the_cloud(event: str | None) -> None:
     sys.exit(0)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """SessionStart, UserPromptSubmit and PreToolUse hook. In the cloud everything is refused. Otherwise only tool
     calls are checked, and input it cannot read is let through: version_save still holds for workspaces."""
+    parser = argparse.ArgumentParser(description="eunomai-business's guard hook.")
+    parser.add_argument("--policy", help="the organization's deny rules (policy.json in the plugin)")
+    arguments = parser.parse_args(argv)
     try:
         payload = json.load(sys.stdin)
     except Exception:
@@ -163,7 +192,9 @@ def main() -> None:
     event = payload.get("hook_event_name") if isinstance(payload, dict) else None
     if in_the_cloud():
         _refuse_the_cloud(event)
-    found = decide(payload) if isinstance(payload, dict) and event in (None, "PreToolUse") else None
+    if not isinstance(payload, dict) or event not in (None, "PreToolUse"):
+        sys.exit(0)
+    found = decide(payload, load_policy(arguments.policy))
     if found:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                  "permissionDecisionReason": f"eunomai-business: {found}."}}))

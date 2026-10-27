@@ -26,10 +26,10 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     hooks = json.loads((tmp_path / "eunomai-business" / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
     assert list(hooks) == ["SessionStart", "UserPromptSubmit", "PreToolUse"]  # the guard alone, on three events
     assert all(len(entries) == 1 for entries in hooks.values())
-    assert all(e[0]["hooks"][0]["command"].endswith("eunomai-business-guard") for e in hooks.values())
+    guard_command = 'eunomai-business-guard --policy "${CLAUDE_PLUGIN_ROOT}/policy.json"'
+    assert all(e[0]["hooks"][0]["command"].endswith(guard_command) for e in hooks.values())
     guard = hooks["PreToolUse"][0]
     assert "Write" in guard["matcher"] and "mcp__workspace__bash" in guard["matcher"]
-    assert guard["hooks"][0]["command"].endswith("eunomai-business-guard")
     assert guard["hooks"][0]["onFailure"] == "block"  # a guard that cannot run stops the write
     assert not any(n.startswith("skills/validate-") for n in names)
     assert "skills/specialist/SKILL.md" in names and "skills/specialist/references/specify.md" in names
@@ -69,7 +69,19 @@ def test_built_text_files_use_lf(tmp_path):
             assert b"\r" not in path.read_bytes(), path
 
 
+def test_the_organizations_deny_rules_are_packaged_for_the_guard(tmp_path):
+    deny = [{"rule": "Bash(npm *)", "reason": "not here", "examples": {"denied": ["npm ci"]}}]
+    build.build(dict(EXAMPLE, deny=deny), tmp_path)
+    assert json.loads((tmp_path / "eunomai-business" / "policy.json").read_text(encoding="utf-8")) == {"deny": deny}
+    build.build({k: v for k, v in EXAMPLE.items() if k != "deny"}, tmp_path / "none")
+    assert json.loads((tmp_path / "none" / "eunomai-business" / "policy.json").read_text(encoding="utf-8")) == {
+        "deny": []}
+
+
 @pytest.mark.parametrize("change, message", [
+    (lambda c: c.update(deny=[{"rule": "Read(./.env)", "reason": "r"}]), "is not Bash(<command>)"),
+    (lambda c: c.update(deny=[{"rule": "Bash(npm *)", "reason": "r", "examples": {"allowed": ["npm ci"]}}]),
+     "which its examples allow"),
     (lambda c: c.update(typo_setting=1), "unknown setting 'typo_setting'"),
     (lambda c: c.update(connector_source="bundle"), 'connector_source must be "bundled" or "path"'),
     (lambda c: c.update(diagnostics="yes"), "diagnostics must be true or false"),

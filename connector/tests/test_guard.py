@@ -56,7 +56,7 @@ def test_the_sandbox_shell_is_checked_best_effort(command, denied):
 def run_hook(monkeypatch, capsys, payload) -> dict | None:
     monkeypatch.setattr(sys, "stdin", io.StringIO(payload if isinstance(payload, str) else json.dumps(payload)))
     with pytest.raises(SystemExit) as done:
-        guard.main()
+        guard.main([])
     assert done.value.code == 0
     out = capsys.readouterr().out
     return json.loads(out) if out.strip() else None
@@ -126,6 +126,31 @@ def test_the_hooks_cover_the_connectors_tools_and_nothing_else():
     assert hooks["PreToolUse"][0]["hooks"][0]["onFailure"] == "block"
     for event in ("SessionStart", "UserPromptSubmit"):  # a broken uv on the computer must not stop all of Cowork
         assert hooks[event][0]["hooks"][0]["onFailure"] == "continue"
+
+
+def test_the_organizations_rules_deny_after_the_file_guard(monkeypatch, capsys, tmp_path, workspaces):
+    from eunomai_business import data_dir
+
+    (data_dir() / "workspaces.json").write_text(json.dumps({str(workspaces / "Ventas"): {"main_branch": "main"}}))
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps({"deny": [{"rule": "Bash(npm *)", "reason": "Node is not used here"},
+                                           {"rule": "Edit(/data/raw/**)", "reason": "raw data is imported"}]}))
+
+    def ask(payload):
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        with pytest.raises(SystemExit):
+            guard.main(["--policy", str(policy)])
+        out = capsys.readouterr().out
+        return json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"] if out.strip() else None
+
+    assert "Node is not used here" in ask({"tool_name": "mcp__workspace__bash", "tool_input": {"command": "npm ci"}})
+    assert "raw data is imported" in ask({"tool_name": "Write",
+                                          "tool_input": {"file_path": "/sessions/a/mnt/Ventas/data/raw/x.csv"}})
+    assert ask({"tool_name": "Write", "tool_input": {"file_path": "/sessions/a/mnt/Otra/data/raw/x.csv"}}) is None
+    assert "kept by IT" in ask({"tool_name": "Write", "tool_input": {"file_path": "/sessions/a/mnt/Ventas/AGENTS.md"}})
+    policy.write_text(json.dumps({"deny": [{"rule": "Read(x)", "reason": "r"}]}))
+    with pytest.raises(ValueError):  # invalid packaged rules fail, and the tool-call hook's onFailure blocks
+        ask({"tool_name": "Bash", "tool_input": {"command": "ls"}})
 
 
 def test_the_hook_knows_the_workspaces_the_connector_registered(workspaces, monkeypatch):
