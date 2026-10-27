@@ -156,20 +156,26 @@ def _specialist_settings(workspace: str) -> dict:
     result = {"docs_language": values["docs_language"], "code_language": values["code_language"],
               "organization": {"context": values["organization_context"], "skills": values["organization_skills"]}}
     if workspace:
-        result["development"] = settings.development(gitops.origin(workspace))
         try:
-            result["project_context"] = gitops.project_context(workspace)
+            files = gitops.project_files(workspace)
         except support.Unreachable:
-            result["project_context"] = {"unavailable": "the server could not be reached; ask again later"}
+            unavailable = "the server could not be reached; ask again later"
+            result["development"] = {"code_allowed": False, "technologies": [], "reason": unavailable}
+            result["project_context"] = {"unavailable": unavailable}
+        else:
+            result["development"] = settings.development(files["declaration"]) if files["read"] else {
+                "code_allowed": False, "technologies": [],
+                "reason": "the project's main branch could not be read on the server, so neither could its declaration"}
+            result["project_context"] = files["context"]
     return result
 
 
 @mcp.tool()
 def specialist_settings(workspace: str = "") -> dict:
     """The organization's choices for the specialist: languages; the organization's context and the skills it
-    provides for given purposes; and, for a workspace, whether code may be written there, with which technologies
-    (empty list: any), and the project's context as IT keeps it on the main branch. For the work, these come before
-    anything personal in the session."""
+    provides for given purposes; and, for a workspace, whether code may be written there and with which technologies
+    (empty list: any), as the project declares it, and the project's context, both as IT keeps them on the main
+    branch. For the work, these come before anything personal in the session."""
     return _safe(_specialist_settings, workspace)
 
 

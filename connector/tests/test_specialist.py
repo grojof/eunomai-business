@@ -25,7 +25,7 @@ def configure(monkeypatch, **values):
 def test_defaults_deny_free_development(monkeypatch):
     monkeypatch.delenv("EUNOMAI_SPECIALIST", raising=False)
     assert settings.load()["docs_language"] == "en" and settings.load()["code_language"] == "en"
-    assert settings.development("https://git.example.test/team/app")["code_allowed"] is False
+    assert settings.development(None)["code_allowed"] is False
 
 
 def test_code_language_follows_the_docs_language(monkeypatch):
@@ -33,11 +33,36 @@ def test_code_language_follows_the_docs_language(monkeypatch):
     assert settings.load()["code_language"] == "es"
 
 
-def test_a_configured_project_allows_its_technologies(monkeypatch):
-    configure(monkeypatch, projects={"https://git.example.test/team/app": {"technologies": ["Python"]}})
-    allowed = settings.development("https://git.example.test/team/App.git")
-    assert allowed["code_allowed"] and allowed["technologies"] == ["Python"]
-    assert settings.development("https://git.example.test/team/other")["code_allowed"] is False
+def declared(text: str) -> dict:
+    return {"file": ".eunomai/project.toml", "from": "the main branch on the server", "text": text}
+
+
+def test_a_project_declares_its_technologies(monkeypatch):
+    monkeypatch.delenv("EUNOMAI_SPECIALIST", raising=False)
+    allowed = settings.development(declared('[development]\ncode = true\ntechnologies = ["Python"]\n'))
+    assert allowed == {"code_allowed": True, "technologies": ["Python"], "reason": "the project declares it"}
+
+
+@pytest.mark.parametrize("text, reason", [
+    ("[development]\ncode = false\n", "declares that no code is written here"),
+    ('[development]\ncode = "yes"\n', "is not valid: [development] takes code"),
+    ('[development]\ncode = true\ntechnologies = "Python"\n', "is not valid"),
+    ('[development]\ncode = true\ntechnologies = [""]\n', "is not valid"),
+    ("development = true\n", "is not valid"),
+    ("[development\ncode = true\n", "is not valid TOML"),
+    ('[development]\ncode = true\ntechnologie = ["Python"]\n', "unknown keys in [development] (technologie)"),
+])
+def test_the_project_decides_even_against_free_development(monkeypatch, text, reason):
+    configure(monkeypatch, free_development=True)
+    refused = settings.development(declared(text))
+    assert refused["code_allowed"] is False and reason in refused["reason"]
+
+
+def test_a_declaration_without_development_leaves_it_to_the_build(monkeypatch):
+    configure(monkeypatch, free_development=True, allowed_technologies=["Python"])
+    assert settings.development(declared('[test]\nbranch = "pruebas"\n'))["reason"] == "free development is enabled"
+    configure(monkeypatch)
+    assert settings.development(declared(""))["code_allowed"] is False
 
 
 def test_free_development_with_a_list(monkeypatch):

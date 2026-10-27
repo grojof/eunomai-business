@@ -15,7 +15,7 @@ the result receives work that is refined and ready to review, not a first draft.
 | **Base plugin** (this repository), for every business user | A local connector that signs in through the organization and handles workspaces, versions, save points and pull requests on the organization's git server, without Git installed; and the barriers around it | Built |
 | **Configuration by each organization's IT** | Sign-in providers, workspaces folder, support address, the specialist's languages, where code may be written and with what, dependency exceptions, the organization's context and skills, diagnostics; set once when building the plugin. Users install and sign in; nothing else | Built |
 | **Guided flows** | The specialist's way of working: strict, defined flows that help users say what they want, so the repository ends up with clear specifications, living docs and tested code, and the pull request shows a reviewer what was not specified or not validated. Plus a skill for IT to review the other skills users rely on | First version, tested once with a business user |
-| **Project plugins**, one per project | The project's knowledge, its repository and its guard rules, on top of the base plugin | Planned |
+| **Project plugins**, one per project | The project's own tools and the paths it protects, on top of the base plugin, made from a [template](templates/project-plugin/README.md) | Template built; the first project's plugin is next |
 
 It is the counterpart of [eunomai](https://github.com/grojof/eunomai): eunomai is flexible, for developers in
 Claude Code; eunomai-business is deliberately strict, for business users in Cowork.

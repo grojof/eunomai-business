@@ -80,7 +80,7 @@ def test_built_text_files_use_lf(tmp_path):
     (lambda c: c.update(docs_language="Spanish"), "docs_language must be a language code"),
     (lambda c: c.update(free_development="no"), "free_development must be true or false"),
     (lambda c: c.update(allowed_technologies="Python"), "allowed_technologies must be a list"),
-    (lambda c: c.update(projects={"http://git.example.test/a": {"technologies": []}}), "must be an https"),
+    (lambda c: c.update(projects={}), "each project declares it in .eunomai/project.toml"),
     (lambda c: c.update(dependency_exceptions=[{"package": "pypi:six"}]), 'needs "package"'),
     (lambda c: c.update(organization_context=["text"]), "organization_context must be text"),
     (lambda c: c.update(organization_skills=[{"skill": "brand:web"}]), "organization_skills must be a list"),

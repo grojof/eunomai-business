@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Decision 11 and the project-plugin template** (`templates/project-plugin/`): a local server for the
+  project's tools, a hook that only denies the paths the project protects in its own workspaces (told by
+  eunomai-business's register of workspaces, with Python's standard library only), a skill, and a build that
+  declares eunomai-business as a dependency and refuses obvious secrets.
+- **A project declares its own development:** `.eunomai/project.toml` on its main branch (`[development]`: `code`,
+  `technologies`), read from the server with `AGENTS.md` and protected like it. The `projects` setting is gone; a
+  build that still has it stops with a message. Unknown keys in `[development]`, or a main branch the connector
+  cannot read, allow no code.
 - **Decision 10:** eunomai-business holds what is valid for everyone; a project brings its own capabilities as a
   project plugin that depends on it, and its context in `AGENTS.md`. Per-project path rules in the base were
   rejected. H10 (`research/project-plugin/`): a project plugin with `dependencies: ["eunomai-business"]` loads

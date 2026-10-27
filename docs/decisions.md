@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, and projects that bring their own capabilities."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, and project plugins made from a template."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md, sources.md]
@@ -195,11 +195,71 @@ What a project needs beyond that belongs to the project:
 | Per-project path rules in eunomai-business's configuration, applied by its guard and its save | One rule in two homes (prose in `AGENTS.md`, a list in the build), a new base version for every project change, and still not a permission: the git server is |
 | One self-contained plugin per project, without eunomai-business | Each would repeat sign-in, git, barriers and the specialist, and drift from them |
 
-- **Consequence:** the `projects` setting (code allowed and technologies per repository) is the base's last
-  project-specific setting. It stays until the template for project plugins shows how a project can say it
-  allows code without the base listing it.
+- **Consequence:** the `projects` setting (code allowed and technologies per repository) was the base's last
+  project-specific setting; each project now declares that itself ([decision 11](#11--project-plugins-from-a-template-a-project-declares-its-own-development)).
 - **Consequence:** on Team, a project plugin is either Required for everyone (every user loads every project's
   plugin) or one members can turn off. Turning it off removes the project's capabilities and its extra hooks, not
   safety: eunomai-business stays Required, the tools carry their own limits and the git server keeps the
   permission.
-- **Next:** the template for project plugins, and where a project's permission to write code is declared.
+
+## 11 · Project plugins from a template; a project declares its own development
+
+Decided 2026-10-27.
+
+- **A template** (`templates/project-plugin/`, [how to use it](../templates/project-plugin/README.md)). IT copies it
+  into the project's repository, configures it, writes the project's tools in one file and builds the zip. What
+  decision 10 requires of a project plugin comes with it:
+  - it depends on eunomai-business;
+  - its hook only denies, and only in the workspaces eunomai-business registered as cloned from the project's
+    repositories;
+  - every tool starts from the project's own workspaces;
+  - the build refuses obvious secrets in its settings.
+- **A local server, not a remote one.** "Claude connects to your remote MCP server from Anthropic's cloud
+  infrastructure, rather than from your local device… This is true across every Claude client, including
+  claude.ai, Claude Desktop, Cowork"; such a server "must be reachable over the public internet"
+  ([custom connectors](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)).
+  A plugin's remote server is connected from its *Connectors* tab in Cowork
+  ([platform support](https://claude.com/docs/plugins/platform-support)); where that connection starts is not
+  documented separately. Internal servers stay off the internet, so the project's server runs on the user's
+  computer, like the connector: a plugin's local server "Loads when the Cowork session runs on your computer"
+  (same page). The support article's note that servers in `claude_desktop_config.json` "aren't available in
+  Cowork" is about that file, not about plugins.
+- **A project declares its own development** in `.eunomai/project.toml` on its main branch:
+
+  ```toml
+  [development]
+  code = true                                  # the specialist may write code here
+  technologies = ["Python", "HTML, CSS and JavaScript"]   # empty: any
+  ```
+
+  The connector reads it from the server in the same fetch as `AGENTS.md`, never from the folder; the guard keeps
+  Claude from writing `.eunomai/`, and a save puts it back. The declaration decides; a project without a
+  `[development]` section is left to the build's `free_development`; if the server cannot be reached, no code is
+  written. It replaces the `projects` setting: a new project no longer needs a new build of the base, and the
+  permission has one home, the project's repository, changed by IT through the git server.
+- **Real changes travel through the git server.** A project's tool prepares and checks a change in the workspace
+  (a migration, a field's definition); the user saves it as a version; IT reviews it; the project's CI applies it.
+- **Next: a profile that works in the test environment without waiting for IT.** A user whom IT puts in a team of
+  the git server updates the project's test branch with their version; the project's CI applies it to the test
+  environment at once, with credentials only the server holds; production still takes IT's review. Gitea limits
+  who may push, and who may force-push, to a protected branch by team (`push_whitelist_teams`,
+  `force_push_allowlist_teams`, Gitea 1.27.1 API). It will be declared in a `[test]` section of the same file, and
+  blocks only clear cases: production, deleting data, secrets, another project.
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| The project's tools as a remote server in its application | Reached from Anthropic's cloud: the application would have to be on the internet |
+| The `projects` setting in the base | A new build of the base for every project, and the permission in two homes |
+| Tools that write to the test database or deploy from the user's computer | Credentials on every computer that runs them, and a record that stays there |
+| For the profile that works without waiting: its own credentials on its computer | The same: a secret on a laptop. The test branch gives the same speed with the credentials on the server |
+
+- **Consequence:** a build whose configuration still has `projects` stops with a message; IT moves each entry to
+  that project's `.eunomai/project.toml`.
+- **Consequence:** a project plugin tells its workspaces by eunomai-business's register of workspaces (written on
+  the user's computer when each one is cloned, out of the sandbox's reach), never by `.git/config`, which the
+  sandbox can rewrite. The register's shape is now shared with project plugins. Like every hook, theirs prevent
+  mistakes; the permission is the git server's.
+- **Consequence:** a project plugin's hook runs with Python's standard library only, so it does not depend on
+  installing anything; set to block when it cannot run, a damaged project plugin stops writes until IT fixes it.

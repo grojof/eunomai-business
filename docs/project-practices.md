@@ -73,7 +73,8 @@ Real permissions live on the git server, not on the user's computer:
   review for some folders, use the hosting's code-owner rules (GitHub and GitHub Enterprise: `CODEOWNERS`;
   Gitea: check what your version offers).
 - **The file guard** ([architecture.md](architecture.md#hooks)) keeps business users' work from changing the
-  project's context (`AGENTS.md`, `CLAUDE.md`), Claude's configuration (`.claude/`, `.mcp.json`), continuous
+  project's context (`AGENTS.md`, `CLAUDE.md`), its declaration (`.eunomai/`), Claude's configuration (`.claude/`,
+  `.mcp.json`), continuous
   integration (`.gitea/`, `.github/`...) and files Windows runs (`.bat`, `.ps1`...): IT changes those through its
   own pull requests. It prevents mistakes; it does not replace the two points above.
 
@@ -84,6 +85,21 @@ touches, rules with their source, and what is out of bounds. The specialist read
 of every session, before anything personal in the user's session. Keep it short (it is cut at 20,000 characters);
 when the specialist proposes lines for it in a pull request, IT decides.
 
+## Where code may be written
+
+Whether the specialist may write code in the project, and with which technologies, the project declares in
+`.eunomai/project.toml` on `main`:
+
+```toml
+[development]
+code = true
+technologies = ["Python", "HTML, CSS and JavaScript"]   # empty: any
+```
+
+The connector reads it from the server, never from the user's folder, and business users' versions cannot change
+it. Protect it like `AGENTS.md`. Without a `[development]` section, the build's `free_development` decides
+([configuration](configuration.md#the-specialist)); a file that is not valid allows no code, and says why.
+
 ## Checks on the server
 
 What runs in a user's session is advisory for IT; what runs on the server is not:
@@ -92,8 +108,8 @@ What runs in a user's session is advisory for IT; what runs on the server is not
   (for example OSV-Scanner).
 - **Workflows from pull requests:** require approval before they run, so a version cannot change what runs on
   IT's runners with access to secrets.
-- **Protected files:** where the hosting offers it, require IT's review for `AGENTS.md`, `.claude/`, workflow
-  folders and lockfiles (code owners or protected file patterns).
+- **Protected files:** where the hosting offers it, require IT's review for `AGENTS.md`, `.eunomai/`, `.claude/`,
+  workflow folders and lockfiles (code owners or protected file patterns).
 
 ## Content
 
