@@ -1,0 +1,10 @@
+# Restart the application <name>.service when follow-branch@<name> makes a new release current, without giving
+# the agent any right over services: systemd watches the file, and restart-on-deploy@.service does the restart.
+[Unit]
+Description=Restart %i when a new release is current
+
+[Path]
+PathChanged=/var/lib/follow-branch/%i/deployed
+
+[Install]
+WantedBy=multi-user.target

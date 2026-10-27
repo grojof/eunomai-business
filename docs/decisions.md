@@ -204,67 +204,22 @@ What a project needs beyond that belongs to the project:
 
 ## 11 · Project plugins from a template; a project declares its own development
 
-Decided 2026-10-27.
-
-- **A template** (`templates/project-plugin/`, [how to use it](../templates/project-plugin/README.md)). IT copies it
-  into the project's repository, configures it, writes the project's tools in one file and builds the zip. What
-  decision 10 requires of a project plugin comes with it:
-  - it depends on eunomai-business;
-  - its hook only denies, and only in the workspaces eunomai-business registered as cloned from the project's
-    repositories;
-  - every tool starts from the project's own workspaces;
-  - the build refuses obvious secrets in its settings.
-- **A local server, not a remote one.** "Claude connects to your remote MCP server from Anthropic's cloud
-  infrastructure, rather than from your local device… This is true across every Claude client, including
-  claude.ai, Claude Desktop, Cowork"; such a server "must be reachable over the public internet"
-  ([custom connectors](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)).
-  A plugin's remote server is connected from its *Connectors* tab in Cowork
-  ([platform support](https://claude.com/docs/plugins/platform-support)); where that connection starts is not
-  documented separately. Internal servers stay off the internet, so the project's server runs on the user's
-  computer, like the connector: a plugin's local server "Loads when the Cowork session runs on your computer"
-  (same page). The support article's note that servers in `claude_desktop_config.json` "aren't available in
-  Cowork" is about that file, not about plugins.
-- **A project declares its own development** in `.eunomai/project.toml` on its main branch:
-
-  ```toml
-  [development]
-  code = true                                  # the specialist may write code here
-  technologies = ["Python", "HTML, CSS and JavaScript"]   # empty: any
-  ```
-
-  The connector reads it from the server in the same fetch as `AGENTS.md`, never from the folder; the guard keeps
-  Claude from writing `.eunomai/`, and a save puts it back. The declaration decides; a project without a
-  `[development]` section is left to the build's `free_development`; if the server cannot be reached, no code is
-  written. It replaces the `projects` setting: a new project no longer needs a new build of the base, and the
-  permission has one home, the project's repository, changed by IT through the git server.
-- **Real changes travel through the git server.** A project's tool prepares and checks a change in the workspace
-  (a migration, a field's definition); the user saves it as a version; IT reviews it; the project's CI applies it.
-- **A profile that works in the test environment without waiting for IT.** A project may declare a test branch
-  (`[test]`: `branch`, and `url` to see it). `version_to_test` replaces that branch with the user's version as last
-  saved, and it is applied to the test environment at once, with credentials that never reach users' computers
-  (best kept on the test server itself: a git server's workflows share the repository's secrets).
-  Who may do it is the git server's to say: Gitea limits who may push, and who may force-push, to a protected
-  branch by team (`push_whitelist_teams`, `force_push_allowlist_teams`, Gitea 1.27.1 API); for anyone else the push
-  is refused and the version goes through IT's review as usual. Production always takes IT's review. The
-  connector sends only a saved version that already has everything on main, so the test environment never loses
-  others' work, and checks it against main by the same rules as a save; the branch shows one version at a time, the
-  last one sent. Setting it up:
-  [project practices](project-practices.md#a-test-environment-without-waiting-for-it).
+| Decided | How | Why |
+|---|---|---|
+| Project plugins are made from a [template](../templates/project-plugin/README.md) | IT copies it into the project, configures it, writes the project's tools in one file and builds the zip | It brings decision 10's rules built in: the dependency on eunomai-business, a hook that only denies in the project's own workspaces, tools that start from those workspaces, no secrets in the build |
+| The project's tools run in a **local** server | The same way as the connector, on the user's computer | A remote server is reached from Anthropic's cloud, so the project's internal servers would have to be on the internet ([sources](sources.md#skills-and-organization-controls)) |
+| A project declares its own development in **`.eunomai/project.toml`** on its main branch | `[development]`: `code`, `technologies`; read from the server, never from the folder; protected like `AGENTS.md` | One home for the permission, kept by IT through the git server; a new project needs no new build of the base |
+| Real changes travel **through the git server** | A tool prepares and checks a change; the user saves it as a version; IT reviews it | No credentials to databases or deployments on users' computers |
+| A **test environment** users can update without waiting for IT | `[test]` declares a branch; `version_to_test` replaces it with the user's saved version; the test server pulls it ([agent](../templates/test-environment-agent/README.md)) | Speed where it is safe: the git server decides who may (a protected branch for a team), the credentials stay on the test server, production still takes review ([how to set it up](project-practices.md#a-test-environment-without-waiting-for-it)) |
 
 **Rejected:**
 
 | Alternative | Why not |
 |---|---|
-| The project's tools as a remote server in its application | Reached from Anthropic's cloud: the application would have to be on the internet |
+| The project's tools as a remote server in its application | The application would have to be on the internet |
 | The `projects` setting in the base | A new build of the base for every project, and the permission in two homes |
-| Tools that write to the test database or deploy from the user's computer | Credentials on every computer that runs them, and a record that stays there |
-| For the profile that works without waiting: its own credentials on its computer | The same: a secret on a laptop. The test branch gives the same speed with the credentials on the server |
+| Tools that write to the test database or deploy from the user's computer, even for a trusted profile | Credentials on laptops, and a record that stays there |
+| Applying the test branch from the git server's CI with repository secrets | Anyone who can push a branch can read those secrets ([sources](sources.md#outside-claude)) |
 
-- **Consequence:** a build whose configuration still has `projects` stops with a message; IT moves each entry to
-  that project's `.eunomai/project.toml`.
-- **Consequence:** a project plugin tells its workspaces by eunomai-business's register of workspaces (written on
-  the user's computer when each one is cloned, out of the sandbox's reach), never by `.git/config`, which the
-  sandbox can rewrite. The register's shape is now shared with project plugins. Like every hook, theirs prevent
-  mistakes; the permission is the git server's.
-- **Consequence:** a project plugin's hook runs with Python's standard library only, so it does not depend on
-  installing anything; set to block when it cannot run, a damaged project plugin stops writes until IT fixes it.
+How each part holds against misuse is in the template's and the agent's pages, and in
+[barriers](barriers.md).

@@ -1,10 +1,13 @@
 """Build the uploadable plugin from the organization's configuration.
 
     python tools/build.py                      # config.local.json -> dist/eunomai-business/ and .zip
+    python tools/build.py --variant tests      # config.local.json + variants/tests.json -> dist/tests/
+    python tools/build.py --all                # the configuration and every variant
     python tools/build.py --config other.json --out some/folder
 
-The configuration holds the organization's host names and public client IDs (no secrets); config.local.json and
-dist/ are git-ignored. Standard library only, so IT needs nothing but Python to build.
+The configuration holds the organization's host names and public client IDs (no secrets); a variant holds only what
+differs from it. config.local.json, variants/ and dist/ are git-ignored. Standard library only, so IT needs nothing
+but Python to build.
 """
 
 import argparse
@@ -26,6 +29,7 @@ SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowe
                    "dependency_exceptions", "organization_context", "organization_skills"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers"} | SPECIALIST_KEYS
+VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 MOVED = {"projects": "projects is no longer a setting: each project declares it in .eunomai/project.toml on its main "
                      "branch (docs/project-practices.md)"}
 PROVIDER_KEYS = {"authorize_url", "token_url", "client_id", "scopes", "redirect_uri", "userinfo_url", "login_field"}
@@ -187,21 +191,67 @@ def build(cfg: dict, out_dir: Path) -> Path:
     return archive_path
 
 
+def overlay(base: dict, changes: dict) -> dict:
+    """A variant's configuration: the base with the variant's settings on top. Objects (providers, a provider)
+    merge key by key; anything else is replaced."""
+    merged = dict(base)
+    for key, value in changes.items():
+        both = isinstance(value, dict) and isinstance(base.get(key), dict)
+        merged[key] = overlay(base[key], value) if both else value
+    return merged
+
+
+def _read(path: Path) -> dict | str:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return f"cannot read {path}: {exc}"
+    return value if isinstance(value, dict) else f"{path} must be a JSON object"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", type=Path, default=ROOT / "config.local.json")
     parser.add_argument("--out", type=Path, default=ROOT / "dist")
+    parser.add_argument("--variant", action="append", default=[],
+                        help="build variants/<name>.json on top of the configuration, into <out>/<name>/")
+    parser.add_argument("--all", action="store_true", help="build the configuration and every variant")
+    parser.add_argument("--variants", type=Path, default=ROOT / "variants", help="the variants' folder")
     args = parser.parse_args(argv)
     if not args.config.exists():
         print(f"missing {args.config}: copy config.example.json and fill it in", file=sys.stderr)
         return 1
-    cfg = json.loads(args.config.read_text(encoding="utf-8"))
-    errors = validate(cfg)
-    if errors:
-        print("configuration errors:\n  " + "\n  ".join(errors), file=sys.stderr)
+    base = _read(args.config)
+    if isinstance(base, str):
+        print(base, file=sys.stderr)
         return 1
-    archive = build(cfg, args.out)
-    print(f"built {archive} (diagnostics {'on' if cfg.get('diagnostics') else 'off'})")
+    if args.all and args.variant:
+        print("use --all or --variant, not both", file=sys.stderr)
+        return 1
+    names = sorted(p.stem for p in args.variants.glob("*.json")) if args.all else args.variant
+    builds = ([("", base, args.out)] if args.all or not names else [])
+    for name in names:
+        if not VARIANT.match(name) or name == "eunomai-business":  # that folder is the base package's
+            print(f"variant {name!r}: lowercase letters, digits and hyphens only, and not eunomai-business",
+                  file=sys.stderr)
+            return 1
+        changes = _read(args.variants / f"{name}.json")
+        if isinstance(changes, str):
+            print(changes, file=sys.stderr)
+            return 1
+        builds.append((name, overlay(base, changes), args.out / name))
+    failed = 0
+    for name, cfg, out in builds:  # every problem of every build at once, and only valid builds are written
+        errors = validate(cfg)
+        if errors:
+            failed += 1
+            print(f"configuration errors{f' in variant {name}' if name else ''}:\n  " + "\n  ".join(errors),
+                  file=sys.stderr)
+    if failed:
+        return 1
+    for name, cfg, out in builds:
+        archive = build(cfg, out)
+        print(f"built {archive} (diagnostics {'on' if cfg.get('diagnostics') else 'off'})")
     return 0
 
 
