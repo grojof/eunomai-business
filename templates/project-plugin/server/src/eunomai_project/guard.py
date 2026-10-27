@@ -10,6 +10,7 @@ matched ignoring case. Standard library only (see hook.py).
 
 import argparse
 import json
+import os
 import re
 import sys
 
@@ -87,8 +88,16 @@ def _why(relative: str, rules: list[dict]) -> str | None:
     return None
 
 
+# The project's server and its internal systems are on the user's computer and its network, which a Cowork task in
+# the cloud cannot reach: such a task is refused outright (CLAUDE_CODE_REMOTE is set in cloud sessions).
+CLOUD = ("this Cowork task runs in the cloud, and this project only works with tasks on the user's computer. Ask "
+         "the user to start a new task on this computer")
+
+
 def decide(payload: dict, config: dict) -> str | None:
     """Why the call may not run, or None."""
+    if os.environ.get("CLAUDE_CODE_REMOTE", "").strip().lower() == "true":
+        return CLOUD
     rules = config.get("deny") or []
     tool = payload.get("tool_name")
     tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}

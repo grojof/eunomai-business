@@ -20,8 +20,10 @@ and browser; hence the [barriers](barriers.md).
 
 - **Rejected:** a remote connector. Claude calls remote connectors from Anthropic's cloud, so internal servers
   would have to be published to the internet.
-- **Requires:** the desktop app open, Cowork tasks on the user's computer until check H16 shows the cloud works
-  too, and uv on every computer, deployed by IT ([decision 9](#9--it-provides-the-runtime-the-plugin-carries-everything-else)).
+- **Requires:** the desktop app open, Cowork tasks on the user's computer, and uv on every computer, deployed by
+  IT ([decision 9](#9--it-provides-the-runtime-the-plugin-carries-everything-else)). A task in the cloud cannot reach
+  the connector, the workspace folders or internal git servers, so the plugin refuses it
+  ([barriers](barriers.md#between-claudes-sandbox-and-the-computer)).
 
 ## 2 · Public sign-in clients, tokens encrypted per user
 

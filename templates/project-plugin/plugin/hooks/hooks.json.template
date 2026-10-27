@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__workspace__bash",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__workspace__bash|mcp__.*{{NAME}}.*",
         "hooks": [
           {
             "type": "command",

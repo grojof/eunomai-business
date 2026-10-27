@@ -11,6 +11,11 @@ import pytest
 from eunomai_project import guard
 
 
+@pytest.fixture(autouse=True)
+def on_the_users_computer(monkeypatch):
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+
+
 @pytest.mark.parametrize("glob, path, matches", [
     ("data/raw/**", "data/raw/a.csv", True), ("data/raw/**", "data/raw/2026/a.csv", True),
     ("data/raw/**", "data/other/a.csv", False), ("data/raw/**", "DATA/Raw/a.csv", True),
@@ -93,6 +98,14 @@ def test_the_hook_only_ever_denies(monkeypatch, capsys, tmp_path, config):
         "permissionDecisionReason": "Example project: the project keeps these as they are (data/raw/a.csv)."}
     for payload in (write("/sessions/x/mnt/Ventas/app.py"), "not json", "[1]"):
         assert run_hook(monkeypatch, capsys, tmp_path, config, payload) is None
+
+
+def test_a_task_in_the_cloud_is_refused_whatever_it_does(monkeypatch, capsys, tmp_path, config):
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+    for payload in (write("/sessions/x/mnt/Ventas/app.py"), {"tool_name": "mcp__plugin_example_example__ask"}):
+        reason = run_hook(monkeypatch, capsys, tmp_path, config, payload)["hookSpecificOutput"]
+        assert "in the cloud" in reason["permissionDecisionReason"]
+    assert guard.decide(write("/sessions/x/mnt/Ventas/app.py"), dict(config, deny=[])) is not None
 
 
 def test_an_unreadable_configuration_fails_so_the_hook_blocks(monkeypatch, tmp_path):

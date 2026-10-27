@@ -11,6 +11,11 @@ import pytest
 from eunomai_business import gitops, guard
 
 
+@pytest.fixture(autouse=True)
+def on_the_users_computer(monkeypatch):
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+
+
 @pytest.mark.parametrize("path, kind", [
     ("AGENTS.md", "context"), ("docs/CLAUDE.md", "context"), ("/sessions/x/mnt/app/agents.md", "context"),
     ("AGENTS.md.", "context"), (".claude/settings.json", "config"), ("app/.mcp.json", "config"),
@@ -78,6 +83,27 @@ def test_the_hook_denies_with_a_reason_claude_can_act_on(monkeypatch, capsys):
 def test_the_hook_lets_everything_else_through(monkeypatch, capsys, payload):
     monkeypatch.setattr(guard, "_workspace_names", lambda: {"ws"})
     assert run_hook(monkeypatch, capsys, payload) is None
+
+
+@pytest.mark.parametrize("payload", [
+    {"tool_name": "Write", "tool_input": {"file_path": "/mnt/ws/app/main.py"}},
+    {"tool_name": "mcp__workspace__bash", "tool_input": {"command": "ls"}},
+    {"tool_name": "mcp__plugin_eunomai-business_eunomai-business__workspace_status", "tool_input": {}},
+])
+def test_a_task_in_the_cloud_is_refused_whatever_it_does(monkeypatch, capsys, payload):
+    monkeypatch.setattr(guard, "_workspace_names", lambda: {"ws"})
+    monkeypatch.setenv("CLAUDE_CODE_REMOTE", "true")
+    decision = run_hook(monkeypatch, capsys, payload)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny" and "in the cloud" in decision["permissionDecisionReason"]
+
+
+def test_the_hook_covers_the_connectors_tools():
+    hooks = json.loads((Path(__file__).parents[2] / "plugin" / "hooks" / "hooks.json.template").read_text())
+    matcher = hooks["hooks"]["PreToolUse"][0]["matcher"]
+    import re
+    for tool in ("Write", "mcp__workspace__bash", "mcp__plugin_eunomai-business_eunomai-business__version_save"):
+        assert re.fullmatch(matcher, tool)
+    assert hooks["hooks"]["PreToolUse"][0]["hooks"][0]["onFailure"] == "block"
 
 
 def test_the_hook_knows_the_workspaces_the_connector_registered(workspaces, monkeypatch):

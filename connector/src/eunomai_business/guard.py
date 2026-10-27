@@ -12,6 +12,7 @@ the plugin does not get in the way of Cowork's own files elsewhere.
 """
 
 import json
+import os
 import re
 import sys
 
@@ -112,7 +113,21 @@ def _inside(text: str, names: set[str]) -> bool:
     return any(part.lower() in names for part in _parts(text.replace(" ", "/")))
 
 
+# The connector, the workspace folders and the git servers are on the user's computer and its network, which a
+# Cowork task in the cloud cannot reach: such a task is refused outright. Claude Code sets CLAUDE_CODE_REMOTE in
+# cloud sessions for hooks to read; the hook's onFailure also blocks when the hook cannot start there.
+CLOUD = ("this Cowork task runs in the cloud, and eunomai-business only works with tasks on the user's computer. "
+         "Ask the user to start a new task on this computer (turn off running new tasks in the cloud in Cowork's "
+         "settings)")
+
+
+def in_the_cloud() -> bool:
+    return os.environ.get("CLAUDE_CODE_REMOTE", "").strip().lower() == "true"
+
+
 def decide(payload: dict) -> str | None:
+    if in_the_cloud():
+        return CLOUD
     tool = payload.get("tool_name")
     tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
     names = _workspace_names()
