@@ -82,7 +82,7 @@ python tools\sbom.py
 | **Deploy it** (IT) | [Configuration](docs/configuration.md) · [Hooks and rules](docs/hooks.md) · [Run the validation](docs/validation/run-the-validation.md) · [Validation checks](docs/validation/hypotheses.md) |
 | **Trust it** (IT, security, data protection, auditors) | [Compliance](docs/compliance.md) · [Barriers](docs/barriers.md) · [Data on computers and servers](docs/data-on-computers.md) |
 | **Understand it** (IT, developers) | [Architecture](docs/architecture.md) · [Decisions](docs/decisions.md) · [Sources and evidence](docs/sources.md) · [Guided flows](docs/guided-flows.md) |
-| **Run a project repository** (repository owners) | [Good practices for project repositories](docs/project-practices.md) |
+| **Run a project repository** (repository owners) | [Good practices for project repositories](docs/project-practices.md) · [Recommended stack](docs/recommended-stack.md) |
 | **Build on it** (organizations) | [Extensions](docs/extensions.md) |
 | **Follow it** | [Changelog](CHANGELOG.md) |
 
