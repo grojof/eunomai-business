@@ -79,7 +79,7 @@ pull request, check the files, the accents and the author, and merge it.
 - Quit Desktop, open it, new task, same request.
 - After the token expires (about an hour): same request → `refreshed: true`.
 
-## 9 · The business-user test and the newer checks (H11–H17)
+## 9 · The business-user test and the newer checks (H11–H18)
 
 1. **Build without diagnostics**, with `organization_context` set, and put an `AGENTS.md` on `main` of a test
    repository (H15).
@@ -91,6 +91,10 @@ pull request, check the files, the accents and the author, and merge it.
 3. **The guard** (H17): ask Claude to write a `start.bat`, to edit `AGENTS.md`, and to do both through the shell;
    each is denied with a reason. Repeat on a computer without Git.
 4. **The cloud** (H16): with "Run Cowork in the cloud" on, repeat steps 6 and 7.
+5. **The test environment** (H18): declare `[test]` in the test repository and protect that branch for a team
+   ([project practices](../project-practices.md#a-test-environment-without-waiting-for-it)). As a member, after a
+   save, accept the specialist's offer to try it: the branch has the version and the workflow runs. Remove the user
+   from the team and try again: refused, and the answer says the version goes through review.
 
 ## 10 · Write down the results
 

@@ -26,7 +26,7 @@ from dulwich import porcelain
 from dulwich.client import get_transport_and_path
 from dulwich.config import ConfigFile, StackedConfig
 from dulwich.diff_tree import tree_changes
-from dulwich.errors import HangupException, NotTreeError
+from dulwich.errors import GitProtocolError, HangupException, NotTreeError
 from dulwich.graph import can_fast_forward, find_merge_base
 from dulwich.index import validate_path, validate_path_element_default, validate_path_element_ntfs
 from dulwich.merge import recursive_merge
@@ -35,7 +35,7 @@ from dulwich.objects import Blob, Commit, SubmoduleEncountered
 from dulwich.repo import Repo
 
 from . import auth, data_dir, guard
-from .support import NeedsIT, Unreachable
+from .support import NeedsIT, Unreachable, clean
 
 # Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
 # which made checkouts CRLF, and a global filter would run commands. Same behaviour with or without Git
@@ -504,16 +504,7 @@ def _check_paths(repo: Repo, changed: list[str]) -> None:
 def _check_saved(repo: Repo, parent: bytes | None, saved: bytes) -> None:
     """The tree actually committed, against the guard: anything that slipped in between the checks and the commit
     (a file written meanwhile) undoes the save point."""
-    found = set()
-    old_tree = repo[parent].tree if parent else None
-    for change in tree_changes(repo.object_store, old_tree, repo[saved].tree):
-        for entry, is_new in ((change.old, False), (change.new, True)):
-            if entry is None or entry.path is None:
-                continue
-            path = entry.path.decode("utf-8", "replace")
-            kind = guard.kind(path)
-            if not _valid(path) or kind in ("context", "config") or (kind == "executable" and is_new):
-                found.add(path)
+    found = _forbidden_changes(repo, parent, saved)
     if found:
         name = _branch(repo)
         repo.refs[f"refs/heads/{name}".encode()] = parent
@@ -594,6 +585,98 @@ def push(workspace: str) -> dict:
         web = origin.removesuffix(".git")
         return {"workspace": workspace, "branch": name, "pushed": True, "head": _head(repo),
                 "web_url": f"{web}/src/branch/{name}"}
+
+
+@_one_at_a_time
+def to_test(workspace: str, test_branch: str) -> dict:
+    """Put the current version, as last saved, on the project's test branch on the server, replacing what it had:
+    the branch shows one version at a time, and the project's CI applies it to the test environment. Whether this
+    user may update that branch is the git server's to say (a protected branch limited to a team)."""
+    current = _git_session()
+    with _repo(workspace) as repo:
+        name = _branch(repo)
+        protected = {branch.casefold() for branch in _protected(repo)}
+        if name is None or name.casefold() in protected:
+            raise PermissionError("only a version goes to the test environment, never the main branch")
+        if test_branch.casefold() in protected | {name.casefold()}:
+            raise PermissionError(f"{test_branch!r} cannot be the project's test branch")
+        if _dirty(repo):
+            return {"workspace": workspace, "status": "not_saved",
+                    "user_message": "Save your latest changes first: the test environment gets the version as last "
+                                    "saved."}
+        origin = _registered_origin(repo, workspace)
+        _check_host(origin, current)
+        client, path = get_transport_and_path(origin, **_remote(current))
+        fetched = _network(lambda: client.fetch(path.encode(), repo))
+        main = _main_branch(repo)
+        tip = fetched.refs.get(f"refs/heads/{main}".encode()) if main else None
+        if not tip:
+            return {"workspace": workspace, "status": "refused",
+                    "user_message": "The project's main branch could not be read on the server, so nothing was sent "
+                                    "to the test environment. Your version goes through IT's review as usual."}
+        head = repo.head()
+        if not can_fast_forward(repo, tip, head):  # the test environment would lose others' work
+            return {"workspace": workspace, "status": "behind_main",
+                    "user_message": "The project has changes your version does not have yet. Bring them in first "
+                                    "(workspace_update), save, and try again."}
+        # The version's refs live in .git, which the sandbox can write: what goes to the test environment is checked
+        # here too, against main, by the same rules as a save.
+        found = _forbidden_changes(repo, tip, head)
+        if found:
+            raise NeedsIT("This version has a file only IT changes, so it was not sent to the test environment. Your "
+                          "work is safe on this computer.", "a protected or executable file in a version for the "
+                          "test environment", _facts(repo, workspace, Paths=", ".join(sorted(found)[:20])))
+        out = io.BytesIO()
+        try:
+            result = _network(lambda: porcelain.push(
+                repo, origin, f"refs/heads/{name}:refs/heads/{test_branch}".encode(), outstream=out, errstream=out,
+                force=True, **_remote(current)))
+        except GitProtocolError as exc:
+            if "403" not in str(exc):
+                raise
+            return _test_refused(workspace, test_branch, {"server": clean(exc, 300)}, "Not allowed to push")
+        errors = {ref.decode(): clean(err, 300) for ref, err in (result.ref_status or {}).items() if err}
+        if errors:
+            # Gitea gives its reason as progress text; the ref's own status only says the hook declined.
+            return _test_refused(workspace, test_branch, {"refs": errors, "server": clean(out.getvalue(), 500)},
+                                 " ".join(errors.values()) + " " + out.getvalue().decode("utf-8", "replace"))
+        return {"workspace": workspace, "status": "sent", "branch": test_branch, "head": _head(repo),
+                "user_message": "Your version is on its way to the test environment: the project's checks apply it "
+                                "in a few minutes. It replaces whatever was being tried there."}
+
+
+def _test_refused(workspace: str, test_branch: str, server: dict, text: str) -> dict:
+    """The server's refusal, told by its reason: only "not allowed to push" is about the user's profile."""
+    said = text.lower()
+    if "force push" in said or "force-push" in said:
+        status, message = "refused", ("The test environment is not set to take a new version over the last one. "
+                                      "IT sets that up; meanwhile your version goes through IT's review as usual.")
+    elif "protected from changing file" in said or "protected file" in said:
+        status, message = "refused", ("Your version changes a file the project protects, so it cannot go to the test "
+                                      "environment. It goes through IT's review as usual.")
+    elif "not allowed to push" in said:
+        status, message = "not_allowed", ("Your profile does not update the test environment, so your version goes "
+                                          "through IT's review as usual. If you should have it, ask IT.")
+    else:
+        status, message = "refused", ("The server did not accept the version for the test environment. It goes "
+                                      "through IT's review as usual.")
+    return {"workspace": workspace, "status": status, "branch": test_branch, **server, "user_message": message}
+
+
+def _forbidden_changes(repo: Repo, old: bytes | None, new: bytes) -> set[str]:
+    """Paths between two commits that no save may carry: the project's context and configuration, a new
+    executable, a path not valid on Windows."""
+    found = set()
+    old_tree = repo[old].tree if old else None
+    for change in tree_changes(repo.object_store, old_tree, repo[new].tree):
+        for entry, is_new in ((change.old, False), (change.new, True)):
+            if entry is None or entry.path is None:
+                continue
+            path = entry.path.decode("utf-8", "replace")
+            kind = guard.kind(path)
+            if not _valid(path) or kind in ("context", "config") or (kind == "executable" and is_new):
+                found.add(path)
+    return found
 
 
 # --- the git hosting's API (Gitea for now; the hosting adapter comes later) ----------------------------------

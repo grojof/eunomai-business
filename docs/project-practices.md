@@ -100,6 +100,41 @@ The connector reads it from the server, never from the user's folder, and busine
 it. Protect it like `AGENTS.md`. Without a `[development]` section, the build's `free_development` decides
 ([configuration](configuration.md#the-specialist)); a file that is not valid allows no code, and says why.
 
+## A test environment without waiting for IT
+
+For users who change things often and need to see them working (a key user, an analyst), a project can give them
+a test environment they update themselves, while everything else still goes through IT's review:
+
+1. **Declare it** in `.eunomai/project.toml` on `main`:
+
+   ```toml
+   [test]
+   branch = "pruebas"                        # the branch the test environment follows
+   url = "https://app-test.example.internal" # where users see it (optional)
+   ```
+
+2. **Protect the branch** on the git server, limited to a team IT keeps. In Gitea (*Settings → Branches*, or the
+   API): enable push and the push allowlist with that team (`enable_push`, `enable_push_whitelist`,
+   `push_whitelist_teams`), and force push with its allowlist (`enable_force_push`, `enable_force_push_allowlist`,
+   `force_push_allowlist_teams`), since each version replaces the last.
+3. **Apply the branch to the test environment,** in one of two ways:
+
+   | | How | Where the test environment's credentials live |
+   |---|---|---|
+   | **The test environment follows the branch** (recommended) | A small job on the test server fetches the branch with a read-only deploy key, runs the migrations and restarts the application | On the test server only |
+   | **A workflow on push to the branch** | Gitea Actions runs the tests and applies the version | In the repository's secrets, which reach **every** workflow run in the repository, from any branch (Gitea has no secrets per environment: `environment` in a workflow is ignored) |
+
+   With a workflow, also add a branch protection rule that matches every branch (`*`), with
+   `protected_file_patterns` set to `.gitea/workflows/**;.github/workflows/**`: otherwise anyone who can push a
+   branch can change a workflow that reads those secrets. A workflow change merged into `main` then also has to
+   reach the test branch (IT pushes `main` to it), or every later version is refused for changing a protected file.
+4. **Production's credentials never go in this repository's secrets:** what reaches the test branch is the
+   version's own code. Production deploys from `main`, by IT's own pipeline.
+
+In Cowork the specialist offers it after a save whose tests pass (`version_to_test`). The connector sends only a
+saved version that already has everything on `main` and changes no file only IT changes. For someone outside the
+team the server refuses, and their version goes through review as usual. Verified on a real Gitea: H18.
+
 ## Checks on the server
 
 What runs in a user's session is advisory for IT; what runs on the server is not:

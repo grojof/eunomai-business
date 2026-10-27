@@ -65,7 +65,7 @@ hashes the supply-chain protection is lost.
 
 | Piece | Holds | Can |
 |---|---|---|
-| Extension (the connector) | The Python connector: sign-in, encrypted tokens, git, save, send, propose, the dependency audit, the guard's rules | Everything that reaches the repository, and every barrier that holds: protected main branch, no force, valid paths, protected files put back, executables refused at save, `.git` configuration checked, the audit appended to pull requests |
+| Extension (the connector) | The Python connector: sign-in, encrypted tokens, git, save, send, propose, the dependency audit, the guard's rules | Everything that reaches the repository, and every barrier that holds: protected main branch, no force (except to a declared test branch), valid paths, protected files put back, executables refused at save, `.git` configuration checked, the audit appended to pull requests |
 | Plugin | Text and configuration only: the skills and the guard hook; no code | Guide Claude, and stop a dangerous file before it lands on the user's disk |
 
 | Case | Risk | What still protects |
