@@ -18,8 +18,9 @@ import sys
 from . import data_dir
 
 CONTEXT_FILES = {"agents.md", "claude.md"}
-# Claude's configuration, the repository's, and continuous integration, which runs on IT's servers.
-CONFIG_FOLDERS = {".claude", ".git", ".gitea", ".github", ".forgejo", ".circleci", ".woodpecker"}
+# Claude's configuration, the repository's, the project's declaration, and continuous integration, which runs on
+# IT's servers.
+CONFIG_FOLDERS = {".claude", ".eunomai", ".git", ".gitea", ".github", ".forgejo", ".circleci", ".woodpecker"}
 CONFIG_FILES = {".mcp.json", ".gitlab-ci.yml", ".woodpecker.yml", ".drone.yml", "jenkinsfile", "azure-pipelines.yml",
                 "bitbucket-pipelines.yml"}
 # What Windows runs, installs or follows on a double click. Script sources that need an interpreter's file

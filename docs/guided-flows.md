@@ -97,9 +97,10 @@ left by reading the open change in the repository, so a new task picks up the sa
 
 ## What the organization decides
 
-Languages, where code may be written and with which technologies, dependency exceptions, and the organization's
-context and skills are set by IT when building the plugin ([configuration](configuration.md#the-specialist)); the
-project's context is an `AGENTS.md` IT keeps in the repository ([decision 8](decisions.md#8--the-projects-context-belongs-to-it)). Without permission to write
+Languages, dependency exceptions, and the organization's context and skills are set by IT when building the
+plugin ([configuration](configuration.md#the-specialist)). Where code may be written, and with which technologies,
+each project declares in its repository ([`.eunomai/project.toml`](project-practices.md#where-code-may-be-written)),
+and its context is an `AGENTS.md` IT keeps there ([decision 8](decisions.md#8--the-projects-context-belongs-to-it)). Without permission to write
 code, the specialist still analyses, shapes and specifies, and delivers that to IT as a proposal.
 
 ## To validate

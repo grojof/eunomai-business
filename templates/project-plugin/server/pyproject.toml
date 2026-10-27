@@ -1,0 +1,30 @@
+[project]
+name = "eunomai-project"
+version = "0.1.0"
+description = "A project plugin's local server and hook, next to eunomai-business (made from its template)."
+requires-python = ">=3.12"
+dependencies = ["mcp==2.3.0"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+
+[project.scripts]
+eunomai-project = "eunomai_project.server:main"
+eunomai-project-guard = "eunomai_project.guard:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eunomai_project"]
+
+[tool.uv]
+# The same rule as eunomai-business's connector: nothing younger than two weeks.
+exclude-newer = "14 days"
+# Rebuild when the source changes, not only when pyproject.toml does (uv caches local builds).
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning"]

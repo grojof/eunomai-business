@@ -200,7 +200,7 @@ Claude can act on:
 |---|---|---|---|
 | Executables | `.bat`, `.cmd`, `.ps1`, `.vbs`, `.lnk`, `.exe`, `.jar`, `.chm`, `.msi` and other files Windows runs, installs or follows on a double click | Everywhere Claude writes | The files are on the user's computer: a double click would run what the sandbox wrote |
 | Project context | `AGENTS.md`, `CLAUDE.md` | In workspaces | IT keeps them; the specialist reads the project's context from the server ([decision 8](decisions.md#8--the-projects-context-belongs-to-it)) |
-| Configuration | `.claude/`, `.mcp.json`, `.git/`, and continuous integration (`.gitea/`, `.github/`, `.forgejo/`, `.gitlab-ci.yml`...) | In workspaces | They configure Claude, the repository, or what runs on IT's servers |
+| Configuration | `.claude/`, `.mcp.json`, `.git/`, the project's declaration (`.eunomai/`), and continuous integration (`.gitea/`, `.github/`, `.forgejo/`, `.gitlab-ci.yml`...) | In workspaces | They configure Claude, the repository, or what runs on IT's servers |
 
 A path is a workspace's when one of its folders has a registered workspace's name. Names Windows treats as the
 same file count as protected too: trailing dots and spaces, alternate streams (`run.bat::x`), 8.3 short names.
@@ -237,4 +237,6 @@ its context in `AGENTS.md` ([decision 10](decisions.md#10--a-base-that-holds-for
 A project plugin's hook cannot undo eunomai-business's deny; its own hooks act only on its project's workspaces and
 its tools carry their own limits. Like every hook, its rules prevent mistakes; the permission is the git server's (see
 [project-practices.md](project-practices.md#who-can-read-and-change-what)). In Cowork it loads only while eunomai-business is
-on (H10, [research](../research/project-plugin/README.md)).
+on (H10, [research](../research/project-plugin/README.md)). It is made from a
+[template](../templates/project-plugin/README.md): a local server with the project's tools, a hook for the paths it
+protects, and a skill ([decision 11](decisions.md#11--project-plugins-from-a-template-a-project-declares-its-own-development)).

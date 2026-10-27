@@ -26,12 +26,12 @@ from dulwich import porcelain
 from dulwich.client import get_transport_and_path
 from dulwich.config import ConfigFile, StackedConfig
 from dulwich.diff_tree import tree_changes
-from dulwich.errors import HangupException
+from dulwich.errors import HangupException, NotTreeError
 from dulwich.graph import can_fast_forward, find_merge_base
 from dulwich.index import validate_path, validate_path_element_default, validate_path_element_ntfs
 from dulwich.merge import recursive_merge
 from dulwich.object_store import iter_tree_contents
-from dulwich.objects import Commit
+from dulwich.objects import Blob, Commit, SubmoduleEncountered
 from dulwich.repo import Repo
 
 from . import auth, data_dir, guard
@@ -56,6 +56,7 @@ _SAFE_CORE = {b"repositoryformatversion", b"filemode", b"bare", b"logallrefupdat
 _SAFE_SECTIONS = {b"remote": {b"url", b"fetch"},
                   b"branch": {b"remote", b"merge", b"description", b"vscode-merge-base", b"github-pr-owner-number"}}
 _CONTEXT_LIMIT = 20_000  # characters of the project's context handed to Claude
+DECLARATION = ".eunomai/project.toml"  # what IT declares for the project, read from main
 # A prototype opens in the user's browser: it must say, itself, that it loads nothing from other sites.
 _PROTOTYPE = re.compile(r"(^|/)openspec/changes/.+/prototype/[^/]+\.html?$", re.IGNORECASE)
 _CSP = re.compile(r"<meta[^>]+http-equiv=[\"']?content-security-policy[\"']?[^>]*default-src\s+'none'", re.IGNORECASE)
@@ -257,7 +258,8 @@ def _one_at_a_time(operation):
 
 
 # What the connector must remember about each workspace lives in its own per-user folder, not in .git: Claude's
-# sandbox can write .git, so nothing a barrier relies on can come from there.
+# sandbox can write .git, so nothing a barrier relies on can come from there. Project plugins read it too, to tell
+# their workspaces ({resolved folder: {"origin": ..., ...}}, templates/project-plugin): keep that shape.
 def _registry() -> dict:
     try:
         return json.loads((data_dir() / "workspaces.json").read_text(encoding="utf-8"))
@@ -959,32 +961,52 @@ def origin(workspace: str) -> str | None:
 
 
 @_one_at_a_time
-def project_context(workspace: str) -> dict | None:
-    """The project's context as the main branch on the server has it now (AGENTS.md, else CLAUDE.md, at the
-    repository's root): what IT wrote, never a copy edited in the folder or a reference rewritten in .git. None when
-    the project has none."""
+def project_files(workspace: str) -> dict:
+    """What IT keeps for the project, as the main branch on the server has it now, in one fetch: its context
+    (`context`: AGENTS.md, else CLAUDE.md, at the repository's root) and its declaration (`declaration`:
+    .eunomai/project.toml). Never a copy edited in the folder or a reference rewritten in .git. Each is None when
+    the project has none; `read` says whether the main branch could be read at all."""
+    found = {"context": None, "declaration": None, "read": False}
     current = _git_session()
     with _repo(workspace) as repo:
         main = _main_branch(repo)
         if not main:
-            return None
+            return found
         origin = _registered_origin(repo, workspace)
         _check_host(origin, current)
         client, path = get_transport_and_path(origin, **_remote(current))
         fetched = _network(lambda: client.fetch(path.encode(), repo))  # the server says which commit is main
         tip = fetched.refs.get(f"refs/heads/{main}".encode())
         if not tip:
-            return None
+            return found
         tree = repo[repo[tip].tree]
-        for name in ("AGENTS.md", "CLAUDE.md"):
+        found["read"] = True
+
+        def text_of(name: str) -> str | None:
+            # missing, a file where a folder should be, a submodule, or an object the server did not send
             try:
                 _, sha = tree.lookup_path(repo.object_store.__getitem__, name.encode())
-            except KeyError:
-                continue
-            text = repo[sha].data.decode("utf-8", errors="replace")
-            return {"file": name, "from": f"the {main} branch on the server", "text": text[:_CONTEXT_LIMIT],
-                    "truncated": len(text) > _CONTEXT_LIMIT}
-        return None
+                item = repo[sha]
+            except (KeyError, NotTreeError, SubmoduleEncountered):
+                return None
+            return item.data.decode("utf-8", errors="replace") if isinstance(item, Blob) else None
+
+        source = f"the {main} branch on the server"
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            text = text_of(name)
+            if text is not None:
+                found["context"] = {"file": name, "from": source, "text": text[:_CONTEXT_LIMIT],
+                                    "truncated": len(text) > _CONTEXT_LIMIT}
+                break
+        text = text_of(DECLARATION)
+        if text is not None:
+            found["declaration"] = {"file": DECLARATION, "from": source, "text": text}
+        return found
+
+
+def project_context(workspace: str) -> dict | None:
+    """The project's context as the main branch on the server has it now; None when the project has none."""
+    return project_files(workspace)["context"]
 
 
 def proposal_state(workspace: str) -> dict | None:

@@ -22,10 +22,12 @@ PLUGIN_SRC = ROOT / "plugin"
 CONNECTOR_SRC = ROOT / "connector"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache",
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov")
-SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies", "projects",
+SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies",
                    "dependency_exceptions", "organization_context", "organization_skills"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers"} | SPECIALIST_KEYS
+MOVED = {"projects": "projects is no longer a setting: each project declares it in .eunomai/project.toml on its main "
+                     "branch (docs/project-practices.md)"}
 PROVIDER_KEYS = {"authorize_url", "token_url", "client_id", "scopes", "redirect_uri", "userinfo_url", "login_field"}
 PROVIDER_REQUIRED = {"authorize_url", "token_url", "client_id", "redirect_uri", "userinfo_url"}
 LOOPBACK = {"127.0.0.1", "localhost"}
@@ -47,15 +49,6 @@ def validate_specialist(cfg: dict) -> list[str]:
         errors.append("free_development must be true or false")
     if not _strings(cfg.get("allowed_technologies", [])):
         errors.append("allowed_technologies must be a list of names")
-    projects = cfg.get("projects", {})
-    if not isinstance(projects, dict):
-        errors.append("projects must be an object: repository URL -> {technologies}")
-    else:
-        for url, project in projects.items():
-            if urlsplit(url).scheme != "https":
-                errors.append(f"projects: {url!r} must be an https repository URL")
-            if not isinstance(project, dict) or not _strings(project.get("technologies", [])):
-                errors.append(f"projects.{url}: technologies must be a list of names")
     context = cfg.get("organization_context", "")
     if not isinstance(context, str) or len(context) > 4000:
         errors.append("organization_context must be text of at most 4000 characters")
@@ -78,7 +71,7 @@ def validate_specialist(cfg: dict) -> list[str]:
 
 def validate(cfg: dict) -> list[str]:
     """Every problem in the configuration, so IT fixes them in one pass. Keys starting with "_" are comments."""
-    errors = [f"unknown setting {key!r}" for key in cfg if not key.startswith("_") and key not in KEYS]
+    errors = [MOVED.get(key, f"unknown setting {key!r}") for key in cfg if not key.startswith("_") and key not in KEYS]
     errors += validate_specialist(cfg)
     if cfg.get("connector_source", "bundled") not in ("bundled", "path"):
         errors.append('connector_source must be "bundled" or "path"')
