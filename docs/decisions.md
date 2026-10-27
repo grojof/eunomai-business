@@ -252,8 +252,8 @@ How each part holds against misuse is in the template's and the agent's pages, a
 
 | Decided | How | Why |
 |---|---|---|
-| Business users' applications use **one stack**: Python with FastAPI, PostgreSQL, and pages made on the server with Jinja2 and htmx | The [recommended stack](recommended-stack.md), the default for `technologies` | About 25 Python packages and 3–5 copied JavaScript files, against 200–590 npm packages for a React page; one language for IT to review |
-| **Exact numbers** end to end | `Decimal` from the database to the page; one formatter of the application's own | JavaScript only has floating point; formatting on the server keeps decimals exact without trusting the browser |
+| Business users' applications use **one stack**: Python with FastAPI, PostgreSQL, and pages made on the server with Jinja2 and htmx | The [recommended stack](recommended-stack.md), the recommended value for `technologies` | About 25 Python packages and 3–5 copied JavaScript files, against about 200 to 590 npm packages for a React page ([measured](sources.md#measured-on-real-installations)); one language for IT to review |
+| **Exact numbers** end to end | `Decimal` from the database to the page, with a decimal context above the data's precision; one formatter of the application's own; Excel rounded by the application's rules | JavaScript has no decimal type; formatting on the server keeps decimals exact without trusting the browser |
 | An **organization's layer** on top | Its plugin: brand variables (shadcn's names), Jinja macros with a catalogue, a skill | Every application looks like the organization's, and a component is one macro |
 | **React only for IT**, case by case | Its own decision and supply-chain controls | Rich clients are sometimes needed; business users' applications do not carry npm |
 
@@ -261,10 +261,10 @@ How each part holds against misuse is in the template's and the agent's pages, a
 
 | Alternative | Why not |
 |---|---|
-| React, TypeScript and shadcn/ui as the base | Hundreds of npm packages in a year of attacks on npm (one published 84 malicious versions of 42 TanStack packages); decimals to protect in the browser |
+| React, TypeScript and shadcn/ui as the base | Hundreds of npm packages, where the largest supply-chain attacks of 2025 and 2026 happened (one published 84 malicious versions of 42 TanStack packages); decimals to protect in the browser |
 | Two tracks of equal standing | Every component twice, and npm in every application |
-| Web Components as the shared layer | A library IT cannot maintain, or a paid one (the useful components of Web Awesome are Pro) |
-| Streamlit, NiceGUI, Reflex, Dash | Their own look and state model; Reflex installs npm underneath |
+| Web Components as the shared layer | A library IT cannot maintain, or a paid one (Web Awesome's data grid and charts are in its paid Pro edition) |
+| Streamlit, NiceGUI, Reflex, Dash | Their own look and state model; Reflex builds a Node front end underneath |
 
 - **Consequence:** the application and organization-plugin templates are built next, and validated on the first
   application that uses them ([open checks](recommended-stack.md#open-checks)).

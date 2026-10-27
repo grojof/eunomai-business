@@ -82,19 +82,6 @@ date is when they were checked. When a source and a measurement disagree, the me
 | Remote MCP servers (custom connectors) are reached "from Anthropic's cloud infrastructure, rather than from your local device", on every client including Cowork, and must be reachable from the public internet; in Cowork a plugin's remote server is connected from its *Connectors* tab, and a local one loads "when the Cowork session runs on your computer" | [Custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp), [Plugin platform support](https://claude.com/docs/plugins/platform-support) | 2026-10-27 | [Decision 11](decisions.md#11--project-plugins-from-a-template-a-project-declares-its-own-development) |
 | Organization sync from github.com, GitHub Enterprise Server and GitLab only; otherwise a zip upload | [Sync plugins from a repository](https://claude.com/docs/plugins/org-sync) | 2026-10-25 | Distribution (the organization's choice) |
 
-### Recommended stack
-
-| Fact | Official source | Checked | Relied on by |
-|---|---|---|---|
-| 84 malicious versions of 42 `@tanstack/*` packages were published on 2026-05-11 through the project's trusted-publisher binding, and removed 3 to 4.5 hours later | [TanStack postmortem](https://tanstack.com/blog/npm-supply-chain-compromise-postmortem) | 2026-10-27 | [Decision 13](decisions.md#13--one-recommended-stack-pages-made-on-the-server) |
-| htmx 2 "will continue to be supported indefinitely"; 4.0 stays on npm's `next` tag until early 2027 | [htmx 4.0.0 announcement](https://four.htmx.org/announcements/2026-08-28-htmx-4.0.0-is-released) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
-| Row grouping, aggregation, Excel export and the server-side row model are AG Grid Enterprise features | [AG Grid: community vs enterprise](https://www.ag-grid.com/javascript-data-grid/community-vs-enterprise/) | 2026-10-27 | Recommended stack |
-| Pydantic v2 serialises `Decimal` as a string in JSON | [Pydantic: standard library types](https://pydantic.dev/docs/validation/latest/api/pydantic/standard_library_types/) | 2026-10-27 | Recommended stack |
-| psycopg 3 returns `numeric` as `Decimal`; pyodbc returns `decimal` as `Decimal` | [psycopg: adaptation](https://www.psycopg.org/psycopg3/docs/advanced/adapt.html), [pyodbc: data types](https://github.com/mkleehammer/pyodbc/wiki/Data-Types) | 2026-10-27 | Recommended stack |
-| GitHub Packages hosts npm, RubyGems, Maven, Gradle, NuGet and containers, not Python | [Introduction to GitHub Packages](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages) | 2026-10-27 | Recommended stack |
-| Gitea's package registry includes PyPI and npm | [Gitea packages](https://docs.gitea.com/usage/packages/overview) | 2026-10-27 | Recommended stack |
-| Securing htmx: escaping, no user content in attributes or scripts, CSP | [Web security basics with htmx](https://htmx.org/essays/web-security-basics-with-htmx/) | 2026-10-27 | Recommended stack |
-
 ### Outside Claude
 
 | Fact | Official source | Checked | Relied on by |
@@ -108,6 +95,22 @@ date is when they were checked. When a source and a measurement disagree, the me
 | Gitea Actions secrets exist per user, organization and repository only | [Gitea secrets](https://docs.gitea.com/usage/actions/secrets) | 2026-10-27 | [A test environment](project-practices.md#a-test-environment-without-waiting-for-it) |
 | Pipelines that run unreviewed code: "executed on isolated nodes", each with only "the credentials it needs" (Poisoned Pipeline Execution) | [OWASP CICD-SEC-4](https://owasp.github.io/www-project-top-10-ci-cd-security-risks/CICD-SEC-04-Poisoned-Pipeline-Execution) | 2026-10-27 | [A test environment](project-practices.md#a-test-environment-without-waiting-for-it) |
 | GitOps: "Software agents automatically pull the desired state declarations from the source" | [OpenGitOps principles](https://opengitops.dev/) | 2026-10-27 | [Branch-following agent](../templates/test-environment-agent/README.md) |
+
+### Recommended stack
+
+| Fact | Official source | Checked | Relied on by |
+|---|---|---|---|
+| 84 malicious versions of 42 `@tanstack/*` packages were published on 2026-05-11 through the project's trusted-publisher binding, and removed about 3 to 4.5 hours later | [TanStack postmortem](https://tanstack.com/blog/npm-supply-chain-compromise-postmortem) | 2026-10-27 | [Decision 13](decisions.md#13--one-recommended-stack-pages-made-on-the-server) |
+| htmx's authors: htmx 2 "will continue to be supported indefinitely"; 4.0 stays on npm's `next` tag "until some point in early 2027" | [htmx 4.0.0 announcement](https://four.htmx.org/announcements/2026-08-28-htmx-4.0.0-is-released) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
+| Row grouping, aggregation, Excel export and the server-side row model are AG Grid Enterprise features | [AG Grid: community vs enterprise](https://www.ag-grid.com/javascript-data-grid/community-vs-enterprise/) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
+| Pydantic v2 serialises `Decimal` as a string in JSON | [Pydantic: standard library types](https://pydantic.dev/docs/validation/latest/api/pydantic/standard_library_types/) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
+| psycopg 3 returns `numeric` as `Decimal`; pyodbc returns `decimal` as `Decimal` | [psycopg: adaptation](https://www.psycopg.org/psycopg3/docs/advanced/adapt.html), [pyodbc: data types](https://github.com/mkleehammer/pyodbc/wiki/Data-Types) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
+| GitHub Packages hosts npm, RubyGems, Maven, Gradle, NuGet and containers, not Python | [Introduction to GitHub Packages](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
+| Gitea's package registry (since 1.17, unless packages are turned off) includes PyPI and npm | [Gitea packages](https://docs.gitea.com/usage/packages/overview) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
+| Securing htmx: escaping, no user content in attributes or scripts, CSP | [Web security basics with htmx](https://htmx.org/essays/web-security-basics-with-htmx/) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
+| Web Awesome's free core is MIT; Pro (paid, per seat) adds components such as its data grid and charts | [Web Awesome Pro](https://webawesome.com/pro) | 2026-10-27 | Decision 13 |
+| Excel stores numbers as double-precision floating point, 15 significant digits | [Microsoft Learn: floating-point arithmetic in Excel](https://learn.microsoft.com/en-us/troubleshoot/microsoft-365-apps/excel/floating-point-arithmetic-inaccurate-result) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
+| Python's default decimal context has a precision of 28 digits | [Python: decimal](https://docs.python.org/3/library/decimal.html) | 2026-10-27 | [Recommended stack](recommended-stack.md) |
 
 ## Measured on real installations
 
@@ -125,6 +128,8 @@ Full status in [validation](validation/hypotheses.md). Facts measured here that 
 | A `.mcpb` bundle declared inside a plugin is not extracted or started in Cowork (empty `.mcpb-cache/`) | 2026-10-26 ([MCPB research](../research/mcpb-uv/README.md)) |
 | Claude Desktop runs a `uv` extension as `<its uv> run <the manifest's arguments>`; uv then prefers a Python installed on the computer unless told `--managed-python` | 2026-10-26 ([MCPB research](../research/mcpb-uv/README.md)) |
 | The first business-user test went from a vague request to a pull request through every stage; its departures drove decisions 7 and 8 | 2026-10-24 (H11–H14) |
+| The recommended stack's server resolves to about 25 Python packages (fastapi, uvicorn, pydantic, sqlalchemy, alembic, psycopg[binary], jinja2, pyodbc, xlsxwriter, python-multipart; `uv pip compile`, Python 3.12; 61 with `fastapi[standard]`, which it avoids) | 2026-10-27 ([recommended stack](recommended-stack.md)) |
+| A minimal React page (Vite, React, TypeScript, Tailwind, shadcn/ui on Radix, TanStack Query and Table) has about 200 lockfile entries, about 590 with the usual linting, testing and client generation (`npm install --package-lock-only --ignore-scripts`) | 2026-10-27 (decision 13) |
 
 ## Research done
 
