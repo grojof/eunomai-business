@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from packaging.markers import InvalidMarker, Marker, UndefinedComparison, UndefinedEnvironmentName
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
 from . import auth, settings
 from .support import Unreachable
@@ -360,6 +361,7 @@ def _normalized(name: str) -> str:
 
 
 # Windows, Linux and macOS on the usual processors, with the CPython versions still supported upstream.
+_SUPPORTED_PYTHONS = ((3, 10), (3, 11), (3, 12), (3, 13), (3, 14), (3, 15))
 _COMPUTER_ENVIRONMENTS = [
     {"sys_platform": sys_platform, "platform_system": system, "os_name": os_name, "platform_machine": machine,
      "python_version": python, "python_full_version": f"{python}.0", "implementation_name": "cpython",
@@ -368,10 +370,25 @@ _COMPUTER_ENVIRONMENTS = [
     for sys_platform, system, os_name in (("win32", "Windows", "nt"), ("linux", "Linux", "posix"),
                                           ("darwin", "Darwin", "posix"))
     for machine in ("AMD64", "x86_64", "ARM64", "aarch64", "arm64")
-    for python in ("3.10", "3.11", "3.12", "3.13", "3.14", "3.15")]
+    for python in (f"{major}.{minor}" for major, minor in _SUPPORTED_PYTHONS)]
 
 # The Python a list was compiled for, from the header `uv pip compile` writes.
 _COMPILED_FOR = re.compile(r"^#.*--python-version[ =](\d+)\.(\d+)", re.MULTILINE)
+
+
+def _declared_python(folder: Path) -> tuple[int, int] | None:
+    """The lowest supported Python a `pyproject.toml` beside a list accepts (`requires-python`), if it says.
+    A minor version counts if any of its releases is accepted (`>=3.11.4` still runs on 3.11)."""
+    try:
+        project = tomllib.loads((folder / "pyproject.toml").read_text(encoding="utf-8")).get("project")
+        declared = project.get("requires-python") if isinstance(project, dict) else None
+        spec = SpecifierSet(declared) if isinstance(declared, str) and declared.strip() else None
+    except (OSError, ValueError, InvalidSpecifier, UnicodeDecodeError):
+        return None
+    if spec is None:
+        return None
+    return next((v for v in _SUPPORTED_PYTHONS
+                 if any(spec.contains(f"{v[0]}.{v[1]}.{patch}") for patch in (0, 99))), None)
 
 
 def _needed_on_a_computer(marker: str, python_from: tuple[int, int] = (3, 10)) -> bool:
@@ -448,7 +465,9 @@ def audit(folder: Path) -> dict:
         except (ValueError, UnicodeDecodeError):
             loose.append(f"{where}: not readable as a pinned list")
             continue
-        compiled_for += [(int(a), int(b)) for a, b in _COMPILED_FOR.findall(text)]
+        if eco == "pypi":  # each list counts with its own Python; one that says nothing, with every supported one
+            header = [(int(a), int(b)) for a, b in _COMPILED_FOR.findall(text)]
+            compiled_for.append(min(header) if header else _declared_python(file.parent) or _SUPPORTED_PYTHONS[0])
         loose += [f"{where}: {line}" for line in not_pinned]
         elsewhere += [f"{where}: {line}" for line in skipped]
         if not hashed:
@@ -457,10 +476,10 @@ def audit(folder: Path) -> dict:
             loose.append(f"{where}: pins nothing")
         for name, version in found:
             pins.setdefault((eco, name, version), []).append(where)
-    # a list compiled for a given Python may leave out what only older ones need; without that header, every
-    # supported Python counts
+    # a list compiled for a given Python (uv's header, or the project's `requires-python`) may leave out what only
+    # older ones need; when neither says, every supported Python counts
     missing, conditional = _unpinned_requirements([(n, v) for eco, n, v in pins if eco == "pypi"],
-                                                  min(compiled_for, default=(3, 10)))
+                                                  min(compiled_for, default=_SUPPORTED_PYTHONS[0]))
     loose += [f"missing from the pinned list: {item}" for item in missing]
     vulnerabilities = _vulnerable(list(pins))
     blocked = []
