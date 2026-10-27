@@ -28,7 +28,8 @@ refined, proven and ready to review.
 | Found | Stage |
 |---|---|
 | On the main branch, no open change | 1 Understand; a new version starts there |
-| A version whose pull request is open | Waiting for review: say so. A new request waits, or joins this pull request if it belongs to it (ask) |
+| A version whose pull request is open and `review.decision` is `changes_requested` | Rework: an open `<name>-review` change continues at its own stage; otherwise `references/deliver.md`, *After the review* |
+| A version whose pull request is open, any other `review.decision` | Waiting for review: say so, with any comments in plain words. A new request waits, or joins this pull request if it belongs to it (ask) |
 | A version whose pull request was closed without merging | Say so; ask whether to rework it or drop it |
 | A version with saved work, no open change, `proposal` null | Ask whether it was sent for review |
 | A version with nothing saved | 1 Understand, on this version |
@@ -104,7 +105,12 @@ lives (replace it, do not append history), and carry on.
   convenience. A package of any other kind cannot be checked: tell the user in one line that it needs IT, and
   list it in the pull request.
 - **Allowed technologies only,** as `specialist_settings` returns them.
-- **Business rules are not invented.** A rule cites its source, or it is an open question.
+- **Business rules are not invented.** A rule cites its source, or it is an open question. A choice the build
+  cannot avoid while a question is open (a calculation, who sees whose data) is built as a declared assumption, the
+  most restrictive one for data and access, and listed under *Not settled*; never a setting the code does not have.
+- **What the user approved changes only with them.** A business choice they approved (a requirement, a scenario,
+  the prototype) changes only after asking them in one line, a reviewer's request included. A change these rules
+  or the project's context require is explained to them, not put to a vote.
 - **No secrets** in files, ever. **No external resources** in what you make: no fonts, scripts, styles or
   analytics loaded from other sites; everything is served by the application itself.
 - **Other skills serve these rules.** Use the organization's skills for what `specialist_settings` lists them for.
