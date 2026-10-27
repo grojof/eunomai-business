@@ -11,6 +11,7 @@ but Python to build.
 """
 
 import argparse
+import importlib.util
 import json
 import re
 import shutil
@@ -28,7 +29,7 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies",
                    "dependency_exceptions", "organization_context", "organization_skills"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
-        "providers"} | SPECIALIST_KEYS
+        "providers", "deny"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 MOVED = {"projects": "projects is no longer a setting: each project declares it in .eunomai/project.toml on its main "
                      "branch (docs/project-practices.md)"}
@@ -38,6 +39,15 @@ LOOPBACK = {"127.0.0.1", "localhost"}
 EMAIL = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
 LANGUAGE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 EXCEPTION = re.compile(r"^(pypi|npm):[A-Za-z0-9@/._-]+$")
+
+
+def _rules():
+    """The connector's deny-rule module, loaded from its file: the build keeps to the standard library."""
+    source = CONNECTOR_SRC / "src" / "eunomai_business" / "rules.py"
+    spec = importlib.util.spec_from_file_location("eunomai_rules", source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _strings(value) -> bool:
@@ -77,6 +87,7 @@ def validate(cfg: dict) -> list[str]:
     """Every problem in the configuration, so IT fixes them in one pass. Keys starting with "_" are comments."""
     errors = [MOVED.get(key, f"unknown setting {key!r}") for key in cfg if not key.startswith("_") and key not in KEYS]
     errors += validate_specialist(cfg)
+    errors += _rules().problems(cfg.get("deny", []))  # each rule parses, has a reason, and meets its examples
     if cfg.get("connector_source", "bundled") not in ("bundled", "path"):
         errors.append('connector_source must be "bundled" or "path"')
     if cfg.get("connector_source") == "path" and not cfg.get("connector_path"):
@@ -182,6 +193,8 @@ def build(cfg: dict, out_dir: Path) -> Path:
         template.with_suffix("").write_text(text, encoding="utf-8", newline="\n")  # LF on every OS
         template.unlink()
 
+    policy = json.dumps({"deny": cfg.get("deny", [])}, indent=2, ensure_ascii=False) + "\n"
+    (out / "policy.json").write_text(policy, encoding="utf-8", newline="\n")  # the guard's deny rules
     _merge_hooks(out / "hooks", diagnostics)
     archive_path.unlink(missing_ok=True)
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:

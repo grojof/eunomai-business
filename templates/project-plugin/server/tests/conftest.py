@@ -25,5 +25,6 @@ def config(tmp_path, monkeypatch):
     (data / "eunomai-business" / "workspaces.json").write_text(json.dumps(registry), encoding="utf-8")
     monkeypatch.setenv("LOCALAPPDATA", str(data))
     return {"name": "example-project", "display_name": "Example project", "repositories": [REPOSITORY],
-            "deny": [{"paths": ["data/raw/**", "*.lock"], "reason": "the project keeps these as they are"}],
+            "deny": [{"rule": "Edit(/data/raw/**)", "reason": "the project keeps these as they are"},
+                     {"rule": "Edit(/*.lock)", "reason": "the project keeps these as they are"}],
             "settings": {"example_folder": "docs"}, "_root": root}

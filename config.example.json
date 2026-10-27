@@ -15,6 +15,19 @@
   "free_development": false,
   "allowed_technologies": [],
   "dependency_exceptions": [],
+  "_deny": "What the organization denies Claude, written like Claude Code's permission rules: Bash(<command>) anywhere (* for any text), Edit(<path relative to a workspace>) in workspaces. The reason is what Claude tells the user; the examples are checked by the build. Reference: docs/hooks.md",
+  "deny": [
+    {
+      "rule": "Bash(npm *)",
+      "reason": "Node packages are not among the organization's technologies",
+      "examples": {"denied": ["npm install left-pad", "cd app && npm ci"], "allowed": ["uv run pytest"]}
+    },
+    {
+      "rule": "Bash(pip install *)",
+      "reason": "dependencies go through uv and the project's lock file",
+      "examples": {"denied": ["pip install requests"], "allowed": ["uv add requests"]}
+    }
+  ],
   "_organization": "What the specialist should know about the organization (what it does, systems that already exist), and which of its skills to use for what. These come before anything personal in a user's session. See docs/configuration.md",
   "organization_context": "Example Corp makes industrial equipment. Existing systems: an ERP for orders and stock, and an HR system for people and absences.",
   "organization_skills": [

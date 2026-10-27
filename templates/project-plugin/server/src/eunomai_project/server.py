@@ -46,9 +46,9 @@ def build(config: dict) -> MCPServer:
 
     @tool
     def project_rules() -> list[dict]:
-        """The paths this project protects in its workspaces, and why. A write to one of them is denied: explain the
-        reason to the user and change the work, never work around it."""
-        return [{"paths": rule["paths"], "reason": rule["reason"]} for rule in config.get("deny", [])]
+        """What this project denies in its workspaces (files it protects, commands it does not run), and why. A
+        denied call stays denied: explain the reason to the user and change the work, never work around it."""
+        return [{"rule": rule["rule"], "reason": rule["reason"]} for rule in config.get("deny", [])]
 
     project_tools.register(tool, config)
     return mcp

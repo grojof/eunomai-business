@@ -219,9 +219,13 @@ keeps dangerous files off the computer; the save keeps them out of the repositor
 
 **Built: measurement hooks** (diagnostics only): they log each tool call and deny two guard-test markers (H9).
 
-**Planned:** default rules for common sensitive files (`.env`, keys, certificates, credential files), and
-organization rules added in the build configuration; organizations extend the defaults and cannot remove the fixed
-rules above.
+**Built: organization rules** (`deny` in the build's configuration). After the fixed rules above, the guard
+applies IT's rules, written like Claude Code's permission rules: `Bash(<command>)` anywhere, `Edit(<path>)` in
+workspaces. They add to the fixed rules and can never remove them ([hooks and rules](hooks.md),
+[decision 12](decisions.md#12--organization-rules-in-claude-codes-permission-syntax-applied-by-the-guard)).
+
+**Planned:** default rules for common sensitive files (`.env`, keys, certificates, credential files) in the
+example configuration.
 
 **Limits:**
 
@@ -242,5 +246,5 @@ A project plugin's hook cannot undo eunomai-business's deny; its own hooks act o
 its tools carry their own limits. Like every hook, its rules prevent mistakes; the permission is the git server's (see
 [project-practices.md](project-practices.md#who-can-read-and-change-what)). In Cowork it loads only while eunomai-business is
 on (H10, [research](../research/project-plugin/README.md)). It is made from a
-[template](../templates/project-plugin/README.md): a local server with the project's tools, a hook for the paths it
-protects, and a skill ([decision 11](decisions.md#11--project-plugins-from-a-template-a-project-declares-its-own-development)).
+[template](../templates/project-plugin/README.md): a local server with the project's tools, a hook for its deny rules,
+and a skill ([decision 11](decisions.md#11--project-plugins-from-a-template-a-project-declares-its-own-development)).
