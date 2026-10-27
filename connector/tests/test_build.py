@@ -89,3 +89,57 @@ def test_configuration_errors_are_reported(change, message):
     cfg = copy.deepcopy(EXAMPLE)
     change(cfg)
     assert any(message in error for error in build.validate(cfg)), build.validate(cfg)
+
+
+# --- variants: one base configuration, several packages ------------------------------------------------------
+
+def test_a_variant_changes_only_what_it_names():
+    merged = build.overlay(EXAMPLE, {"diagnostics": True, "providers": {"git": {"client_id": "test-client"}}})
+    assert merged["diagnostics"] is True and merged["providers"]["git"]["client_id"] == "test-client"
+    assert merged["providers"]["git"]["token_url"] == EXAMPLE["providers"]["git"]["token_url"]
+    assert merged["providers"]["directory"] == EXAMPLE["providers"]["directory"]
+    assert EXAMPLE["diagnostics"] is False  # the base is untouched
+
+
+def setup_variants(tmp_path, **variants) -> tuple[Path, Path]:
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps(EXAMPLE), encoding="utf-8")
+    folder = tmp_path / "variants"
+    folder.mkdir()
+    for name, changes in variants.items():
+        (folder / f"{name}.json").write_text(json.dumps(changes), encoding="utf-8")
+    return config, folder
+
+
+def test_every_variant_is_built_in_its_own_folder(tmp_path):
+    config, folder = setup_variants(tmp_path, tests={"diagnostics": True}, otra={"support_email": "it@otra.test"})
+    out = tmp_path / "dist"
+    assert build.main(["--config", str(config), "--variants", str(folder), "--out", str(out), "--all"]) == 0
+    assert (out / "eunomai-business.zip").exists()
+    assert (out / "tests" / "eunomai-business.zip").exists() and (out / "otra" / "eunomai-business.zip").exists()
+    with zipfile.ZipFile(out / "tests" / "eunomai-business.zip") as built:
+        assert any(name.startswith("skills/validate-") for name in built.namelist())  # diagnostics on
+    with zipfile.ZipFile(out / "eunomai-business.zip") as built:
+        assert not any(name.startswith("skills/validate-") for name in built.namelist())
+
+
+def test_one_variant_alone(tmp_path):
+    config, folder = setup_variants(tmp_path, tests={"diagnostics": True})
+    out = tmp_path / "dist"
+    assert build.main(["--config", str(config), "--variants", str(folder), "--out", str(out), "--variant",
+                       "tests"]) == 0
+    assert (out / "tests" / "eunomai-business.zip").exists() and not (out / "eunomai-business.zip").exists()
+
+
+@pytest.mark.parametrize("variants, argument, message", [
+    ({"tests": {"diagnostics": "yes"}}, "--all", "in variant tests"),
+    ({}, "--variant=missing", "cannot read"),
+    ({}, "--variant=../x", "lowercase letters, digits and hyphens"),
+    ({"tests": {"projects": {}}}, "--all", ".eunomai/project.toml"),
+    ({"eunomai-business": {"diagnostics": True}}, "--all", "not eunomai-business"),
+])
+def test_a_wrong_variant_builds_nothing(tmp_path, capsys, variants, argument, message):
+    config, folder = setup_variants(tmp_path, **variants)
+    out = tmp_path / "dist"
+    assert build.main(["--config", str(config), "--variants", str(folder), "--out", str(out), argument]) == 1
+    assert message in capsys.readouterr().err and not out.exists()

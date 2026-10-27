@@ -33,6 +33,9 @@ work, and sign-in, versions and the file guard are its own. Why this split:
    python build.py                         # -> dist\<name>.zip
    ```
 
+   Several packages from one configuration (a test git server, another set of settings): put in `variants/` a file
+   with only what differs, then `python build.py --variant <name>` (into `dist\<name>\`) or `--all`. Every build
+   is checked before any is written.
 6. Before publishing, IT checks the rules below, and reviews the skill with eunomai-business's `review-skills`.
 7. Publish it in *Organization settings → Plugins* next to eunomai-business, which must be **Required**: a member
    who could turn eunomai-business off would also turn off the project plugin, and then nothing guards their
@@ -50,23 +53,15 @@ From decision 10, checked by IT before every publish:
 | Its tools enforce their own limits | Every tool starts from `project.own_workspace`; the rest is the project's code, reviewed by IT |
 | No secrets in the plugin | `build.py` refuses obvious ones (a name that says so, credentials in an address, a bearer value); IT's review covers the rest |
 
-## Where things run, and why
+## How it works, and why
 
-- **The server runs on the user's computer**, started by IT's uv with its own Python 3.12, so it reaches internal
-  servers. A remote server named in the plugin would be reached from Anthropic's cloud, which needs the server on
-  the internet (decision 11). A Cowork session that runs in the cloud has no local servers, so no project tools.
-- **Real changes travel through the git server.** A tool prepares and checks a change in the workspace (a
-  migration, a field's definition); the user saves it as a version; IT reviews it; the project's CI applies it.
-  No credentials to a database or a deployment live on a user's computer.
-- **Rules prevent mistakes; permissions are the git server's.** A workspace is the project's when eunomai-business
-  registered it as cloned from one of the project's repositories; its register is on the user's computer, out of
-  the sandbox's reach, never the workspace's `.git/config`.
-- **What the hook checks.** The file tools always. The sandbox shell best effort, since a command is only text:
-  writing, moving, removing or unpacking into a protected path, written plainly. A protected folder is written
-  `folder/**`; `folder` alone protects only the folder's own entry.
-- **The hook needs nothing but Python.** uv runs `hook.py` with its own Python 3.12 and no environment, so it never
-  waits for, or fails on, installing the server's dependencies. It is set to `onFailure: "block"`: if it cannot run
-  (a damaged `project.json`), writes stop everywhere until IT fixes the plugin, never pass unchecked.
+| Part | How | Why |
+|---|---|---|
+| The server | Runs on the user's computer, started by IT's uv with its own Python 3.12 | It reaches internal servers without putting them on the internet. A Cowork session in the cloud has no local servers, so no project tools |
+| Real changes | A tool prepares and checks a change in the workspace; the user saves it as a version; IT reviews it | No credentials to databases or deployments on users' computers |
+| The project's workspaces | Those eunomai-business registered as cloned from the project's repositories (its register, out of the sandbox's reach) | Never `.git/config`, which the sandbox can rewrite |
+| The hook | The file tools always; the sandbox shell best effort (writing, moving, removing or unpacking into a protected path). A folder is protected as `folder/**` | Rules prevent mistakes; the permissions are the git server's |
+| The hook's runtime | `hook.py` with Python's standard library only, set to block if it cannot run | It never waits for installing anything; a damaged plugin stops writes until IT fixes it, never lets them through |
 
 ## Settings and dependencies
 

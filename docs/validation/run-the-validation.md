@@ -93,8 +93,9 @@ pull request, check the files, the accents and the author, and merge it.
 4. **The cloud** (H16): with "Run Cowork in the cloud" on, repeat steps 6 and 7.
 5. **The test environment** (H18): declare `[test]` in the test repository and protect that branch for a team
    ([project practices](../project-practices.md#a-test-environment-without-waiting-for-it)). As a member, after a
-   save, accept the specialist's offer to try it: the branch has the version and the workflow runs. Remove the user
-   from the team and try again: refused, and the answer says the version goes through review.
+   save, accept the specialist's offer to try it: the branch has the version, and the test server's agent applies
+   it within a couple of minutes. Remove the user from the team and try again: refused, and the answer says the version goes
+   through review.
 
 ## 10 · Write down the results
 

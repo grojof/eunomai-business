@@ -102,38 +102,29 @@ it. Protect it like `AGENTS.md`. Without a `[development]` section, the build's 
 
 ## A test environment without waiting for IT
 
-For users who change things often and need to see them working (a key user, an analyst), a project can give them
-a test environment they update themselves, while everything else still goes through IT's review:
+For users who change things often and need to see them working, a project can give them a test environment they
+update themselves; everything else still goes through IT's review. Declare it in `.eunomai/project.toml` on `main`:
 
-1. **Declare it** in `.eunomai/project.toml` on `main`:
+```toml
+[test]
+branch = "pruebas"                        # the branch the test environment follows
+url = "https://app-test.example.internal" # where users see it (optional)
+```
 
-   ```toml
-   [test]
-   branch = "pruebas"                        # the branch the test environment follows
-   url = "https://app-test.example.internal" # where users see it (optional)
-   ```
+In Cowork the specialist offers it after a save whose tests pass (`version_to_test`). What protects it is on the
+servers, so it holds whichever way someone tries, from Cowork or not:
 
-2. **Protect the branch** on the git server, limited to a team IT keeps. In Gitea (*Settings → Branches*, or the
-   API): enable push and the push allowlist with that team (`enable_push`, `enable_push_whitelist`,
-   `push_whitelist_teams`), and force push with its allowlist (`enable_force_push`, `enable_force_push_allowlist`,
-   `force_push_allowlist_teams`), since each version replaces the last.
-3. **Apply the branch to the test environment,** in one of two ways:
+| Layer | What IT sets up | What it prevents |
+|---|---|---|
+| 1. The test environment is not trusted | A server apart from production, with no route to it, test or anonymised data, credentials that open only the test environment | Unreviewed code reaching production or real data |
+| 2. The server pulls the branch | The [branch-following agent](../templates/test-environment-agent/README.md), with a read-only deploy key | The test environment's credentials being anywhere but on that server |
+| 3. The git server's CI only tests | Workflows on users' branches run without secrets, on runners that deploy nothing | A branch's code reading secrets in CI |
+| 4. The git server decides who updates the test branch | A protected branch only one team may push and force-push to: push and force-push allowlists (Gitea), a ruleset that team may bypass (GitHub), "Allowed to push and merge" and "Allowed to force push" (GitLab; groups need Premium) | Anyone else putting a version there, by any client |
+| 5. Production takes `main` only | The same agent following `main` on the production server; `main` changes only through reviewed pull requests | Unreviewed code in production |
+| 6. Least access | Write access only where needed; `AGENTS.md`, `.eunomai/` and workflow folders protected by code owners or protected file patterns | A valid account doing more than its job |
 
-   | | How | Where the test environment's credentials live |
-   |---|---|---|
-   | **The test environment follows the branch** (recommended) | A small job on the test server fetches the branch with a read-only deploy key, runs the migrations and restarts the application | On the test server only |
-   | **A workflow on push to the branch** | Gitea Actions runs the tests and applies the version | In the repository's secrets, which reach **every** workflow run in the repository, from any branch (Gitea has no secrets per environment: `environment` in a workflow is ignored) |
-
-   With a workflow, also add a branch protection rule that matches every branch (`*`), with
-   `protected_file_patterns` set to `.gitea/workflows/**;.github/workflows/**`: otherwise anyone who can push a
-   branch can change a workflow that reads those secrets. A workflow change merged into `main` then also has to
-   reach the test branch (IT pushes `main` to it), or every later version is refused for changing a protected file.
-4. **Production's credentials never go in this repository's secrets:** what reaches the test branch is the
-   version's own code. Production deploys from `main`, by IT's own pipeline.
-
-In Cowork the specialist offers it after a save whose tests pass (`version_to_test`). The connector sends only a
-saved version that already has everything on `main` and changes no file only IT changes. For someone outside the
-team the server refuses, and their version goes through review as usual. Verified on a real Gitea: H18.
+Deploying from the git server's CI with repository secrets is not recommended: anyone who can push a branch can
+read them, and Gitea has no secrets per environment ([sources](sources.md#outside-claude)).
 
 ## Checks on the server
 
