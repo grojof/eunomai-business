@@ -11,6 +11,7 @@ git-ignored.
 """
 
 import argparse
+import importlib.util
 import json
 import re
 import shutil
@@ -38,6 +39,15 @@ UV_PATH = re.compile(r"^[^\"'&|;<>^%$`!\r\n]+$")
 
 def _text(value, limit: int) -> bool:
     return isinstance(value, str) and value.strip() != "" and len(value) <= limit and "\n" not in value
+
+
+def _rules():
+    """The deny-rule module the hook uses, loaded from its file: the build keeps to the standard library."""
+    spec = importlib.util.spec_from_file_location("eunomai_project_rules",
+                                                  HERE / "server" / "src" / "eunomai_project" / "rules.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _relative_glob(value) -> bool:
@@ -68,19 +78,11 @@ def validate(cfg: dict) -> list[str]:
             if not _text(url, 300) or urlsplit(url).scheme != "https" or SECRET_VALUE.search(url):
                 errors.append(f"repositories: {url!r} must be an https address without credentials")
     deny = cfg.get("deny", [])
-    if not isinstance(deny, list):
-        errors.append("deny must be a list of {paths, reason}")
-    else:
-        for index, rule in enumerate(deny):
-            if not isinstance(rule, dict) or set(rule) != {"paths", "reason"}:
-                errors.append(f"deny[{index}] must have exactly paths and reason")
-                continue
-            if not isinstance(rule["paths"], list) or not rule["paths"] \
-                    or not all(_relative_glob(path) for path in rule["paths"]):
-                errors.append(f"deny[{index}].paths must be paths relative to the workspace, with / and without "
-                              "./ or ..")
-            if not _text(rule["reason"], 300):
-                errors.append(f"deny[{index}].reason must be one line of at most 300 characters")
+    errors += _rules().problems(deny)  # each rule parses, has a reason, and meets its examples
+    for index, rule in enumerate(deny if isinstance(deny, list) else []):
+        spec = rule.get("rule", "") if isinstance(rule, dict) and isinstance(rule.get("rule"), str) else ""
+        if spec.startswith("Edit(") and not _relative_glob(spec[5:-1].removeprefix("/")):
+            errors.append(f"deny[{index}]: Edit paths are relative to the workspace, with / and without ./ or ..")
     settings = cfg.get("settings", {})
     if not isinstance(settings, dict):
         errors.append("settings must be an object")

@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, and project plugins made from a template."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, and organization rules in Claude Code's permission syntax."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md, sources.md]
@@ -227,3 +227,23 @@ What a project needs beyond that belongs to the project:
 
 How each part holds against misuse is in the template's and the agent's pages, and in
 [barriers](barriers.md).
+
+## 12 · Organization rules in Claude Code's permission syntax, applied by the guard
+
+| Decided | How | Why |
+|---|---|---|
+| IT adds deny rules by **configuration**, in the base and in each project plugin | `deny`: `{rule, reason, examples}` in the build's configuration, packaged as data the guard reads ([how](hooks.md)) | No code to write or review for a common need; the build checks every rule against its examples |
+| Rules use **Claude Code's permission syntax**, `Bash(<command>)` and `Edit(<path>)` | The same wildcard and path semantics as [Anthropic's rules](https://code.claude.com/docs/en/permissions), tested against its own examples | One way to read a rule; they could move to `permissions.deny` unchanged if that ever reaches every Cowork task |
+| The **plugin's guard** applies them | `PreToolUse`, with `onFailure: "block"`, in a plugin made Required | It is the one control that reaches every Cowork task: managed settings reach only computers IT manages, server-managed settings are not read by Cowork, a plugin cannot carry permission rules, and policy mods are Claude Code only ([sources](sources.md#hooks)) |
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| Hook scripts of IT's own in the plugin | Each brings an interpreter, paths and shell differences between Windows and the cloud, the failures seen in Anthropic's open issues |
+| Prompt or agent hooks as a control | Not deterministic; agent hooks are experimental |
+| A central policy server called by hooks | A network dependency every tool call would wait on |
+| A rule language of our own | Two ways to read the same rule, and nothing to migrate to |
+
+- **Consequence:** the rules are guidance, not a boundary, as Anthropic says of its own: the boundaries stay the
+  connector's barriers, IT's review and the network ([limits](hooks.md#limits)).

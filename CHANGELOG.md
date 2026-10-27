@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Deny rules by configuration** (decision 12): `deny` in the build's configuration, in Claude Code's permission
+  syntax (`Bash(<command>)`, `Edit(<path>)`), with examples the build checks. eunomai-business's guard applies them
+  after the file guard (Bash rules anywhere, Edit rules in workspaces); a project plugin applies its own in its
+  workspaces, replacing its `{paths, reason}` rules. One rule module, shared and kept identical by a test. New page:
+  [hooks and rules](docs/hooks.md).
 - **Only tasks on the user's computer:** a Cowork task in the cloud is refused. Claude is told at the start, prompts
   are blocked, and every write, shell command and connector call is denied, from the variables Claude Code sets in
   cloud sessions. The hook's matcher is anchored, so it covers exactly the file tools, the shell and the plugin's

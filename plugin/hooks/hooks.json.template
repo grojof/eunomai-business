@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard --policy \"${CLAUDE_PLUGIN_ROOT}/policy.json\"",
             "timeout": 60,
             "onFailure": "continue"
           }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard --policy \"${CLAUDE_PLUGIN_ROOT}/policy.json\"",
             "timeout": 60,
             "onFailure": "continue"
           }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard --policy \"${CLAUDE_PLUGIN_ROOT}/policy.json\"",
             "timeout": 60,
             "onFailure": "block"
           }

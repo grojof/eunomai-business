@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from eunomai_project import guard
+from eunomai_project import guard, rules
 
 
 @pytest.fixture(autouse=True)
@@ -17,15 +17,9 @@ def on_the_users_computer(monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_REMOTE_SESSION_ID", raising=False)
 
 
-@pytest.mark.parametrize("glob, path, matches", [
-    ("data/raw/**", "data/raw/a.csv", True), ("data/raw/**", "data/raw/2026/a.csv", True),
-    ("data/raw/**", "data/other/a.csv", False), ("data/raw/**", "DATA/Raw/a.csv", True),
-    ("*.lock", "uv.lock", True), ("*.lock", "server/uv.lock", False), ("**/*.lock", "server/uv.lock", True),
-    ("**/*.lock", "uv.lock", True), ("docs/?.md", "docs/a.md", True), ("docs/?.md", "docs/ab.md", False),
-    ("a+b/[x].txt", "a+b/[x].txt", True),
-])
-def test_rule_paths(glob, path, matches):
-    assert bool(guard.pattern(glob).match(path)) == matches
+def test_the_template_carries_the_connectors_rules_unchanged():
+    connector = Path(__file__).parents[4] / "connector" / "src" / "eunomai_business" / "rules.py"
+    assert Path(rules.__file__).read_bytes() == connector.read_bytes()
 
 
 def write(path, tool: str = "Write") -> dict:
