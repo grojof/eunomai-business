@@ -1,10 +1,13 @@
 """Build a project plugin from its configuration.
 
     python build.py                          # config.json -> dist/<name>/ and dist/<name>.zip
+    python build.py --variant tests          # config.json + variants/tests.json -> dist/tests/
+    python build.py --all                    # the configuration and every variant
     python build.py --config other.json --out some/folder
 
-Standard library only, so IT needs nothing but Python to build. config.json holds no secret (the build refuses obvious
-ones) and is versioned with the project, so its rules are reviewed like the rest; dist/ is git-ignored.
+Standard library only, so IT needs nothing but Python to build. config.json and variants/ hold no secret (the build
+refuses obvious ones) and are versioned with the project, so their rules are reviewed like the rest; dist/ is
+git-ignored.
 """
 
 import argparse
@@ -23,6 +26,7 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "
 KEYS = {"name", "display_name", "description", "version", "uv", "repositories", "deny", "settings"}
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,48}[a-z0-9]$")
 DISPLAY_NAME = re.compile(r"^[\w .()-]{1,60}$")
+VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 # A setting the tools read must never be a secret: a secret on a user's computer is everyone's. These catch the
 # obvious ones (a name that says so, credentials in an address, a bearer value); IT's review covers the rest.
@@ -128,21 +132,63 @@ def build(cfg: dict, out_dir: Path) -> Path:
     return archive_path
 
 
+def overlay(base: dict, changes: dict) -> dict:
+    """A variant's configuration: the base with the variant's settings on top. Objects (settings) merge key by key;
+    anything else (repositories, deny) is replaced."""
+    merged = dict(base)
+    for key, value in changes.items():
+        both = isinstance(value, dict) and isinstance(base.get(key), dict)
+        merged[key] = overlay(base[key], value) if both else value
+    return merged
+
+
+def _read(path: Path) -> dict | str:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return f"cannot read {path}: {exc}"
+    return value if isinstance(value, dict) else f"{path} must be a JSON object"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", type=Path, default=HERE / "config.json")
     parser.add_argument("--out", type=Path, default=HERE / "dist")
+    parser.add_argument("--variant", action="append", default=[],
+                        help="build variants/<name>.json on top of the configuration, into <out>/<name>/")
+    parser.add_argument("--all", action="store_true", help="build the configuration and every variant")
+    parser.add_argument("--variants", type=Path, default=HERE / "variants", help="the variants' folder")
     args = parser.parse_args(argv)
-    try:
-        cfg = json.loads(args.config.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        print(f"cannot read {args.config}: {exc}", file=sys.stderr)
+    base = _read(args.config)
+    if isinstance(base, str):
+        print(base, file=sys.stderr)
         return 1
-    errors = validate(cfg) if isinstance(cfg, dict) else ["the configuration must be a JSON object"]
-    if errors:
-        print("configuration errors:\n- " + "\n- ".join(errors), file=sys.stderr)
+    if args.all and args.variant:
+        print("use --all or --variant, not both", file=sys.stderr)
         return 1
-    print(f"built {build(cfg, args.out)}")
+    names = sorted(p.stem for p in args.variants.glob("*.json")) if args.all else args.variant
+    builds = [("", base, args.out)] if args.all or not names else []
+    for name in names:
+        if not VARIANT.match(name) or name == base.get("name"):  # that folder is the base package's
+            print(f"variant {name!r}: lowercase letters, digits and hyphens only, and not the plugin's name",
+                  file=sys.stderr)
+            return 1
+        changes = _read(args.variants / f"{name}.json")
+        if isinstance(changes, str):
+            print(changes, file=sys.stderr)
+            return 1
+        builds.append((name, overlay(base, changes), args.out / name))
+    failed = False
+    for name, cfg, _ in builds:  # every problem of every build at once, and only valid builds are written
+        errors = validate(cfg)
+        if errors:
+            failed = True
+            print(f"configuration errors{f' in variant {name}' if name else ''}:\n- " + "\n- ".join(errors),
+                  file=sys.stderr)
+    if failed:
+        return 1
+    for _, cfg, out in builds:
+        print(f"built {build(cfg, out)}")
     return 0
 
 

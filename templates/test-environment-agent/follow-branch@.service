@@ -1,0 +1,44 @@
+# One instance per application: follow-branch@<name>.service, as its own user fb-<name>, with its settings in
+# /etc/follow-branch/<name>.env (root only: systemd reads it) and its deploy key handed over as a credential.
+# It runs without privileges and with no way to gain them, and writes only its own state folder. The repository's
+# code it applies runs with the same limits: on a test environment that code has not been reviewed.
+[Unit]
+Description=Follow a branch and apply it (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=fb-%i
+Group=fb-%i
+EnvironmentFile=/etc/follow-branch/%i.env
+Environment=HOME=%S/follow-branch/%i
+LoadCredential=deploy-key:/etc/follow-branch/%i.key
+LoadCredential=known-hosts:/etc/follow-branch/known_hosts
+StateDirectory=follow-branch/%i
+StateDirectoryMode=0750
+# The state folder is an argument, so nothing in the settings file can move it.
+ExecStart=/usr/local/lib/follow-branch/follow-branch.sh %S/follow-branch/%i
+TimeoutStartSec=20min
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM

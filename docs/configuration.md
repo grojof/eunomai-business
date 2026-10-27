@@ -23,6 +23,27 @@ plugin and sign in; they configure nothing. Why: [decision 4](decisions.md#4--co
 Nothing in the file is a secret: every sign-in client is public (no client secret, no certificate). It does
 contain internal host names, so keep the built zip inside the organization.
 
+### Several packages from one configuration
+
+A **variant** is a small file in `variants/` (git-ignored) with only what differs from `config.local.json`; objects
+such as `providers` merge key by key. For example `variants/tests.json`:
+
+```json
+{ "diagnostics": true, "providers": { "git": { "client_id": "<the test server's client>" } } }
+```
+
+```powershell
+python tools\build.py --variant tests   # -> dist\tests\eunomai-business.zip
+python tools\build.py --all             # the configuration and every variant, each in its own folder
+```
+
+| Good to know | |
+|---|---|
+| Checks | Every build is checked before any is written |
+| Limits | A variant adds or changes settings; to remove one, use another configuration (`--config`). It cannot be named `eunomai-business` |
+| What it is for | A test installation, a test server, another organization. Every variant is the plugin `eunomai-business`, and an organization publishes one; it is not a way to give some people a different base plugin |
+| Not for | Where code may be written: each project declares that ([project practices](project-practices.md#where-code-may-be-written)) |
+
 ## Settings
 
 | Key | Default | What it does |

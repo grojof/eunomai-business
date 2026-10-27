@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **The test environment pulls its branch:** a branch-following agent for any Linux server with systemd
+  (`templates/test-environment-agent/`): a read-only deploy key handed over as a credential, each commit fetched
+  into a throwaway repository, IT's own apply command without the key, the previous release kept live when an apply
+  fails or hangs, one unprivileged hardened user per application. The guide for IT now sets out six layers, for any git server;
+  deploying from CI with repository secrets is advised against.
+- **Build variants:** `variants/<name>.json` holds only what differs from `config.local.json`;
+  `python tools/build.py --variant <name>` or `--all` writes each package in its own folder, after checking all of
+  them.
 - **A test environment without waiting for IT:** a project may declare a test branch (`[test]` in
   `.eunomai/project.toml`). `version_to_test` replaces it with the user's saved version, which must already have
   everything on main; the project's CI applies it. The git server decides who may (a protected branch limited to a

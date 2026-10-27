@@ -32,3 +32,7 @@ jobs:
       - name: Test the project-plugin template
         working-directory: templates/project-plugin/server
         run: uv run --frozen --group dev --python 3.12 pytest -q
+      - name: Test the branch-following agent
+        if: runner.os == 'Linux'
+        working-directory: templates/test-environment-agent
+        run: python3 -m unittest discover -s tests -v

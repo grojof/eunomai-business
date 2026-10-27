@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart %i after a new release
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart %i.service
