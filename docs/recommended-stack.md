@@ -24,8 +24,8 @@ the facts behind them in [sources](sources.md#recommended-stack).
 | Reading another system's SQL Server | pyodbc with Microsoft's ODBC Driver 18 and a read-only user | `decimal` arrives as `Decimal` |
 | Pages | Jinja2 with escaping always on, htmx 2.0, Alpine in its CSP build | No Node; its authors support htmx 2 indefinitely |
 | Look | Tailwind CSS 4 with daisyUI 5, behind Jinja macros | Components free to customise, with colours from one theme; screens call macros, so an organization can replace this layer without touching a screen |
-| Tables | Made on the server (paged, sorted and filtered there); Tabulator where grouping or editing is needed | Tabulator groups for free; in AG Grid grouping is a paid feature. Exports go through Excel on the server |
-| Charts | Apache ECharts, one file | Apache licence, enough for dashboards and plans |
+| Tables | A native HTML table with daisyUI's classes; paged, sorted, filtered and grouped on the server | Only one page of rows reaches the browser, and a native table needs no keyboard code. Tabulator and AG Grid stay for an application that truly needs spreadsheet-like editing. Exports go through Excel on the server |
+| Charts | Chart.js, one file, always with a text summary and the data as a table | MIT and 210 KB, no violation of the Content Security Policy, and tooltips that fit the theme. ECharts is richer, at 1.1 MB, and its default tooltip breaks under the policy ([measured](sources.md#measured-on-real-installations)) |
 | Excel | XlsxWriter, on the server | Real number and date cells; Excel keeps 15 significant digits, so values are rounded first by the application's rules |
 | Numbers, dates, times | `Decimal` from the database to the page, with the decimal context raised above the data's precision (Python's default is 28 digits) and rounding only where a rule says; dates as dates; moments in UTC shown in the user's time zone; one formatter of the application's own | The browser never computes, so nothing passes through floating point |
 
@@ -101,7 +101,7 @@ In a project's [`.eunomai/project.toml`](project-practices.md#where-code-may-be-
 
 ```toml
 technologies = ["Python", "FastAPI", "Pydantic", "SQLAlchemy", "Alembic", "PostgreSQL", "pyodbc", "Jinja2", "htmx",
-                "Alpine.js", "Tailwind CSS", "daisyUI", "Tabulator", "Apache ECharts", "XlsxWriter", "HTML and CSS"]
+                "Alpine.js", "Tailwind CSS", "daisyUI", "Chart.js", "XlsxWriter", "HTML and CSS"]
 ```
 
 ## Open checks
@@ -109,7 +109,7 @@ technologies = ["Python", "FastAPI", "Pydantic", "SQLAlchemy", "Alembic", "Postg
 | Check | How |
 |---|---|
 | A decimal(38,20) value read from SQL Server reaches the page unchanged, and Excel rounded by the application's rules | Frozen real values, compared one by one |
-| A 50,000-row table: on the server versus Tabulator | Paging, sorting, export |
+| A 50,000-row table made on the server | Paging, sorting, export |
 | Claude builds three screens from the base application's catalogue | Count the defects; tune the checks in CI |
 | An organization clones the base application, adds its brand and clones it again for an application | Measure IT's effort |
 | Generating the stylesheet in Cowork under another organization's network rules ([H20](validation/hypotheses.md)) | In a local task there, download the executable, compare its hash and generate; it has run on one sandbox so far ([measured](sources.md#measured-on-real-installations)) |
