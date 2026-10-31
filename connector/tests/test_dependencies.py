@@ -4,12 +4,24 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
 import pytest
 
 CONNECTOR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(CONNECTOR.parent / "tools"))
+import update_dependencies  # noqa: E402
+
+
+@pytest.mark.parametrize("reasons, why", [
+    ("known vulnerabilities: GHSA-x", "fixes a known vulnerability"),
+    ("version 2.0 is newer than two weeks and is not needed to fix a vulnerability",
+     "the newest version the rules allow"),
+])
+def test_a_summary_says_why_a_package_moved(reasons, why):
+    assert f": {why} (" in update_dependencies.move_note("pkg", "2.0", "1.9", reasons)
 
 
 def test_direct_dependencies_are_pinned_exactly():
