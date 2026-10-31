@@ -33,7 +33,7 @@ packages = ["src/eunomai_business"]
 exclude-newer = "14 days"
 # ...unless every older version is vulnerable: then the fixed one wins. tools/update_dependencies.py maintains
 # these overrides from dependency_check, and drops them once the two-week window covers them.
-exclude-newer-package = { certifi = "2026-10-21T00:00:00Z" }
+exclude-newer-package = { certifi = "2026-10-18T16:22:06Z" }
 # Rebuild when the source changes, not only when pyproject.toml does (uv caches local builds).
 cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }]
 
