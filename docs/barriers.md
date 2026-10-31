@@ -72,18 +72,42 @@ The newest version that passes is recommended, with its runtime requirements. Th
 check allows.
 
 `dependency_audit` applies the same rules to every package a workspace pins, direct and indirect, in
-`requirements*.txt` or `package-lock.json` (version 2 or later), outside environments and archives and never
-through a link. It blocks:
+`requirements*.txt`, `package-lock.json` (version 2 or later), `uv.lock`, or `vendor.json`, outside environments and
+archives and never through a link. The rules name no library or framework: which technologies a project may use is
+`allowed_technologies`, and a package IT vetted despite the origin rules is in `dependency_exceptions`
+([configuration](configuration.md)). It blocks:
 
 - a requirement that is not an exact pin from the public index: ranges, URLs, local paths, other indexes or
   `--find-links`, and any `-r`/`-c` that does not name another pinned list in the same folder;
 - an npm entry not downloaded from the public registry under its own name;
-- a list that pins nothing, or leaves out a package a pinned one requires (Python; an npm lockfile is complete by
-  construction), including one required only on Windows, Linux or macOS, since `--require-hashes` then fails
-  there (markers are evaluated as PEP 508 says, with `packaging`). What a package requires only on other platforms,
+- a `uv.lock` entry that does not come from the public index, other than the project itself, so a workspace member
+  is refused too. Every entry has files, each with a hash that the registry published for that name and version:
+  anyone can upload to the index, so an address says nothing about which package a file is;
+- a `uv.lock` that no longer answers `pyproject.toml`: a package missing or at a version it does not accept, or a
+  requirement by address. A plain `uv sync` would write a new lockfile and install what the audit never saw;
+- a `tool.uv` setting outside a short list of those that change neither where a package comes from nor which one is
+  installed, and a `uv.toml` beside the lockfile;
+- a `vendor.json` entry that does not name a valid npm `package` (or whose name is not one) and a `version` published
+  there, or with a `url` other than https on a known code host or the npm registry. A file a project keeps in its
+  own tree meets the same rules as the published package of that version; the project checks the bytes itself, and
+  the host says nothing about who owns the file. `vendor.json` never counts as the list of what a project installs;
+- a list that pins nothing, or leaves out a package a pinned one requires (Python requirements lists; npm and uv
+  lockfiles are read as they are), including one required only on Windows, Linux or macOS, since
+  `--require-hashes` then fails there (markers are evaluated as PEP 508 says, with `packaging`). What a package requires only on other platforms,
   or only on Pythons older than the one a list was compiled for (`--python-version` in uv's header, or the
   `requires-python` of a `pyproject.toml` beside the list), is listed apart, not blocked;
-- declared packages (`pyproject.toml`, `package.json`...) without a pinned list.
+- declared packages (`pyproject.toml`, including its development groups, extras and dynamic dependencies,
+  `package.json`...) without a pinned list;
+- a `uv.lock` holding anything the audit does not read, and a pinned list that is a link: tools follow it.
+
+Every package in a `uv.lock` is audited, whatever marker leads to it: a marker in a lockfile cannot be told from one
+somebody edited, so a package only a browser installs needs IT's exception like any other. A package left out of a
+lockfile is not installed, so the application breaks but nothing unaudited arrives. The audit reads the lockfile and
+never runs uv, because `uv lock --check` can run a project's build backend on the user's computer. So it does not
+prove the lockfile is what uv would write today, and what `[build-system]` installs is outside it, as no lockfile
+holds it. `uv lock --check` belongs in the project's continuous integration, and the application installs with
+`--frozen`: a plain `uv run` or `uv sync` may write a new lockfile. A `uv.lock` in a subfolder says nothing about a
+project beside it, as with a requirements list.
 
 A project that installs no packages has nothing to check. Lists without hashes are noted. The specialist runs the
 audit before delivering, and the connector runs it again itself and appends the result to every pull request, so

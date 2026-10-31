@@ -214,8 +214,8 @@ def dependency_check(ecosystem: str, package: str, version: str = "") -> dict:
 
 @mcp.tool()
 def dependency_audit(workspace: str) -> dict:
-    """Check every package a workspace pins, direct and indirect (requirements*.txt, package-lock.json), by the same
-    rules as dependency_check. A project that installs packages pins all of them; run this before delivering."""
+    """Check every package a workspace pins, direct and indirect (requirements*.txt, package-lock.json, uv.lock,
+    vendor.json), by the same rules as dependency_check. A project that installs packages pins all of them; run this before delivering."""
     return _safe(lambda name: deps.audit(gitops.folder(name)), workspace)
 
 

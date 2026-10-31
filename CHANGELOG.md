@@ -2,13 +2,21 @@
 
 ## Unreleased
 
+- **`dependency_audit` reads `uv.lock` and `vendor.json`:** every package a uv project locks is audited, development
+  ones included, and each file's hash must be one the registry published for that name and version. A lockfile that
+  no longer answers `pyproject.toml`, a `tool.uv` setting outside a short list, and a `uv.toml` beside the lockfile
+  are refused. Files kept in the project's own tree meet the same rules as the published package, and do not hide
+  packages left unpinned. Nothing in the audit names a library. A package's source is now what it labels as its
+  code: `annotated-doc`, which FastAPI needs, was blocked because a `Changelog` address was taken for its repository.
+  Packages declared only for development, as extras or dynamically must now be pinned too, and a pinned list that
+  is a link is refused. `colorama` and `httpx2-jsfetch` need IT's exception.
 - **Decision 14, the visual layer and the organization's layer:** corrects the recommended stack, which refused
   Tailwind and Bootstrap for bringing a build or an npm tree. Neither needs an npm tree: Bootstrap is published
   compiled, and Tailwind's stylesheet is built by a standalone executable, with daisyUI's files. Tailwind with
   daisyUI is now the recommended layer, behind Jinja macros so an organization can replace it, with the generated
   CSS committed and colours only in the organization's theme. Bootstrap stays rejected, for its global styles. The organization's layer is a base
   application to clone (`business-app-base`), not a plugin holding components. The npm, Node and React rules do not
-  change. `dependency_audit` does not read `uv.lock` or `vendor.json` yet. To validate in Cowork: H20, H21.
+  change. To validate in Cowork: H20, H21.
 - **Decision 13, one recommended stack:** Python with FastAPI, PostgreSQL, and pages made on the server with Jinja2
   and htmx; exact decimals end to end; an organization's layer of brand variables and Jinja macros; React only for
   IT. New page: [recommended stack](docs/recommended-stack.md). The templates follow.

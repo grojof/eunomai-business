@@ -18,7 +18,8 @@ your sandbox.
   `dependency_check`). `<version>` is the Python IT runs, from the project's context or the allowed technologies;
   if neither says, the sandbox's, and the question goes under *Not settled*. The list holds every package, direct
   and indirect, at its exact version, with its hashes and the markers of the platforms that need it; `pip freeze`
-  lists only what the sandbox (Linux) installed, and fails on Windows. JavaScript: `package-lock.json`.
+  lists only what the sandbox (Linux) installed, and fails on Windows. A project that already locks with `uv.lock`
+  keeps it and runs `uv lock`. JavaScript: `package-lock.json`. Files kept in the project's own tree: `vendor.json`.
 - Then `dependency_audit(workspace)`: its `verdict` must be `allowed`. If it blocks a version, pin the
   `recommended` one from `dependency_check` in the `.in` file (newer than two weeks only when it fixes a
   vulnerability: add `--exclude-newer-package <name>=<YYYY-MM-DD of today>`) and compile again. A package it blocks that the
