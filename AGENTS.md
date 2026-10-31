@@ -22,7 +22,7 @@ How to work in this repository, for people and AI assistants alike. What the pro
 | Business users never install or run anything; IT provides the runtime (uv) | Decisions 6, 7, 9 |
 | Host-agnostic: GitHub or Gitea, any Linux server, any identity proxy | [Architecture](docs/architecture.md#what-is-tied-to-a-git-hosting) |
 | A base for every organization; projects bring their capabilities in project plugins from the template | Decisions 10, 11 |
-| One recommended stack for business users' applications; React only for IT | Decision 13, [recommended stack](docs/recommended-stack.md) |
+| One recommended stack for business users' applications; React only for IT | Decisions 13, 14, [recommended stack](docs/recommended-stack.md) |
 | Rules in Claude Code's permission syntax, applied by the guard; no scripts of IT's own, no prompt or agent hooks, no rule language of our own | Decision 12, [hooks and rules](docs/hooks.md) |
 | The guard only denies; tool-call hooks block when they fail, prompt and session hooks continue; matchers are anchored | [Hooks and rules](docs/hooks.md) |
 
