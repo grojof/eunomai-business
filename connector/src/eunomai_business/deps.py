@@ -632,6 +632,6 @@ def audit(folder: Path) -> dict:
         result["not_installed_on_computers"] = elsewhere
     if undeclared:  # vendored files are not a list of what the project installs
         result["reasons"] = ["packages are declared but not pinned: requirements*.txt, package-lock.json or uv.lock"]
-    elif not files:
+    elif not files and not loose:
         result.update(verdict="allowed", note="the project installs no packages: nothing to check")
     return result

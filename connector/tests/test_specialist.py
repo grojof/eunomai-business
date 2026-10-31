@@ -838,13 +838,10 @@ def test_a_real_lockfile_has_no_table_the_audit_refuses():
 
 
 @pytest.mark.parametrize("name", ["uv.lock", "requirements.txt", "vendor.json"])
-def test_a_pinned_list_that_is_a_link_is_refused(tmp_path, name):
-    (tmp_path / "elsewhere").write_text("version = 1\n")
+def test_a_pinned_list_that_is_a_link_is_refused(monkeypatch, tmp_path, name):
+    (tmp_path / name).write_text("version = 1\n")
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "app"\ndependencies = []\n')
-    try:
-        (tmp_path / name).symlink_to(tmp_path / "elsewhere")
-    except OSError:
-        pytest.skip("this account cannot create links")
+    monkeypatch.setattr(deps.Path, "is_symlink", lambda path: path.name == name)  # not every account can create one
     result = deps.audit(tmp_path)
     assert result["verdict"] == "blocked" and result["not_pinned"] == [f"{name}: a link, not a pinned list"]
 
