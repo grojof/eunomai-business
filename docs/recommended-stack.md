@@ -61,7 +61,7 @@ An organization does not install its layer: it clones it.
 | Piece | Owner | Contents |
 |---|---|---|
 | eunomai-business | The product, the same for every organization | This page as the recommended value for `technologies`, the guard and its [deny rules](hooks.md) |
-| `business-app-base` | A separate repository, the same for every organization | A demo application: Jinja macros with a catalogue page, the rules for assistants in its `AGENTS.md`, and the tests that hold them |
+| `business-app-base` | A separate repository, the same for every organization | A demo application: Jinja macros with a gallery of every component, the rules for assistants in its `AGENTS.md`, and the tests that hold them |
 | The organization's base | Its IT | A clone of `business-app-base`, made once, with its brand added: daisyUI's theme (colours, radius) and logos |
 | An application | Its project | A clone of the organization's base with the demo deleted |
 | A project plugin | IT, per project | The project's tools and rules ([decision 11](decisions.md#11--project-plugins-from-a-template-a-project-declares-its-own-development)) |
