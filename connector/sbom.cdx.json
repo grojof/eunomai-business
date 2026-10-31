@@ -128,28 +128,28 @@
   },
   {
    "type": "library",
-   "bom-ref": "certifi-5@2026.10.19",
+   "bom-ref": "certifi-5@2026.10.18",
    "name": "certifi",
-   "version": "2026.10.19",
-   "purl": "pkg:pypi/certifi@2026.10.19",
+   "version": "2026.10.18",
+   "purl": "pkg:pypi/certifi@2026.10.18",
    "externalReferences": [
     {
      "type": "distribution",
-     "url": "https://files.pythonhosted.org/packages/a6/bd/1436c50cc46699de0230fbaacc1d1de7bfec413176099949e9d5112e88f2/certifi-2026.10.19.tar.gz",
+     "url": "https://files.pythonhosted.org/packages/7e/eb/a2aa1ac3ea30dd3f30ca57f40232138b6b0040719316ecb85daf61167771/certifi-2026.10.18.tar.gz",
      "hashes": [
       {
        "alg": "SHA-256",
-       "content": "035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae"
+       "content": "b9995d97b64d0431a5af837d8ca8cd6238104d1f319f04bd93ea43124d6c861e"
       }
      ]
     },
     {
      "type": "distribution",
-     "url": "https://files.pythonhosted.org/packages/c4/51/29046e48f693c54e5b7412216d447a1d8362c9653148d98c02cdf65fa733/certifi-2026.10.19-py3-none-any.whl",
+     "url": "https://files.pythonhosted.org/packages/08/ba/95dd616042484f7c83a06974388b37b837732740ee70bc5dc715b5fcd55a/certifi-2026.10.18-py3-none-any.whl",
      "hashes": [
       {
        "alg": "SHA-256",
-       "content": "42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b"
+       "content": "73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62"
       }
      ]
     }
@@ -5290,7 +5290,7 @@
    "ref": "attrs-4@26.1.0"
   },
   {
-   "ref": "certifi-5@2026.10.19"
+   "ref": "certifi-5@2026.10.18"
   },
   {
    "ref": "cffi-6@2.1.1",
@@ -5331,7 +5331,7 @@
   {
    "ref": "httpcore-11@1.0.9",
    "dependsOn": [
-    "certifi-5@2026.10.19",
+    "certifi-5@2026.10.18",
     "h11-10@0.16.0"
    ]
   },
@@ -5346,7 +5346,7 @@
    "ref": "httpx-13@0.28.1",
    "dependsOn": [
     "anyio-3@4.15.1",
-    "certifi-5@2026.10.19",
+    "certifi-5@2026.10.18",
     "httpcore-11@1.0.9",
     "idna-16@3.20"
    ]
