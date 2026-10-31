@@ -1,7 +1,9 @@
 """The specialist's settings and the dependency check, with registry and OSV answers simulated."""
 
 import json
+import tomllib
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -228,7 +230,7 @@ def registry(monkeypatch, packages: dict, vulns: dict | None = None, requires: d
             return None
         if "pypi.org" in url:
             return {"info": {"project_urls": {"Source": f"https://github.com/o/{name}"}, "license": "MIT"},
-                    "releases": {v: [{"upload_time_iso_8601": stamp(d), "yanked": False}]
+                    "releases": {v: [{"upload_time_iso_8601": stamp(d), "yanked": False, "digests": {"sha256": "aa"}}]
                                  for v, d in packages[name].items()}}
         return {"time": {v: stamp(d) for v, d in packages[name].items()},
                 "repository": "github:o/" + name.split("/")[-1],
@@ -396,6 +398,483 @@ def test_the_audit_reads_npm_lockfiles(monkeypatch, tmp_path):
     assert result["packages"] == 2 and result["without_hashes"] == []
     assert [b["package"] for b in result["blocked"]] == ["@scope/tool"]
     assert "two weeks" in result["blocked"][0]["reasons"][0]
+
+
+PYPI = 'source = { registry = "https://pypi.org/simple" }'
+HASHED = 'wheels = [{ url = "https://files.pythonhosted.org/x.whl", hash = "sha256:aa" }]'
+
+
+def uv_project(folder, *packages, pyproject='[project]\nname = "app"\ndependencies = ["fastapi"]\n'):
+    (folder / "pyproject.toml").write_text(pyproject)
+    own = '[[package]]\nname = "app"\nversion = "1.0.0"\nsource = { virtual = "." }\n'
+    (folder / "uv.lock").write_text("version = 1\nrevision = 5\n\n" + own + "\n".join(packages))
+
+
+def locked(name, version, source=PYPI, files=HASHED):
+    return f'[[package]]\nname = "{name}"\nversion = "{version}"\n{source}\n{files}\n'
+
+
+def test_the_audit_reads_uv_lockfiles_with_development_packages(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}, "ruff": {"1.0.0": 5, "0.9.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), locked("ruff", "1.0.0"))
+    result = deps.audit(tmp_path)
+    assert result["files"] == ["uv.lock"] and result["packages"] == 2 and result["without_hashes"] == []
+    assert [b["package"] for b in result["blocked"]] == ["ruff"] and result["verdict"] == "blocked"
+    assert "two weeks" in result["blocked"][0]["reasons"][0]
+
+
+def test_an_audited_uv_project_passes(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"))
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("source", [
+    'source = { registry = "https://mirror.example/simple" }',
+    'source = { git = "https://example.com/pkg.git?rev=abc#abc" }',
+    'source = { url = "https://example.com/pkg.whl" }',
+    'source = { path = "../pkg.whl" }',
+    'source = { directory = "../pkg" }',
+    'source = { editable = "../pkg" }',
+    'source = { virtual = "../pkg" }',
+])
+def test_the_audit_refuses_a_uv_package_from_anywhere_else(monkeypatch, tmp_path, source):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}, "other": {"1.0.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), locked("other", "1.0.0", source=source))
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and result["not_pinned"] == ["uv.lock: other (only the public index)"]
+
+
+def test_a_uv_package_named_like_the_project_is_not_waved_through(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "fastapi"\ndependencies = []\n')
+    (tmp_path / "uv.lock").write_text("version = 1\n\n" + locked("fastapi", "0.1.0", source='source = { path = "x" }'))
+    assert deps.audit(tmp_path)["not_pinned"] == ["uv.lock: fastapi (only the public index)"]
+
+
+def test_a_uv_lockfile_out_of_date_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), pyproject=(
+        '[project]\nname = "app"\ndependencies = ["fastapi>=0.1", "uvicorn[standard]<1"]\n'
+        '[project.optional-dependencies]\nextra = ["httpx"]\n'
+        '[dependency-groups]\ndev = ["pytest", { include-group = "other" }]\nother = []\n'))
+    assert sorted(line.split(": ")[1] for line in deps.audit(tmp_path)["not_pinned"]) == [
+        "httpx (in pyproject.toml, not in the lockfile)", "pytest (in pyproject.toml, not in the lockfile)",
+        "uvicorn (in pyproject.toml, not in the lockfile)"]
+
+
+@pytest.mark.parametrize("text", ["not toml", "version = 2\n", '[[package]]\nversion = "1"\n',
+                                  'version = 1\n[[package]]\nversion = "1"\n', "version = 1\npackage = 3\n"])
+def test_a_uv_lockfile_that_cannot_be_read_is_refused(tmp_path, text):
+    (tmp_path / "uv.lock").write_text(text)
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and result["not_pinned"] == ["uv.lock: not readable as a pinned list"]
+
+
+def test_the_audit_applies_the_same_rules_to_vendored_files(monkeypatch, tmp_path):
+    registry(monkeypatch, {"some-library": {"2.0.0": 100}, "other-library": {"1.0.0": 100}},
+             vulns={("some-library", "2.0.0"): ["GHSA-lib"]})
+    (tmp_path / "vendor.json").write_text(json.dumps({
+        "some-library": {"version": "2.0.0", "sha384": "x"},
+        "other-library": {"version": "1.0.0"},
+        "a-derived-file": {"package": "other-library", "version": "1.0.0"}}))
+    result = deps.audit(tmp_path)
+    assert result["files"] == ["vendor.json"] and result["packages"] == 2 and result["verdict"] == "blocked"
+    assert [(b["ecosystem"], b["package"]) for b in result["blocked"]] == [("npm", "some-library")]
+
+
+def test_a_vendored_file_that_was_never_published_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"some-library": {"2.0.0": 100}})
+    (tmp_path / "vendor.json").write_text(json.dumps({"some-library": {"version": "9.9.9"}}))
+    assert "does not exist" in deps.audit(tmp_path)["blocked"][0]["reasons"][0]
+
+
+@pytest.mark.parametrize("text", ['{"x": {}}', '{"x": {"version": ""}}', '{"x": {"version": 1}}', "{}", "[]",
+                                  '{"x": 1}', "not json"])
+def test_a_vendor_list_that_says_nothing_certain_is_refused(tmp_path, text):
+    (tmp_path / "vendor.json").write_text(text)
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def wheel(url, digest="aa"):
+    return f'wheels = [{{ url = "{url}", hash = "sha256:{digest}" }}]'
+
+
+@pytest.mark.parametrize("files", [
+    wheel("http://127.0.0.1:8000/fastapi.whl"),
+    wheel("http://files.pythonhosted.org/fastapi.whl"),
+    wheel("https://files.pythonhosted.org.evil.example/fastapi.whl"),
+    'sdist = { url = "https://evil.example/fastapi.tar.gz", hash = "sha256:aa" }',
+    'sdist = { path = "fastapi.tar.gz", hash = "sha256:aa" }',
+])
+def test_a_uv_file_downloaded_from_anywhere_else_is_refused(monkeypatch, tmp_path, files):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0", files=files))
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and result["not_pinned"] == ["uv.lock: fastapi (only the public index)"]
+
+
+@pytest.mark.parametrize("source", ['source = { registry = "https://pypi.org/simple", git = "https://evil.example" }',
+                                    "source = {}"])
+def test_a_uv_source_that_is_not_only_the_public_index_is_refused(monkeypatch, tmp_path, source):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0", source=source))
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_the_public_index_may_end_in_a_slash(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0", source='source = { registry = "https://pypi.org/simple/" }'))
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_a_uv_package_without_a_version_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, f'[[package]]\nname = "fastapi"\n{PYPI}\n{HASHED}\n')
+    assert deps.audit(tmp_path)["not_pinned"] == ["uv.lock: fastapi (only the public index)"]
+
+
+def test_a_uv_project_built_in_place_is_not_a_pin(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "app"\ndependencies = ["fastapi"]\n')
+    (tmp_path / "uv.lock").write_text('version = 1\n\n[[package]]\nname = "app"\nversion = "1"\n'
+                                      'source = { editable = "." }\n\n' + locked("fastapi", "0.1.0"))
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "allowed" and result["packages"] == 1
+
+
+def test_a_uv_project_with_no_packages_passes(tmp_path):
+    uv_project(tmp_path, pyproject='[project]\nname = "app"\ndependencies = []\n')
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "allowed" and result["without_hashes"] == []
+
+
+def test_a_project_requiring_itself_is_not_out_of_date(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), pyproject=(
+        '[project]\nname = "app"\ndependencies = ["fastapi"]\n[dependency-groups]\ndev = ["app[extra]>=9"]\n'))
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_names_are_compared_as_pypi_compares_them(monkeypatch, tmp_path):
+    registry(monkeypatch, {"my-pkg": {"1.0.0": 100}})
+    uv_project(tmp_path, locked("My_Pkg", "1.0.0"), pyproject=(
+        '[project]\nname = "My.App"\ndependencies = ["MY.PKG"]\n'))
+    (tmp_path / "uv.lock").write_text((tmp_path / "uv.lock").read_text().replace('name = "app"', 'name = "my-app"'))
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_a_marker_on_the_project_takes_nothing_out_of_the_audit(monkeypatch, tmp_path):
+    registry(monkeypatch, {"evil": {"1.0.0": 100}}, vulns={("evil", "1.0.0"): ["GHSA-evil"]})
+    lock = locked("evil", "1.0.0")
+    uv_project(tmp_path, lock, pyproject='[project]\nname = "app"\ndependencies = ["evil"]\n')
+    text = (tmp_path / "uv.lock").read_text().replace(
+        'source = { virtual = "." }\n', 'source = { virtual = "." }\n'
+        'dependencies = [{ name = "evil", marker = "sys_platform == \'emscripten\'" }]\n')
+    (tmp_path / "uv.lock").write_text(text)
+    assert [b["package"] for b in deps.audit(tmp_path)["blocked"]] == ["evil"]
+
+
+def test_a_uv_package_only_a_browser_installs_is_audited_all_the_same(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), locked("web", "1.0"))
+    assert [b["package"] for b in deps.audit(tmp_path)["blocked"]] == ["web"]
+
+
+def test_a_uv_lockfile_is_complete_so_nothing_is_reported_missing_from_it(monkeypatch, tmp_path):
+    """uv leaves out what no path reaches: keyring only off Windows, and what keyring needs only on Windows."""
+    registry(monkeypatch, {"keyring": {"1.0.0": 100}},
+             requires={"keyring": ['pywin32-ctypes; sys_platform == "win32"']})
+    uv_project(tmp_path, locked("keyring", "1.0.0"), pyproject='[project]\nname = "app"\ndependencies = ["keyring"]\n')
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("pyproject", [
+    '[project]\nname = "app"\ndependencies = ["fastapi @ https://evil.example/f.whl"]\n',
+    '[project]\nname = "app"\ndependencies = ["fastapi"]\n[tool.uv.sources]\nfastapi = { git = "https://x.example" }\n',
+    '[project]\nname = "app"\ndependencies = ["fastapi"]\n[[tool.uv.index]]\nurl = "https://x.example"\n',
+    '[project]\nname = "app"\ndependencies = ["fastapi"]\n[tool.uv]\nindex-url = "https://x.example"\n',
+    '[project]\nname = "app"\ndependencies = ["fastapi"]\n[tool.uv]\nextra-index-url = ["https://x.example"]\n',
+    '[project]\nname = "app"\ndependencies = ["fastapi"]\n[tool.uv]\nfind-links = ["./wheels"]\n',
+    '[project]\nname = "app"\ndependencies = ["fastapi>=2"]\n',
+    '[project]\nname = "app"\ndependencies = ["fastapi", "evil"]\n',
+    '[project]\nname = "app"\ndependencies = ["fastapi"]\n[tool.uv]\ndev-dependencies = ["evil"]\n',
+])
+def test_a_pyproject_the_lockfile_no_longer_answers_is_refused(monkeypatch, tmp_path, pyproject):
+    """A plain `uv sync` would write a new lockfile and install what the audit never saw."""
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), pyproject=pyproject)
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_what_no_python_here_needs_may_be_out_of_the_lockfile(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), pyproject=(
+        '[project]\nname = "app"\nrequires-python = ">=3.12"\n'
+        'dependencies = ["fastapi", "tomli; python_version < \'3.11\'"]\n'))
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_a_lockfile_with_a_name_in_capitals_is_read(tmp_path):
+    (tmp_path / "UV.LOCK").write_text("version = 2\n")
+    assert deps.audit(tmp_path)["not_pinned"] == ["UV.LOCK: not readable as a pinned list"]
+
+
+@pytest.mark.parametrize("name", ["moment#", "moment?a=1", "moment/", "moment\n", "@babel%2ftraverse", "../moment",
+                                  "a b", ""])
+def test_a_vendored_name_npm_could_not_publish_is_refused(monkeypatch, tmp_path, name):
+    """OSV would receive it literally and find nothing, while the address still reaches the real package."""
+    registry(monkeypatch, {"moment": {"2.0.0": 100}})
+    (tmp_path / "vendor.json").write_text(json.dumps({"x": {"package": name, "version": "2.0.0", "sha384": "x"}}))
+    assert deps.audit(tmp_path)["not_pinned"] == ["vendor.json: x (a vendored file names its package and version)"]
+
+
+def test_a_scoped_vendored_name_is_read(monkeypatch, tmp_path):
+    registry(monkeypatch, {"@scope/tool": {"2.0.0": 100}})
+    (tmp_path / "vendor.json").write_text(json.dumps({"@scope/tool": {"version": "2.0.0", "sha384": "x"}}))
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("url", ["http://github.com/o/x.js", "https://evil.example/x.js", "ftp://github.com/x", 5,
+                                 "https://github.com.evil.example/x.js", "https://evil.example\\@github.com/x.js"])
+def test_a_vendored_file_from_anywhere_else_is_refused(monkeypatch, tmp_path, url):
+    registry(monkeypatch, {"some-library": {"2.0.0": 100}})
+    (tmp_path / "vendor.json").write_text(json.dumps({"some-library": {"version": "2.0.0", "url": url}}))
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_vendored_file_from_a_release_passes_and_a_schema_is_not_an_entry(monkeypatch, tmp_path):
+    registry(monkeypatch, {"some-library": {"2.0.0": 100}})
+    (tmp_path / "vendor.json").write_text(json.dumps({"$schema": "x", "some-library": {
+        "version": "2.0.0", "sha384": "x", "url": "https://github.com/o/x/releases/download/v{version}/x.js"}}))
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "allowed" and result["packages"] == 1 and result["without_hashes"] == []
+
+
+def test_a_vendored_file_without_a_hash_is_noted(monkeypatch, tmp_path):
+    registry(monkeypatch, {"some-library": {"2.0.0": 100}})
+    (tmp_path / "vendor.json").write_text(json.dumps({"some-library": {"version": "2.0.0"}}))
+    assert deps.audit(tmp_path)["without_hashes"] == ["vendor.json"]
+
+
+@pytest.mark.parametrize("manifest, text", [
+    ("pyproject.toml", '[project]\nname = "app"\ndependencies = ["evil"]\n'),
+    ("package.json", '{"dependencies": {"evil": "1.0.0"}}'),
+])
+def test_vendored_files_do_not_hide_packages_left_unpinned(monkeypatch, tmp_path, manifest, text):
+    registry(monkeypatch, {"clean": {"1.0.0": 100}})
+    (tmp_path / manifest).write_text(text)
+    (tmp_path / "vendor.json").write_text(json.dumps({"clean": {"version": "1.0.0", "sha384": "x"}}))
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "not pinned" in result["reasons"][0]
+
+
+@pytest.mark.parametrize("text", [
+    '[project]\nname = "app"\n[dependency-groups]\ndev = ["evil"]\n',
+    '[project]\nname = "app"\n[project.optional-dependencies]\nextra = ["evil"]\n',
+    '[project]\nname = "app"\n[tool.uv]\ndev-dependencies = ["evil"]\n',
+])
+def test_packages_declared_only_for_development_or_an_extra_must_be_pinned(tmp_path, text):
+    (tmp_path / "pyproject.toml").write_text(text)
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_input_nested_too_deeply_is_refused_without_stopping(tmp_path):
+    (tmp_path / "vendor.json").write_text("[" * 200000)
+    assert deps.audit(tmp_path)["not_pinned"] == ["vendor.json: not readable as a pinned list"]
+
+
+def pypi_links(monkeypatch, links):
+    releases = {"1.0.0": [{"upload_time_iso_8601": stamp(100), "yanked": False}]}
+    monkeypatch.setattr(deps, "_get", lambda url: {"releases": releases, "info": {"project_urls": links}})
+
+
+@pytest.mark.parametrize("links, source", [
+    ({"Changelog": "https://github.com/o/x/release-notes.md", "Repository": "https://github.com/o/x"},
+     "https://github.com/o/x"),
+    ({"Changelog": "https://github.com/o/x/CHANGES.md", "Source": "https://code.example.org/o/x"},
+     "https://code.example.org/o/x"),
+    ({"Homepage": "https://github.com/o/x", "Source": "http://github.com/o/x"}, "https://github.com/o/x"),
+    ({"Homepage": "https://github.com/o/x"}, "https://github.com/o/x"),
+])
+def test_the_source_is_what_the_package_labels_as_its_code(monkeypatch, links, source):
+    pypi_links(monkeypatch, links)
+    assert deps._pypi("x")["source"] == source
+
+
+def test_an_old_npm_version_listing_engines_as_a_list_is_read(monkeypatch):
+    monkeypatch.setattr(deps, "_get", lambda url: {"time": {"1.0.0": stamp(100)}, "repository": "github:o/x",
+                                                   "versions": {"1.0.0": {"engines": ["node >= 0.8"]}}})
+    assert deps._npm("x")["releases"]["1.0.0"]["requires"] is None
+
+
+@pytest.mark.parametrize("source, files", [
+    ('source = { registry = "https://evil.example/simple", virtual = "." }', wheel("https://evil.example/app.whl")),
+    ('source = { url = "https://evil.example/app.whl", virtual = "." }', ""),
+    ('source = { virtual = "." }', wheel("https://evil.example/app.whl")),
+])
+def test_the_project_itself_is_only_skipped_when_it_comes_from_nowhere(monkeypatch, tmp_path, source, files):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "app"\ndependencies = ["fastapi"]\n')
+    (tmp_path / "uv.lock").write_text("version = 1\n\n" + locked("app", "1.0.0", source=source, files=files) + "\n"
+                                      + locked("fastapi", "0.1.0"))
+    assert deps.audit(tmp_path)["not_pinned"] == ["uv.lock: app (only the public index)"]
+
+
+def test_a_file_the_registry_did_not_publish_for_that_version_is_refused(monkeypatch, tmp_path):
+    """Anyone can upload to the public index, so a good address may hold another package's wheel."""
+    registry(monkeypatch, {"iniconfig": {"2.1.0": 100}})
+    other = 'wheels = [{ url = "https://files.pythonhosted.org/tomli-2.1.0-py3-none-any.whl", hash = "sha256:bb" }]'
+    uv_project(tmp_path, locked("iniconfig", "2.1.0", files=other), pyproject=(
+        '[project]\nname = "app"\ndependencies = ["iniconfig"]\n'))
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "not one the registry published" in result["blocked"][0]["reasons"][0]
+
+
+def test_an_exception_from_it_does_not_lift_the_published_files(monkeypatch, tmp_path):
+    registry(monkeypatch, {"iniconfig": {"2.1.0": 100}})
+    monkeypatch.setattr(deps, "_excepted", lambda ecosystem, name: True)
+    uv_project(tmp_path, locked("iniconfig", "2.1.0", files=wheel("https://files.pythonhosted.org/x.whl", "bb")),
+               pyproject='[project]\nname = "app"\ndependencies = ["iniconfig"]\n')
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+@pytest.mark.parametrize("url", [
+    "https://evil.example:8443\\\\@files.pythonhosted.org/fastapi.whl",
+    "https://files.pythonhosted.org/fastapi.whl?/x.whl",
+    "https://files.pythonhosted.org/fastapi.whl#/x.whl",
+])
+def test_an_address_two_parsers_could_read_differently_is_refused(monkeypatch, tmp_path, url):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0", files=wheel(url)))
+    assert deps.audit(tmp_path)["not_pinned"] == ["uv.lock: fastapi (only the public index)"]
+
+
+@pytest.mark.parametrize("files", ["", 'wheels = [{ url = "https://files.pythonhosted.org/x.whl" }]'])
+def test_a_uv_package_without_files_or_hashes_is_refused(monkeypatch, tmp_path, files):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0", files=files))
+    assert deps.audit(tmp_path)["not_pinned"] == ["uv.lock: fastapi (only the public index)"]
+
+
+@pytest.mark.parametrize("lock", ["version = 1\n", 'version = 1\n[[package]]\nname = "app"\nversion = "1"\n'
+                                                   'source = { virtual = "." }\n'])
+@pytest.mark.parametrize("manifest, text", [("package.json", '{"dependencies": {"evil": "1.0.0"}}'),
+                                            ("requirements.in", "evil\n"), ("poetry.lock", "")])
+def test_an_empty_lockfile_does_not_hide_packages_left_unpinned(tmp_path, lock, manifest, text):
+    (tmp_path / "uv.lock").write_text(lock)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "app"\ndependencies = []\n')
+    (tmp_path / manifest).write_text(text)
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "not pinned" in result["reasons"][0]
+
+
+@pytest.mark.parametrize("setting", [
+    '[tool.uv]\noverride-dependencies = ["fastapi @ https://x.example/f.whl"]\n',
+    '[tool.uv]\nconstraint-dependencies = ["fastapi @ https://x.example/f.whl"]\n',
+    '[tool.uv.pip]\nindex-url = "https://x.example"\n',
+    '[tool.uv]\nsome-setting-not-yet-invented = true\n',
+])
+def test_a_uv_setting_the_audit_does_not_know_is_refused(monkeypatch, tmp_path, setting):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), pyproject=(
+        '[project]\nname = "app"\ndependencies = ["fastapi"]\n' + setting))
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_settings_that_do_not_change_the_packages_are_accepted(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), pyproject=(
+        '[project]\nname = "app"\ndependencies = ["fastapi"]\n'
+        '[tool.uv]\nexclude-newer = "14 days"\ncache-keys = []\npackage = false\n'))
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_a_uv_toml_beside_a_lockfile_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"))
+    (tmp_path / "uv.toml").write_text('index-url = "https://x.example"\n')
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_requirement_for_a_python_nobody_runs_says_nothing_about_the_lockfile(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"2.0.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "2.0.0"), pyproject=(
+        '[project]\nname = "app"\nrequires-python = ">=3.12"\n'
+        'dependencies = ["fastapi<2; python_version<\'3.12\'", "fastapi>=2; python_version>=\'3.12\'"]\n'))
+    text = (tmp_path / "uv.lock").read_text().replace("revision = 5\n", 'revision = 5\nrequires-python = ">=3.12"\n')
+    (tmp_path / "uv.lock").write_text(text)
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_the_python_of_a_lockfile_is_its_own(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), pyproject=(
+        '[project]\nname = "app"\ndependencies = ["fastapi", "tomli; python_version < \'3.11\'"]\n'))
+    text = (tmp_path / "uv.lock").read_text().replace("revision = 5\n", 'revision = 5\nrequires-python = ">=3.13"\n')
+    (tmp_path / "uv.lock").write_text(text)
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_a_requirement_with_a_marker_a_computer_needs_must_be_in_the_lockfile(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"), pyproject=(
+        '[project]\nname = "app"\ndependencies = ["fastapi", "evil; sys_platform == \'win32\'"]\n'))
+    assert deps.audit(tmp_path)["not_pinned"] == ["uv.lock: evil (in pyproject.toml, not in the lockfile)"]
+
+
+@pytest.mark.parametrize("table", ["distribution", "something-newer"])
+def test_a_uv_lockfile_with_a_table_the_audit_does_not_read_is_refused(tmp_path, table):
+    """uv still reads `distribution` as an older name for `package`, so such a lockfile installs what is not seen."""
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "app"\ndependencies = []\n')
+    (tmp_path / "uv.lock").write_text(f'version = 1\n\n[[{table}]]\nname = "evil"\nversion = "1.0.0"\n')
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and result["not_pinned"] == ["uv.lock: not readable as a pinned list"]
+
+
+def test_a_real_lockfile_has_no_table_the_audit_refuses():
+    fields = tomllib.loads((Path(__file__).parents[1] / "uv.lock").read_text(encoding="utf-8"))
+    assert set(fields) <= deps._UV_LOCK_FIELDS
+
+
+@pytest.mark.parametrize("name", ["uv.lock", "requirements.txt", "vendor.json"])
+def test_a_pinned_list_that_is_a_link_is_refused(monkeypatch, tmp_path, name):
+    (tmp_path / name).write_text("version = 1\n")
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "app"\ndependencies = []\n')
+    monkeypatch.setattr(deps.Path, "is_symlink", lambda path: path.name == name)  # not every account can create one
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and result["not_pinned"] == [f"{name}: a link, not a pinned list"]
+
+
+def test_a_dollar_does_not_hide_a_vendored_file(monkeypatch, tmp_path):
+    registry(monkeypatch, {"evil": {"1.0.0": 100}}, vulns={("evil", "1.0.0"): ["GHSA-evil"]})
+    (tmp_path / "vendor.json").write_text(json.dumps({"$moment": {"package": "evil", "version": "1.0.0"}}))
+    assert [b["package"] for b in deps.audit(tmp_path)["blocked"]] == ["evil"]
+
+
+def test_an_empty_hash_is_no_hash(monkeypatch, tmp_path):
+    registry(monkeypatch, {"some-library": {"2.0.0": 100}})
+    (tmp_path / "vendor.json").write_text(json.dumps({"some-library": {"version": "2.0.0", "sha384": ""}}))
+    assert deps.audit(tmp_path)["without_hashes"] == ["vendor.json"]
+
+
+def test_a_vendored_tool_with_several_files_counts_as_hashed(monkeypatch, tmp_path):
+    registry(monkeypatch, {"some-tool": {"2.0.0": 100}})
+    (tmp_path / "vendor.json").write_text(json.dumps({"some-tool": {"version": "2.0.0", "executables": {"a": "x"}}}))
+    assert deps.audit(tmp_path)["without_hashes"] == []
+
+
+def test_a_malformed_link_beside_the_repository_changes_nothing(monkeypatch):
+    pypi_links(monkeypatch, {"Source": "https://github.com/o/x", "Docs": "https://[bad"})
+    assert deps._pypi("x")["source"] == "https://github.com/o/x"
+
+
+@pytest.mark.parametrize("manifest, text", [("PYPROJECT.TOML", '[project]\nname = "a"\ndependencies = ["evil"]\n'),
+                                            ("Package.json", '{"dependencies": {"evil": "1.0.0"}}'),
+                                            ("pyproject.toml", '[project]\nname = "a"\ndynamic = ["dependencies"]\n')])
+def test_packages_declared_in_any_case_or_dynamically_must_be_pinned(tmp_path, manifest, text):
+    (tmp_path / manifest).write_text(text)
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
 
 
 def test_a_project_without_packages_has_nothing_to_audit(tmp_path):

@@ -114,7 +114,6 @@ technologies = ["Python", "FastAPI", "Pydantic", "SQLAlchemy", "Alembic", "Postg
 | An organization clones the base application, adds its brand and clones it again for an application | Measure IT's effort |
 | Generating the stylesheet in Cowork under another organization's network rules ([H20](validation/hypotheses.md)) | In a local task there, download the executable, compare its hash and generate; it has run on one sandbox so far ([measured](sources.md#measured-on-real-installations)) |
 | A person opens, from their computer, a server running inside Cowork's sandbox ([H21](validation/hypotheses.md)) | Not documented: try it in a local task. Until it passes, the user sees screenshots and results from the sandbox |
-| `dependency_audit` on an application cloned from the base | It reads `requirements*.txt` and `package-lock.json`, so it blocks a project pinned in `uv.lock`, and it does not see `vendor.json`: it needs a change first |
 | `business-app-base` ready to clone | As of 2026-10-30 it is private, has no licence and holds its first milestone, not yet the whole stack |
 
 The first application built with this stack runs these checks first.

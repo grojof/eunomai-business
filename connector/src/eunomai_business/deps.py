@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from packaging.markers import InvalidMarker, Marker, UndefinedComparison, UndefinedEnvironmentName
+from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
 from . import auth, settings
@@ -36,8 +37,19 @@ _SOURCE_HOST = re.compile(r"(^|\.)(github\.com|gitlab\.com|codeberg\.org|bitbuck
 _SOURCE_SHORT = re.compile(r"^(github|gitlab|bitbucket):[\w.-]+/[\w.-]+$|^git@[\w.-]+:[\w.-]+/")
 # Project links a package labels as its code, wherever it is hosted (foss.heptapod.net, a foundation's own forge...)
 _SOURCE_LABELS = {"source", "source code", "sourcecode", "repository", "code", "github", "gitlab", "git", "scm"}
-_PINNED_FILES = ("requirements*.txt", "package-lock.json")
+_LOCKFILES = ("package-lock.json", "uv.lock", "vendor.json")
+_PYPI_INDEX = "https://pypi.org/simple"
+_PYPI_FILE = re.compile(r"https://files\.pythonhosted\.org/[\w./%+~-]+")  # no query, fragment or backslash to hide in
+_UV_LOCK_FIELDS = {"version", "revision", "requires-python", "resolution-markers", "supported-markers",
+                   "required-markers", "conflicts", "options", "manifest", "package"}
+# Settings that change neither where a package comes from nor which one is installed. Any other is refused.
+_UV_SETTINGS = {"cache-keys", "default-groups", "dev-dependencies", "environments", "exclude-newer",
+                "exclude-newer-package", "managed", "package", "required-environments", "required-version"}
+_NPM_NAME = re.compile(r"(@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*", re.IGNORECASE)
+_VENDOR_URL = re.compile(r"https://(github\.com|gitlab\.com|codeberg\.org|registry\.npmjs\.org)/[\w./%+~{}-]+")
+_VENDOR_HASHES = ("sha256", "sha384", "sha512", "executables")
 _SKIP_FOLDERS = {".git", ".venv", "venv", "node_modules", "__pycache__", "archive"}
+_UNREADABLE = (ValueError, UnicodeDecodeError, TypeError, AttributeError, KeyError, RecursionError)
 
 
 def _get(url: str) -> dict | None:
@@ -95,7 +107,10 @@ def _web_address(url: str) -> str | None:
         return f"https://{ssh.group(1)}/{ssh.group(2)}"
     if url.startswith("git://"):
         url = "https://" + url.removeprefix("git://")
-    return url if urlsplit(url).scheme == "https" else None
+    try:
+        return url if urlsplit(url).scheme == "https" else None
+    except ValueError:
+        return None
 
 
 def _public(host: str) -> bool:
@@ -131,8 +146,8 @@ def _pypi(name: str) -> dict | None:
     info = data.get("info") or {}
     links = info.get("project_urls") or {}
     urls = list(links.values()) + [info.get("home_page") or ""]
-    labelled = [url for label, url in links.items()
-                if re.sub(r"[-_]+", " ", str(label)).strip().lower() in _SOURCE_LABELS]
+    labelled = [url for label, url in links.items() if _web_address(str(url))
+                and re.sub(r"[-_]+", " ", str(label)).strip().lower() in _SOURCE_LABELS]
     releases = {}
     for version, files in (data.get("releases") or {}).items():
         if not files:
@@ -140,9 +155,10 @@ def _pypi(name: str) -> dict | None:
         releases[version] = {
             "age_days": min(_days_ago(f["upload_time_iso_8601"]) for f in files),
             "unusable": "yanked" if all(f.get("yanked") for f in files) else None,
-            "requires": next((f.get("requires_python") for f in files if f.get("requires_python")), None)}
+            "requires": next((f.get("requires_python") for f in files if f.get("requires_python")), None),
+            "digests": {(f.get("digests") or {}).get("sha256") for f in files}}
     inactive = "Development Status :: 7 - Inactive" in (info.get("classifiers") or [])
-    return {"source": _source(urls, labelled),
+    return {"source": _source(labelled[:1] or urls, labelled),  # what it labels as its code before any other link
             "license": info.get("license_expression") or info.get("license"), "inactive": inactive,
             "releases": releases}
 
@@ -157,9 +173,10 @@ def _npm(name: str) -> dict | None:
     for version, meta in (data.get("versions") or {}).items():
         if version not in times:
             continue
+        engines = meta.get("engines")  # a list in some old versions
         releases[version] = {"age_days": _days_ago(times[version]),
                              "unusable": "deprecated" if meta.get("deprecated") else None,
-                             "requires": (meta.get("engines") or {}).get("node")}
+                             "requires": engines.get("node") if isinstance(engines, dict) else None}
     declared = repository.get("url") if isinstance(repository, dict) else repository
     return {"source": _source([declared], [_web_address(declared)] if isinstance(declared, str) else []),
             "license": data.get("license") if isinstance(data.get("license"), str) else None,
@@ -264,20 +281,24 @@ def check(ecosystem: str, name: str, version: str = "") -> dict:
 
 # --- the whole tree a project installs ----------------------------------------------------------------------
 
-def _project_files(folder: Path):
-    """Files of a project, never following a link or junction out of it, skipping environments and archives."""
+def _project_files(folder: Path, links: bool = False):
+    """Files of a project, never following a link or junction out of it, skipping environments and archives. With
+    `links`, the links to files instead."""
     for current, folders, files in os.walk(folder, followlinks=False):
         here = Path(current)
         folders[:] = [f for f in folders if f not in _SKIP_FOLDERS
                       and not (here / f).is_symlink() and not (here / f).is_junction()]
         for name in files:
-            if not (here / name).is_symlink():
+            if (here / name).is_symlink() is links:
                 yield here / name
 
 
+def _is_pinned_list(file: Path) -> bool:
+    return file.name.lower() in _LOCKFILES or fnmatch.fnmatch(file.name.lower(), "requirements*.txt")
+
+
 def _pinned_files(folder: Path) -> list[Path]:
-    return sorted(f for f in _project_files(folder)
-                  if f.name == "package-lock.json" or fnmatch.fnmatch(f.name.lower(), "requirements*.txt"))
+    return sorted(filter(_is_pinned_list, _project_files(folder)))
 
 
 # A marker that names one platform which is not a computer's (a web browser's "emscripten", for example): the pin
@@ -356,6 +377,81 @@ def _vulnerable(queries: list[tuple[str, str, str]]) -> dict[tuple[str, str, str
             for query, result in zip(queries, results)}
 
 
+def _own_project(folder: Path) -> tuple[str, list[Requirement], list[str]]:
+    """The project beside a lockfile: its name, every requirement its `pyproject.toml` declares, and the uv settings
+    the audit cannot answer for, since they may install what the lockfile does not show."""
+    file = folder / "pyproject.toml"
+    if not file.is_file():
+        return "", [], []
+    data = tomllib.loads(file.read_text(encoding="utf-8"))
+    project = data.get("project") or {}
+    uv = (data.get("tool") or {}).get("uv") or {}
+    lists = [project.get("dependencies") or [], uv.get("dev-dependencies") or [],
+             *(project.get("optional-dependencies") or {}).values(), *(data.get("dependency-groups") or {}).values()]
+    asked = [Requirement(item) for items in lists for item in items
+             if isinstance(item, str)]  # a group may also include another group, which is not a requirement
+    settings = [f"tool.uv.{key}" for key in sorted(set(uv) - _UV_SETTINGS)]
+    return _normalized(project.get("name") or ""), asked, settings + ["uv.toml"] * (folder / "uv.toml").is_file()
+
+
+def _uv_lock(text: str, folder: Path, digests: dict) -> tuple[list[tuple[str, str]], list[str], bool, list[str]]:
+    """Pins of a uv lockfile, each with files on the public index, and their hashes in `digests` to compare with what
+    the registry published: anyone can upload there, so the address does not say which package a file is. Only the
+    project itself may come from anywhere else. The lockfile must also still answer what `pyproject.toml` asks for:
+    if it does not, a plain `uv sync` writes a new one and installs what nobody audited."""
+    data = tomllib.loads(text)
+    if data.get("version") != 1 or set(data) - _UV_LOCK_FIELDS:  # uv also reads older names for the same tables
+        raise ValueError("unknown lockfile format")
+    own, asked, settings = _own_project(folder)
+    pins, versions = [], {}
+    loose = [f"{setting} (not a setting the audit can answer for)" for setting in settings]
+    for package in data.get("package") or []:
+        name, version, source = _normalized(package["name"]), package.get("version"), package.get("source") or {}
+        versions.setdefault(name, set()).add(version)
+        files = [*(package.get("wheels") or []), *([package["sdist"]] if "sdist" in package else [])]
+        if name == own and source in ({"virtual": "."}, {"editable": "."}) and not files:
+            continue
+        if not version or not isinstance(version, str) or set(source) != {"registry"} or not files \
+                or str(source["registry"]).rstrip("/") != _PYPI_INDEX or not all(
+                    _PYPI_FILE.fullmatch(str(file.get("url", ""))) and file.get("hash") for file in files):
+            loose.append(f"{name} (only the public index)")
+            continue
+        pins.append((name, version))
+        digests.setdefault(("pypi", name, version), set()).update(
+            str(file["hash"]).removeprefix("sha256:") for file in files)
+    python_from = _lowest_python(data.get("requires-python")) or _declared_python(folder) or _SUPPORTED_PYTHONS[0]
+    for requirement in asked:
+        name, marker = _normalized(requirement.name), str(requirement.marker or "")
+        if requirement.url:
+            loose.append(f"{name} (only the public index)")
+        elif marker and not _needed_on_a_computer(marker, python_from):  # uv rightly drops what no Python here needs
+            continue
+        elif name not in versions:
+            loose.append(f"{name} (in pyproject.toml, not in the lockfile)")
+        elif name != own and not any(requirement.specifier.contains(v, prereleases=True) for v in versions[name]):
+            loose.append(f"{name} (pyproject.toml asks for {requirement.specifier}, not in the lockfile)")
+    return pins, loose, True, []
+
+
+def _vendored(text: str) -> tuple[list[tuple[str, str]], list[str], bool, list[str]]:
+    """Files a project keeps in its own tree: `vendor.json` maps a name to its `version` on npm, and to the `package`
+    it was published under when that is not the name. A `url` says where the file really comes from. The project
+    checks the bytes itself, against the hashes kept here."""
+    pins, loose, hashed = [], [], True
+    for key, entry in json.loads(text).items():
+        if key == "$schema" and isinstance(entry, str):
+            continue
+        name, version, url = entry.get("package", key), entry.get("version"), entry.get("url")
+        if not (isinstance(name, str) and _NPM_NAME.fullmatch(name) and version and isinstance(version, str)):
+            loose.append(f"{key} (a vendored file names its package and version)")
+        elif url is not None and not _VENDOR_URL.fullmatch(str(url)):
+            loose.append(f"{key} (only over https from a known code host or the npm registry)")
+        else:
+            pins.append((name, version))
+            hashed = hashed and any(entry.get(field) for field in _VENDOR_HASHES)
+    return pins, loose, hashed, []
+
+
 def _normalized(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -381,9 +477,15 @@ def _declared_python(folder: Path) -> tuple[int, int] | None:
     A minor version counts if any of its releases is accepted (`>=3.11.4` still runs on 3.11)."""
     try:
         project = tomllib.loads((folder / "pyproject.toml").read_text(encoding="utf-8")).get("project")
-        declared = project.get("requires-python") if isinstance(project, dict) else None
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    return _lowest_python(project.get("requires-python") if isinstance(project, dict) else None)
+
+
+def _lowest_python(declared: object) -> tuple[int, int] | None:
+    try:
         spec = SpecifierSet(declared) if isinstance(declared, str) and declared.strip() else None
-    except (OSError, ValueError, InvalidSpecifier, UnicodeDecodeError):
+    except InvalidSpecifier:
         return None
     if spec is None:
         return None
@@ -429,57 +531,75 @@ def _unpinned_requirements(pins: list[tuple[str, str]], python_from: tuple[int, 
 def _declares_packages(folder: Path) -> bool:
     """Whether a project without a pinned list still declares packages to install."""
     for file in _project_files(folder):
-        if file.name in ("setup.py", "setup.cfg", "Pipfile", "requirements.in", "poetry.lock", "yarn.lock",
-                         "pnpm-lock.yaml"):
+        name = file.name.lower()
+        if name in ("setup.py", "setup.cfg", "pipfile", "requirements.in", "poetry.lock", "yarn.lock",
+                    "pnpm-lock.yaml"):
             return True
         try:
-            if file.name == "pyproject.toml":
+            if name == "pyproject.toml":
                 data = tomllib.loads(file.read_text(encoding="utf-8"))
-                if (data.get("project") or {}).get("dependencies") or (data.get("tool") or {}).get("poetry"):
+                project, tool = data.get("project") or {}, data.get("tool") or {}
+                if project.get("dependencies") or tool.get("poetry") or (tool.get("uv") or {}).get("dev-dependencies") \
+                        or "dependencies" in (project.get("dynamic") or []) \
+                        or any((project.get("optional-dependencies") or {}).values()) \
+                        or any((data.get("dependency-groups") or {}).values()):
                     return True
-            if file.name == "package.json":
+            if name == "package.json":
                 data = json.loads(file.read_text(encoding="utf-8"))
                 if data.get("dependencies") or data.get("devDependencies"):
                     return True
-        except (ValueError, UnicodeDecodeError):
+        except _UNREADABLE:
             return True  # unreadable: treat as declaring, so it is not waved through
     return False
 
 
 def audit(folder: Path) -> dict:
     """Every package a project pins, direct and indirect, against the same rules as `check`. A project that
-    installs anything pins all of it in requirements*.txt or package-lock.json."""
+    installs anything pins all of it in requirements*.txt, package-lock.json or uv.lock; the files it keeps in its
+    own tree are listed in vendor.json."""
     files = _pinned_files(folder)
     pins: dict[tuple[str, str, str], list[str]] = {}
     loose, unhashed, elsewhere, compiled_for = [], [], [], []
+    # a tool follows a link the audit never reads
+    loose += [f"{f.relative_to(folder).as_posix()}: a link, not a pinned list"
+              for f in sorted(filter(_is_pinned_list, _project_files(folder, links=True)))]
+    listed: dict[tuple[str, str], None] = {}  # a requirements list may leave something out; a lockfile cannot
+    digests: dict[tuple[str, str, str], set[str]] = {}
+    installs = False  # whether any file says what the project installs
     for file in files:
-        eco = "npm" if file.name == "package-lock.json" else "pypi"
+        kind = file.name.lower()
+        eco = "npm" if kind in ("package-lock.json", "vendor.json") else "pypi"
         where = file.relative_to(folder).as_posix()
         try:
             text = file.read_text(encoding="utf-8")
-            if eco == "npm":
+            if kind == "package-lock.json":
                 found, not_pinned, hashed, skipped = _npm_lock(text)
+            elif kind == "vendor.json":
+                found, not_pinned, hashed, skipped = _vendored(text)
+            elif kind == "uv.lock":
+                found, not_pinned, hashed, skipped = _uv_lock(text, file.parent, digests)
             else:
                 siblings = {f.name for f in files if f.parent == file.parent and f != file}
                 found, not_pinned, hashed, skipped = _requirements(text, siblings)
-        except (ValueError, UnicodeDecodeError):
+        except _UNREADABLE:
             loose.append(f"{where}: not readable as a pinned list")
             continue
-        if eco == "pypi":  # each list counts with its own Python; one that says nothing, with every supported one
-            header = [(int(a), int(b)) for a, b in _COMPILED_FOR.findall(text)]
+        if eco == "pypi" and kind != "uv.lock":  # each list counts with its own Python; one that says nothing, with
+            header = [(int(a), int(b)) for a, b in _COMPILED_FOR.findall(text)]  # every supported one
             compiled_for.append(min(header) if header else _declared_python(file.parent) or _SUPPORTED_PYTHONS[0])
+            listed.update(dict.fromkeys(found))
         loose += [f"{where}: {line}" for line in not_pinned]
         elsewhere += [f"{where}: {line}" for line in skipped]
         if not hashed:
             unhashed.append(where)
-        if not found and not not_pinned and not skipped:
+        if not found and not not_pinned and not skipped and kind != "uv.lock":  # a project with no packages locks too
             loose.append(f"{where}: pins nothing")
+        installs = installs or (kind != "vendor.json" and bool(found or kind != "uv.lock"))
         for name, version in found:
             pins.setdefault((eco, name, version), []).append(where)
     # a list compiled for a given Python (uv's header, or the project's `requires-python`) may leave out what only
     # older ones need; when neither says, every supported Python counts
-    missing, conditional = _unpinned_requirements([(n, v) for eco, n, v in pins if eco == "pypi"],
-                                                  min(compiled_for, default=_SUPPORTED_PYTHONS[0]))
+    missing, conditional = _unpinned_requirements(list(listed), min(compiled_for, default=_SUPPORTED_PYTHONS[0]))
     loose += [f"missing from the pinned list: {item}" for item in missing]
     vulnerabilities = _vulnerable(list(pins))
     blocked = []
@@ -498,17 +618,20 @@ def audit(folder: Path) -> dict:
                 reasons.append(f"known vulnerabilities: {', '.join(vulnerabilities[(eco, name, version)])}")
             elif release["age_days"] < MIN_AGE_DAYS and check(eco, name, version)["verdict"] != "allowed":
                 reasons.append(f"version {version} is newer than two weeks and is not needed to fix a vulnerability")
+            if digests.get((eco, name, version), set()) - release.get("digests", set()):
+                reasons.append(f"a file in the lockfile is not one the registry published for version {version}")
         if reasons:
             blocked.append({"ecosystem": eco, "package": name, "version": version, "files": where, "reasons": reasons})
-    result = {"verdict": "allowed" if files and not blocked and not loose else "blocked",
+    undeclared = not installs and not loose and _declares_packages(folder)
+    result = {"verdict": "allowed" if files and not blocked and not loose and not undeclared else "blocked",
               "files": [f.relative_to(folder).as_posix() for f in files], "packages": len(pins),
               "blocked": blocked, "not_pinned": loose, "without_hashes": unhashed}
     if conditional:
         result["only_on_some_platforms"] = conditional
     if elsewhere:
         result["not_installed_on_computers"] = elsewhere
-    if not files and _declares_packages(folder):
-        result["reasons"] = ["packages are declared but not pinned: requirements*.txt or package-lock.json"]
-    elif not files:
+    if undeclared:  # vendored files are not a list of what the project installs
+        result["reasons"] = ["packages are declared but not pinned: requirements*.txt, package-lock.json or uv.lock"]
+    elif not files and not loose:
         result.update(verdict="allowed", note="the project installs no packages: nothing to check")
     return result
