@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Dependency summaries say why a package moved:** one left only because it is newer than two weeks read as fixing
+  a vulnerability, because the reason it is blocked contains the word.
 - **`dependency_audit` reads `uv.lock` and `vendor.json`:** every package a uv project locks is audited, development
   ones included, and each file's hash must be one the registry published for that name and version. A lockfile that
   no longer answers `pyproject.toml`, a `tool.uv` setting outside a short list, and a `uv.toml` beside the lockfile
