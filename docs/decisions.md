@@ -298,6 +298,6 @@ How each part holds against misuse is in the template's and the agent's pages, a
 - **Consequence:** generating the stylesheet in Cowork needs the sandbox to download the executable, under the
   organization's network settings, and has been shown on one sandbox only. Where it cannot, a developer's computer
   or CI generates it, as a case for IT ([decision 6](#6--the-user-never-resolves-a-technical-problem)).
-- **Consequence:** `dependency_audit` reads `requirements*.txt` and `package-lock.json`, so today it blocks an
-  application pinned in `uv.lock`, and it does not see `vendor.json`. That needs a change of its own
-  ([open checks](recommended-stack.md#open-checks)).
+- **Consequence:** `dependency_audit` reads `uv.lock` and `vendor.json` as well as `requirements*.txt` and
+  `package-lock.json`, by the same rules and with no library named in them
+  ([barriers](barriers.md)).
