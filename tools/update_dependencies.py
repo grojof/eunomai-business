@@ -63,6 +63,12 @@ def uploaded(name: str, version: str) -> datetime:
     return min(datetime.fromisoformat(f["upload_time_iso_8601"].replace("Z", "+00:00")) for f in files)
 
 
+def move_note(name: str, version: str, recommended: str, reasons: str) -> str:
+    """What a move is for: a version may also be left only because it is too new, which fixes nothing."""
+    why = "fixes a known vulnerability" if "known vulnerabilities" in reasons else "the newest version the rules allow"
+    return f"`{name}` {version} → {recommended}: {why} ({reasons})"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--summary", type=Path, required=True)
@@ -93,7 +99,7 @@ def main() -> int:
                 current[name] = (uploaded(name, recommended) + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
                 write_overrides(current)
                 uv("lock", "--upgrade-package", name)
-                notes.append(f"`{name}` {version} → {recommended}: fixes a known vulnerability ({reasons})")
+                notes.append(move_note(name, version, recommended, reasons))
                 moved = True
             elif (name, version, reasons) not in problems:
                 problems.append((name, version, reasons))
