@@ -139,6 +139,7 @@ Full status in [validation](validation/hypotheses.md). Facts measured here that 
 | The recommended stack's server resolves to about 25 Python packages (fastapi, uvicorn, pydantic, sqlalchemy, alembic, psycopg[binary], jinja2, pyodbc, xlsxwriter, python-multipart; `uv pip compile`, Python 3.12; 61 with `fastapi[standard]`, which it avoids) | 2026-10-27 ([recommended stack](recommended-stack.md)) |
 | A minimal React page (Vite, React, TypeScript, Tailwind, shadcn/ui on Radix, TanStack Query and Table) has about 200 lockfile entries, about 590 with the usual linting, testing and client generation (`npm install --package-lock-only --ignore-scripts`) | 2026-10-27 (decision 13) |
 | Inside a real local Cowork sandbox (Linux x86_64), Tailwind's `tailwindcss-linux-x64` downloaded, its SHA-256 matched and it ran. One sandbox, on one organization's network rules | 2026-10-30 ([open checks](recommended-stack.md#open-checks), H20) |
+| Chart.js 4.6.1 and ECharts 6.1.0 on the same data, under `style-src 'self'` in Chrome: Chart.js has no violation; ECharts' default tooltip has 9 to 10 distinct ones and loses its layout, none with `renderMode: "richText"`. Neither was tried with a screen reader | 2026-10-31 ([recommended stack](recommended-stack.md)) |
 
 ## Research done
 
