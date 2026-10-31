@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Decision 14, the visual layer and the organization's layer:** corrects the recommended stack, which refused
+  Tailwind and Bootstrap for bringing a build or an npm tree. Neither needs an npm tree: Bootstrap is published
+  compiled, and Tailwind's stylesheet is built by a standalone executable, with daisyUI's files. Tailwind with
+  daisyUI is now the recommended layer, behind Jinja macros so an organization can replace it, with the generated
+  CSS committed and colours only in the organization's theme. Bootstrap stays rejected, for its global styles. The organization's layer is a base
+  application to clone (`business-app-base`), not a plugin holding components. The npm, Node and React rules do not
+  change. `dependency_audit` does not read `uv.lock` or `vendor.json` yet. To validate in Cowork: H20, H21.
 - **Decision 13, one recommended stack:** Python with FastAPI, PostgreSQL, and pages made on the server with Jinja2
   and htmx; exact decimals end to end; an organization's layer of brand variables and Jinja macros; React only for
   IT. New page: [recommended stack](docs/recommended-stack.md). The templates follow.

@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, and one recommended stack."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, one recommended stack, and its visual layer with a base application to clone."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md, sources.md]
@@ -254,7 +254,7 @@ How each part holds against misuse is in the template's and the agent's pages, a
 |---|---|---|
 | Business users' applications use **one stack**: Python with FastAPI, PostgreSQL, and pages made on the server with Jinja2 and htmx | The [recommended stack](recommended-stack.md), the recommended value for `technologies` | About 25 Python packages and 3–5 copied JavaScript files, against about 200 to 590 npm packages for a React page ([measured](sources.md#measured-on-real-installations)); one language for IT to review |
 | **Exact numbers** end to end | `Decimal` from the database to the page, with a decimal context above the data's precision; one formatter of the application's own; Excel rounded by the application's rules | JavaScript has no decimal type; formatting on the server keeps decimals exact without trusting the browser |
-| An **organization's layer** on top | Its plugin: brand variables (shadcn's names), Jinja macros with a catalogue, a skill | Every application looks like the organization's, and a component is one macro |
+| An **organization's layer** on top | Its plugin was to hold brand variables (shadcn's names), Jinja macros with a catalogue and a skill; it is now a base application to clone ([decision 14](#14--tailwind-with-daisyui-behind-macros-the-organizations-layer-is-a-base-application)) | Every application looks like the organization's, and a component is one macro |
 | **React only for IT**, case by case | Its own decision and supply-chain controls | Rich clients are sometimes needed; business users' applications do not carry npm |
 
 **Rejected:**
@@ -266,5 +266,38 @@ How each part holds against misuse is in the template's and the agent's pages, a
 | Web Components as the shared layer | A library IT cannot maintain, or a paid one (Web Awesome's data grid and charts are in its paid Pro edition) |
 | Streamlit, NiceGUI, Reflex, Dash | Their own look and state model; Reflex builds a Node front end underneath |
 
-- **Consequence:** the application and organization-plugin templates are built next, and validated on the first
-  application that uses them ([open checks](recommended-stack.md#open-checks)).
+- **Consequence:** the application and organization-plugin templates became one base application to clone
+  ([decision 14](#14--tailwind-with-daisyui-behind-macros-the-organizations-layer-is-a-base-application)), validated
+  on the first application that uses it ([open checks](recommended-stack.md#open-checks)).
+
+## 14 · Tailwind with daisyUI behind macros; the organization's layer is a base application
+
+| Decided | How | Why |
+|---|---|---|
+| **Tailwind with daisyUI** is the recommended visual layer | Tailwind CSS 4 and daisyUI 5, both MIT, behind Jinja macros: screens call macros, so an organization can replace the layer without touching a screen | Components free to customise: a utility overrides a component without fighting global styles, and a theme is a set of variables |
+| **No Node and no npm** for it | Tailwind's standalone executable and daisyUI's two files, each pinned by version and hash ([recommended stack](recommended-stack.md#the-stylesheet), [sources](sources.md#recommended-stack)) | The npm, Node and React rules of [decision 13](#13--one-recommended-stack-pages-made-on-the-server) stay as they are: business users' applications do not carry npm |
+| **The generated CSS is committed** | Generated wherever templates change: a developer's computer, the assistant's sandbox, CI | Servers need neither Node nor the executable, and a business user runs nothing ([decision 7](#7--nothing-runs-on-the-users-computer)). The executable ran in a real local Cowork sandbox ([measured](sources.md#measured-on-real-installations)) |
+| **Colours exist only in the organization's theme** | Tailwind's own palette is removed; a test refuses invented values such as `bg-[#ff0000]` | Removing the palette takes `bg-red-500` away but not an arbitrary value, so the test closes what is left |
+| The organization's layer is a **base application to clone**, not a plugin holding components | `business-app-base`, a separate repository: an organization clones it once and adds its brand, then clones that per application and deletes the demo | Each organization and application can change anything, with nothing to stay tied to |
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| Bootstrap | Not for a build or an npm tree: it is published compiled. Its global styles force custom classes for anything different, a judgement from experience, not a measurement |
+| Every component written by hand | All their behaviour and accessibility to maintain |
+| Tailwind or daisyUI through npm | Business users' applications do not carry npm, and the executable does the same job without it |
+| Generating the stylesheet on the server | The server would need the executable |
+| Components as a package, in a plugin or published by tag or registry | Updates would reach everyone, but it ties applications to the package and limits what they can change (Gitea's registry hosts Python, GitHub Packages does not) |
+| The paid parts of Tailwind and daisyUI: Tailwind Plus, daisyUI's store, Blueprint MCP | Not needed: for component classes, assistants have daisyUI's official `llms.txt` |
+
+- **Consequence:** the brand's variables use daisyUI's names, not shadcn's; how they map for a React application of
+  IT's is settled with that application.
+- **Consequence:** there is no update mechanism: when the base improves, an application compares versions and takes
+  what it wants.
+- **Consequence:** generating the stylesheet in Cowork needs the sandbox to download the executable, under the
+  organization's network settings, and has been shown on one sandbox only. Where it cannot, a developer's computer
+  or CI generates it, as a case for IT ([decision 6](#6--the-user-never-resolves-a-technical-problem)).
+- **Consequence:** `dependency_audit` reads `requirements*.txt` and `package-lock.json`, so today it blocks an
+  application pinned in `uv.lock`, and it does not see `vendor.json`. That needs a change of its own
+  ([open checks](recommended-stack.md#open-checks)).
