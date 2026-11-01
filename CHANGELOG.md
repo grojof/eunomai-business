@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **A business user's computer** (add-on to the fourth review): the connector's start, a preview of the base application
+  and the whole path against a fake server now run on uv and Windows' own folders, with no git and no Python, and a
+  repository test keeps it so. When a download cannot get through the person reads one plain sentence and the report
+  names the address, or the Python to deploy; uv's own three tries are the only ones. With `github.com` closed, every
+  package seemed not to show where it comes from: it is now told as an audit that could not run, and still stops.
+  [Configuration](docs/configuration.md#installing-uv-in-an-organization) says which Pythons to deploy, how much a
+  person downloads, every address, and that a Python from the Microsoft Store is neither needed nor used.
 - **What goes is well formed before anything reads it** (fourth review): a tree listing `AGENTS.md`, a workflows folder or
   `requirements.txt` twice showed dulwich's checks an innocent twin while git used the other, and it reached the server
   and a real merge. Every commit beyond the main branch and every tree in it are now read from their raw entries, for

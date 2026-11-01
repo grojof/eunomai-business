@@ -65,6 +65,7 @@ _VENDOR_HASHES = ("sha256", "sha384", "sha512", "executables")
 _SKIP_FOLDERS = {".git", ".venv", "venv", "node_modules", "__pycache__"}
 _UNREADABLE = (ValueError, UnicodeDecodeError, TypeError, AttributeError, KeyError, RecursionError)
 _AT_ONCE = 8  # packages checked at the same time: the audit runs before every send
+_NOT_VERIFIED = "the published source repository could not be reached to verify it: "
 
 
 def _get(url: str) -> dict | None:
@@ -72,7 +73,7 @@ def _get(url: str) -> dict | None:
         with auth.http_client() as client:
             response = client.get(url, headers={"Accept": "application/json"})
     except Exception as exc:
-        raise Unreachable() from exc
+        raise Unreachable(urlsplit(url).hostname or "") from exc
     if response.status_code == 404:
         return None
     response.raise_for_status()
@@ -85,7 +86,7 @@ def _vulnerabilities(ecosystem: str, name: str, version: str) -> list[str]:
             response = client.post("https://api.osv.dev/v1/query", json={
                 "version": version, "package": {"name": name, "ecosystem": _ECOSYSTEMS[ecosystem]}})
     except Exception as exc:
-        raise Unreachable() from exc
+        raise Unreachable("api.osv.dev") from exc
     response.raise_for_status()
     return sorted(v["id"] for v in response.json().get("vulns", []))
 
@@ -219,7 +220,7 @@ def _origin_reasons(ecosystem: str, name: str, package: dict) -> list[str]:
         if found is False:
             reasons.append(f"the published source repository does not exist: {package['source']}")
         elif found is None:
-            reasons.append(f"the published source repository could not be reached to verify it: {package['source']}")
+            reasons.append(f"{_NOT_VERIFIED}{package['source']}")
     newest_age = min(r["age_days"] for r in package["releases"].values())
     if package["inactive"] or newest_age > MAX_SILENCE_DAYS:
         reasons.append("no release in more than three years, or marked inactive: likely unmaintained")
@@ -426,7 +427,7 @@ def _vulnerable(queries: list[tuple[str, str, str]]) -> dict[tuple[str, str, str
                 {"version": version, "package": {"name": name, "ecosystem": _ECOSYSTEMS[eco]}}
                 for eco, name, version in queries]})
     except Exception as exc:
-        raise Unreachable() from exc
+        raise Unreachable("api.osv.dev") from exc
     response.raise_for_status()
     results = response.json().get("results", [])
     if len(results) != len(queries):
@@ -798,6 +799,7 @@ def audit(folder: Path) -> dict:
 # What the audit says about a package, as a person can read it.
 _PLAIN_REASONS = (("known vulnerabilities", "has a known security problem"),
                   ("two weeks", "is too new to trust yet"),
+                  (_NOT_VERIFIED, "could not be checked from this network"),
                   ("source repository", "does not show where it comes from"),
                   ("unmaintained", "is no longer maintained"),
                   ("yanked", "was withdrawn by its authors"), ("deprecated", "was withdrawn by its authors"),
@@ -822,14 +824,29 @@ def _plain_reasons(result: dict) -> list[str]:
     return list(found) or ["what the application uses could not be confirmed"]
 
 
+def _closed_addresses(result: dict) -> list[str]:
+    """The hosts of the source repositories the audit could not reach. A proxy that closes one closes them all."""
+    urls = [reason.removeprefix(_NOT_VERIFIED) for item in result["blocked"] for reason in item["reasons"]
+            if reason.startswith(_NOT_VERIFIED)]
+    return sorted({urlsplit(_web_address(url) or "").hostname or "" for url in urls} - {""})
+
+
 def refusal(workspace: str, result: dict, outcome: str) -> dict:
     """A tool's answer when the audit of a saved version is not `allowed`: `outcome`, the reasons in plain words, a
-    report for IT, and the audit's own findings for Claude."""
+    report for IT, and the audit's own findings for Claude. When all that stopped it is a closed network, nothing is
+    wrong with the packages, so it is told as the audit that could not run, which it still does not let through."""
+    closed = _closed_addresses(result)
+    only_closed = closed and not result["not_pinned"] and not result.get("unpinned_files") and all(
+        reason.startswith(_NOT_VERIFIED) for item in result["blocked"] for reason in item["reasons"])
+    if only_closed:
+        return support.audit_unavailable(workspace, f"{outcome}: the checks on where what it uses comes from could not "
+                                         "run. Check the network or VPN and try again; your work is safe on this "
+                                         "computer.", Unreachable(", ".join(closed[:5])))
     reasons = _plain_reasons(result)
     message = f"{outcome}, because of what it uses: {'; '.join(reasons[:5])}. Your work is safe on this computer."
     details = {"Workspace": workspace, "Version": result["head"][:12], "Packages": "; ".join(
         f"{item['package']} {item['version']}: {', '.join(item['reasons'])}" for item in result["blocked"]),
-        "Not pinned": "; ".join(result["not_pinned"])}
+        "Not pinned": "; ".join(result["not_pinned"]), **({"Cannot reach": ", ".join(closed[:5])} if closed else {})}
     stop = support.report(support.NeedsIT(message, "the dependency audit refused a version", details))
     return {**stop, "status": "audit_refused", "workspace": workspace, "reasons": reasons, "blocked": result["blocked"],
             "not_pinned": result["not_pinned"]}

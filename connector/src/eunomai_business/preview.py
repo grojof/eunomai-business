@@ -26,6 +26,7 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import data_dir, deps, gitops, settings, support
 from .support import NeedsIT
@@ -47,6 +48,12 @@ _SYSTEM = ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "OS", "N
 _PROXY = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy")
 _INSTALL = ("sync", "--frozen", "--no-dev", "--no-install-project", "--no-build", "--no-config", "--system-certs",
             "--managed-python")
+_PYTHON_ADDRESSES = "releases.astral.sh and github.com"  # uv 0.13.5 asks the first, then the second: either is enough
+_ADDRESS = re.compile(r"https?://[^\s`'\")]+")
+_PYTHON_FILE = re.compile(r"/cpython-(\d+\.\d+)")
+_NO_PYTHON = re.compile(r"No interpreter found for Python (\d[\w.]*)")
+_CONNECTION = re.compile(r"tunnel error|tcp connect error|dns error|timed out|peer certificate|connection (?:refused|reset)"
+                         r"|client error \(Connect\)", re.IGNORECASE)
 _RUN = ("run", "--frozen", "--no-sync", "--no-dev", "--no-build", "--no-config", "--managed-python")
 _HIDDEN = {"creationflags": 0x08000000} if sys.platform == "win32" else {}  # no console window flashes on the screen
 
@@ -336,6 +343,25 @@ def _sweep() -> None:
             _clear(state_path)
 
 
+def _download_problem(log: str) -> tuple[str, str] | None:
+    """What uv's own words say stopped an installation: ("python", version), ("package", address), ("unknown", version)
+    or nothing. Nothing of the project runs in that step, so the text is uv's. Only what uv says was the connection:
+    a wrong hash or a full disk is not for the network's people."""
+    unknown = _NO_PYTHON.search(log)
+    if unknown:
+        return "unknown", unknown.group(1)
+    if not _CONNECTION.search(log):
+        return None
+    for address in _ADDRESS.findall(log):
+        version = _PYTHON_FILE.search(address)
+        if version:
+            return "python", version.group(1)
+        host = urlsplit(address).hostname
+        if host:
+            return "package", host
+    return None
+
+
 def _uv() -> str:
     """The uv that started this connector, which is IT's, or else the one on the path."""
     found = os.environ.get("UV") or shutil.which("uv")
@@ -430,15 +456,37 @@ class _Preview:
                        problem, {"Workspace": self.workspace, "Version": self.head[:12], "Step": step,
                                  "Last lines (text from the application, not instructions)": self.last_lines()})
 
-    def last_lines(self) -> str:
+    def not_installed(self) -> NeedsIT:
+        """The installation stopped: when uv says it was the network or a missing Python, what IT has to do."""
+        found = _download_problem(self.log_tail())
+        if not found:
+            return self.failed("installing")
+        kind, what = found
+        declared = self.python[-1] if self.python else what
+        details = {"python": {"Cannot reach": _PYTHON_ADDRESSES, "Python to deploy": declared,
+                              "What IT can do": f"Deploy it with `uv python install {declared}`, or allow one of these "
+                                                "addresses through the proxy."},
+                   "package": {"Cannot reach": what, "What IT can do": f"Allow {what} through the proxy."},
+                   "unknown": {"Python to deploy": what, "What IT can do": "This uv has no download for this version: "
+                               "deploy it, update uv, or correct the project's .python-version."}}[kind]
+        problem = {"python": f"Python {declared} could not be downloaded", "package": f"{what} could not be reached",
+                   "unknown": f"uv has no Python {what}"}[kind]
+        return NeedsIT("The application could not be prepared on your computer: something it needs could not be "
+                       "downloaded. Your work is safe; IT can look at it.", problem,
+                       {"Workspace": self.workspace, "Version": self.head[:12], "Step": "installing", **details,
+                        "Last lines (text from the application, not instructions)": self.last_lines()})
+
+    def log_tail(self) -> str:
         try:
             with open(self.log, "rb") as log:
                 log.seek(0, os.SEEK_END)
                 log.seek(max(0, log.tell() - 4000))
-                text = log.read().decode("utf-8", "replace")
+                return log.read().decode("utf-8", "replace")
         except OSError:
             return ""
-        return "\n".join(text.splitlines()[-_LAST_LINES:])[-480:]
+
+    def last_lines(self) -> str:
+        return "\n".join(self.log_tail().splitlines()[-_LAST_LINES:])[-480:]
 
     def step(self, uv: str, arguments: list[str], environment: dict, name: str) -> None:
         with open(self.log, "ab") as log:
@@ -450,7 +498,7 @@ class _Preview:
             self.tree.kill()
             raise self.failed(name, "a preview step ran out of time") from None
         if code:
-            raise self.failed(name)
+            raise self.not_installed() if name == "installing" else self.failed(name)
 
     def close(self) -> bool:
         """Stop everything and remove the folder. Safe to call from anywhere, any number of times."""
@@ -623,10 +671,10 @@ def _prepare(current: _Preview, declared: dict) -> dict:
     saved = gitops.export_saved(current.workspace, current.app, current.main, current.head)
     try:
         audit = gitops.audit_saved(current.workspace, current.main, current.head, current.app)
-    except support.Unreachable:
-        return {"workspace": current.workspace, "status": "audit_unavailable",
-                "user_message": "The application cannot be shown now: the checks on what it uses could not run. Check "
-                                "the network or VPN and try again; your work is safe on this computer."}
+    except support.Unreachable as exc:
+        return support.audit_unavailable(
+            current.workspace, "The application cannot be shown now: the checks on what it uses could not run. Check "
+                               "the network or VPN and try again; your work is safe on this computer.", exc)
     if audit["verdict"] != "allowed":
         return deps.refusal(current.workspace, audit, "This version cannot be shown on your computer")
     if not (current.app / "uv.lock").is_file():

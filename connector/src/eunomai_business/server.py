@@ -111,10 +111,10 @@ def _audit_gate(workspace: str, main: str, head: str | None = None) -> tuple[dic
     no packages is allowed without the network."""
     try:
         audit = gitops.audit_saved(workspace, main, head)
-    except support.Unreachable:
-        return None, {"workspace": workspace, "status": "audit_unavailable",
-                      "user_message": "This version was not sent: the checks on what it uses could not run. Check the "
-                                      "network or VPN and try again; your work is safe on this computer."}
+    except support.Unreachable as exc:
+        return None, support.audit_unavailable(
+            workspace, "This version was not sent: the checks on what it uses could not run. Check the network or VPN "
+                       "and try again; your work is safe on this computer.", exc)
     return audit, None if audit["verdict"] == "allowed" else deps.refusal(workspace, audit, "This version was not sent")
 
 

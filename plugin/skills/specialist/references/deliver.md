@@ -47,7 +47,7 @@ Both audit what is saved and refuse unless it is `allowed`, whatever the project
 | Answer | Next |
 |---|---|
 | `audit_refused` | Back to the dependency steps in `build.md`, save, and send again. What only IT can lift (`reasons` that no allowed version solves): show `user_message` and offer `email_link`, and wait for IT |
-| `audit_unavailable` | Show `user_message`; try again when the network is back |
+| `audit_unavailable` | Show `user_message`, and its `email_link` if there is one: an address stays closed until IT opens it. Try again when the network is back |
 | `not_sent` | The latest save is not on the server: `version_send`, then propose again. If the send is refused, as above |
 | `main_missing`, `not_a_version` | Show `user_message`, and its `email_link` if there is one; these are not for you to work around |
 

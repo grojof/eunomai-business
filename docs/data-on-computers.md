@@ -57,7 +57,8 @@ tokens. It travels only if the user sends the e-mail.
 web address of each package's source repository to check it exists. They send package names and versions only;
 nothing about the user or the project.
 
-A preview's installation asks `pypi.org` and `files.pythonhosted.org` for the project's packages, through uv. What the
+A preview's installation asks `files.pythonhosted.org` for the project's packages, through uv, and for a Python, if the
+computer lacks it, `releases.astral.sh` or `github.com` ([addresses](configuration.md#installing-uv-in-an-organization)). What the
 application itself calls is the application's business: it runs with the person's network.
 
 ## On servers

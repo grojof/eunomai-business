@@ -33,7 +33,11 @@ class NeedsIT(Exception):
 
 
 class Unreachable(Exception):
-    """The server could not be reached; nothing for IT yet."""
+    """The server could not be reached; nothing for IT yet, unless it names an address only IT can open."""
+
+    def __init__(self, address: str = ""):
+        super().__init__(address)
+        self.address = address
 
 
 def _connector_version() -> str:
@@ -68,6 +72,16 @@ def unreachable() -> dict:
     return {"status": "unreachable",
             "user_message": "The server could not be reached. Check the network or VPN and try again; your work "
                             "is safe on this computer."}
+
+
+def audit_unavailable(workspace: str, user_message: str, error: Unreachable) -> dict:
+    """The audit could not run. A passing failure asks to try again; an address that stays closed is IT's to open."""
+    answer = {"status": "audit_unavailable", "workspace": workspace, "user_message": user_message}
+    if error.address:
+        answer = {**report(NeedsIT(user_message, f"the audit could not reach {error.address}", {
+            "Workspace": workspace, "Cannot reach": error.address,
+            "What IT can do": f"Allow {error.address} through the proxy."})), **answer}
+    return answer
 
 
 def safe(call, *args) -> dict:
