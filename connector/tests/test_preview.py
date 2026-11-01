@@ -8,6 +8,7 @@ real: a preview that survives its stop is the failure these exist for.
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import textwrap
@@ -18,7 +19,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from eunomai_business import data_dir, deps, gitops, guard, preview, server as tools, settings, support
+from conftest import alive, stop_previews
+from eunomai_business import data_dir, deps, gitops, guard, preview, server as tools, settings, support, watcher
 
 needs_uv = pytest.mark.skipif(shutil.which("uv") is None, reason="needs uv")
 real = [pytest.mark.preview, needs_uv]
@@ -80,7 +82,7 @@ def declaration(pids: Path, *setup: str, run: str = RUN, mode: str = "") -> byte
 def nothing_left_behind():
     gitops._audits.clear()
     yield
-    preview.stop_all()
+    stop_previews()
 
 
 @pytest.fixture
@@ -128,15 +130,17 @@ def show(name: str) -> dict:
 def gone(*numbers: int, wait: float = 15.0) -> bool:
     deadline = time.time() + wait
     while time.time() < deadline:
-        if not any(preview._alive(number) for number in numbers):
+        if not any(alive(number) for number in numbers):
             return True
         time.sleep(0.1)
     return False
 
 
 def folders() -> list[Path]:
-    """The temporary folders of previews this process knows of."""
-    return [p.folder for p in preview._previews.values()]
+    """The temporary folders of previews on this computer: the ones being prepared here, and the running ones."""
+    states = (data_dir() / "previews").glob("*.json")
+    running = [Path(state["folder"]) for state in map(preview._read_state, states) if state.get("folder")]
+    return sorted({*running, *(p.folder for p in preview._previews.values())})
 
 
 def wait_for_file(path: Path, wait: float = 30.0) -> None:
@@ -475,7 +479,7 @@ def test_it_shows_the_saved_version_in_the_browser_and_stops(signed_in, workspac
     assert browser == [answer["url"]] and answer["user_message"] and answer["minutes"] == 60
     assert httpx.get(answer["url"]).text.strip() == "saved"
     numbers = json.loads(pids.read_text())
-    assert all(preview._alive(number) for number in numbers)
+    assert all(alive(number) for number in numbers)
     folder = folders()[0]
     assert folder.exists() and not folder.is_relative_to(workspaces)
     stopped = tools.app_preview_stop(name)
@@ -758,9 +762,32 @@ def test_asking_again_for_the_same_version_reopens_it_without_starting_another(s
 def test_an_application_that_dies_leaves_nothing_behind(signed_in, workspaces, turned_on, pids):
     name, _ = project(signed_in, declaration(pids))
     assert show(name)["status"] == "ready"
-    current = next(iter(preview._previews.values()))
-    current.tree.kill()
-    assert current.ended.wait(15) and not current.folder.exists() and preview._key(name) not in preview._previews
+    numbers, folder = json.loads(pids.read_text()), folders()[0]
+    pids.unlink()
+    os.kill(numbers[0], signal.SIGKILL if sys.platform != "win32" else signal.SIGTERM)
+    assert gone(numbers[0]) and wait_gone(folder, 20), "the watcher did not notice"
+    state = preview._state_file(name)
+    deadline = time.time() + 10
+    while state.exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert not state.exists() and folders() == []
+    answer = show(name)
+    assert answer["status"] == "ready" and answer["ended_before"] == "application" and not answer["already_running"]
+    assert "stopped by itself" in answer["user_message"] and httpx.get(answer["url"]).text.strip() == "saved"
+
+
+@pytest.mark.preview
+@needs_uv
+def test_an_application_that_died_is_nothing_to_stop(signed_in, workspaces, turned_on, pids):
+    name, _ = project(signed_in, declaration(pids))
+    assert show(name)["status"] == "ready"
+    number, folder = json.loads(pids.read_text())[0], folders()[0]
+    os.kill(number, signal.SIGKILL if sys.platform != "win32" else signal.SIGTERM)
+    assert wait_gone(folder, 20)
+    deadline = time.time() + 10
+    while preview._state_file(name).exists() and time.time() < deadline:
+        time.sleep(0.05)
+    assert tools.app_preview_stop(name)["status"] == "not_running"
 
 
 HARNESS = textwrap.dedent('''\
@@ -777,7 +804,8 @@ HARNESS = textwrap.dedent('''\
     preview.shutil.copytree(source, current.app, dirs_exist_ok=True)
     preview._bring_up(current, {"setup": [["python", "leave.py"]], "run": run,
                                 "environment": {"PIDS_FILE": pids, "LEFT_FILE": pids + ".left"}})
-    print(json.dumps({"folder": str(current.folder), "url": current.url, "watcher": current.watcher.pid}), flush=True)
+    state = json.loads(preview._state_file(name).read_text())
+    print(json.dumps({"folder": str(current.folder), "url": current.url, "watcher": state["watcher"]}), flush=True)
     sys.stdin.read()
     ''')
 
@@ -807,65 +835,66 @@ def wait_gone(folder: Path, wait: float = 30.0) -> bool:
     return not folder.exists()
 
 
+def end_preview(name: str) -> None:
+    assert preview._end(preview._state_file(name))
+
+
+def kill_watcher(number: int) -> None:
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/F", "/PID", str(number)], capture_output=True)
+    else:
+        os.kill(number, 9)
+
+
 @pytest.mark.preview
 @needs_uv
 @pytest.mark.parametrize("how", ["closed", "killed"])
-def test_it_stops_when_the_connector_exits(tmp_path, how):
-    """Closed: its input ends, as when Claude Desktop closes the session. Killed: nothing of it runs any more."""
+def test_a_connector_that_ends_leaves_the_preview_running(tmp_path, how):
+    """Closed: its input ends, as when a host closes it. Killed: nothing of it runs any more. In Cowork, every turn."""
     process, started, numbers = connector_with_a_preview(tmp_path, f"exit-{how}")
-    assert all(preview._alive(number) for number in numbers)
     if how == "closed":
         process.stdin.close()
     else:
         process.kill()
     process.wait(timeout=30)
-    assert gone(*numbers, wait=20), "a process outlived the connector"
-    assert wait_gone(Path(started["folder"])), "the temporary folder outlived the connector"
-    if how == "killed":
-        state = preview._state_file(f"exit-{how}")
-        deadline = time.time() + 20
-        while state.exists() and time.time() < deadline:
-            time.sleep(0.1)
-        assert not state.exists(), "the watcher left the state file behind"
+    time.sleep(1.5)
+    assert all(alive(number) for number in numbers) and httpx.get(started["url"]).status_code == 200
+    preview._sweep()  # its connector is gone, and it is healthy
+    assert Path(started["folder"]).exists() and alive(started["watcher"])
+    end_preview(f"exit-{how}")
+    assert gone(*numbers, wait=20) and not Path(started["folder"]).exists()
 
 
 @pytest.mark.preview
 @needs_uv
 @pytest.mark.skipif(sys.platform != "win32", reason="a job object")
-def test_with_the_watcher_gone_too_the_job_still_ends_everything(tmp_path):
-    process, started, numbers = connector_with_a_preview(tmp_path, "both-gone")
-    subprocess.run(["taskkill", "/F", "/PID", str(started["watcher"])], capture_output=True)
-    process.kill()
-    process.wait(timeout=30)
-    assert gone(*numbers, wait=20), "a process outlived both"
-    shutil.rmtree(started["folder"], ignore_errors=True)
-    preview._state_file("both-gone").unlink(missing_ok=True)
-
-
-@pytest.mark.preview
-@needs_uv
-@pytest.mark.skipif(sys.platform != "win32", reason="a job object")
-def test_nothing_in_the_tree_can_keep_the_job_open_by_its_name(tmp_path):
-    """A process that opened the job by name kept KILL_ON_CLOSE from firing. Nothing names it now."""
-    process, started, numbers = connector_with_a_preview(tmp_path, "no-name")
+def test_with_the_watcher_gone_the_job_ends_everything(tmp_path):
+    """Only the watcher holds the job, so that no process outlives what looks after it."""
+    process, started, numbers = connector_with_a_preview(tmp_path, "watcher-only")
     try:
-        assert "job" not in json.loads(preview._state_file("no-name").read_text())
-        assert preview._Tree().name is None if hasattr(preview._Tree, "name") else True
+        kill_watcher(started["watcher"])
+        assert gone(*numbers, wait=20), "a process outlived the watcher"
+        preview._sweep()
+        assert not Path(started["folder"]).exists() and not preview._state_file("watcher-only").exists()
     finally:
         process.kill()
         process.wait(timeout=30)
-    assert gone(*numbers, wait=20)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="a job object")
+def test_the_job_has_no_name_for_anything_in_it_to_open():
+    """A process that opened the job by name kept KILL_ON_CLOSE from firing. Nothing names it."""
+    assert "CreateJobObjectW(None, None)" in Path(watcher.__file__).read_text(encoding="utf-8")
 
 
 @pytest.mark.preview
 @needs_uv
-def test_another_connector_on_the_same_workspace_replaces_it(tmp_path):
-    """Claude Desktop starts one connector per task: two tasks on a workspace must not leave two previews."""
+def test_another_connector_on_the_same_workspace_can_end_it(tmp_path):
     process, started, numbers = connector_with_a_preview(tmp_path, "shared")
     try:
-        preview._clear_left_over("shared")
+        end_preview("shared")
         assert gone(*numbers, wait=20), "the other connector's preview survived"
-        assert wait_gone(Path(started["folder"]))
+        assert not Path(started["folder"]).exists()
     finally:
         process.kill()
         process.wait(timeout=30)
@@ -873,26 +902,105 @@ def test_another_connector_on_the_same_workspace_replaces_it(tmp_path):
 
 @pytest.mark.preview
 @needs_uv
-def test_with_the_watcher_gone_another_connector_never_says_stopped_while_it_runs(tmp_path):
+def test_with_the_watcher_dead_a_stop_ends_what_is_left_and_says_what_is_true(tmp_path):
     process, started, numbers = connector_with_a_preview(tmp_path, "watcher-gone")
     try:
-        if sys.platform == "win32":
-            subprocess.run(["taskkill", "/F", "/PID", str(started["watcher"])], capture_output=True)
-            assert gone(started["watcher"], wait=10)
-        else:  # it stays a zombie until the connector, which never waits for it here, reaps it
-            os.kill(started["watcher"], 9)
+        kill_watcher(started["watcher"])
+        state = preview._state_file("watcher-gone")
+        deadline = time.time() + 10
+        while preview._watching(state) and time.time() < deadline:
+            time.sleep(0.05)
         answer = preview.stop("watcher-gone")
-        if answer["status"] == "stopped":
-            assert gone(*numbers, wait=20), "it said stopped and the application still runs"
-        else:
-            assert answer["status"] == "not_stopped" and answer["user_message"]
-            assert any(preview._alive(number) for number in numbers)
+        assert gone(*numbers, wait=20), "something outlived the watcher and the stop"
+        assert answer["status"] == ("not_running" if sys.platform == "win32" else "stopped"), answer
+        assert not Path(started["folder"]).exists() and not state.exists()
     finally:
         process.kill()
         process.wait(timeout=30)
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_preparation_ends_with_the_connector_that_asked_for_it(tmp_path):
+    """Nobody would ever hear of it, and the next call starts again."""
+    current = preview._Preview("cut-short", "0" * 40)
+    state = preview._state_file("cut-short")
+    assert preview._read_state(state)["phase"] == "preparing" and preview._watching(state)
+    current.pipe.stdin.close()
+    deadline = time.time() + 20
+    while preview._watching(state) and time.time() < deadline:
+        time.sleep(0.05)
+    assert not preview._watching(state) and not current.folder.exists() and not state.exists()
+    current.closed = True
+
+
+def test_a_number_that_came_back_as_another_process_is_not_a_watcher(tmp_path):
+    """The state names this very test as the watcher, alive and well; no lock is held, so nothing watches."""
+    left = tmp_path / f"{preview._PREFIX}reused"
+    left.mkdir()
+    state = preview._state_file("reused")
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({"workspace": "reused", "folder": str(left), "watcher": os.getpid(), "token": "t",
+                                 "groups": []}))
+    state.with_suffix(".alive").touch()
+    assert not preview._watching(state)
+    preview._sweep()
+    assert not left.exists() and not state.exists() and not state.with_suffix(".alive").exists()
+
+
+def test_a_preview_nothing_could_find_again_ends():
+    """Someone removes the connector's folder: no tool could reach it, and it would run out its hour unseen."""
+    current = preview._Preview("lost", "0" * 40)
+    state = preview._state_file("lost")
+    state.unlink()
+    deadline = time.time() + 20
+    while preview._watching(state) and time.time() < deadline:
+        time.sleep(0.05)
+    assert not preview._watching(state) and not current.folder.exists()
+    current.close()
+
+
+def test_a_live_watcher_is_left_alone_whoever_its_connector_was():
+    current = preview._Preview("healthy", "0" * 40)
+    try:
+        preview._sweep()
+        assert current.folder.exists() and preview._watching(preview._state_file("healthy"))
+    finally:
+        current.close()
+
+
+def test_a_folder_nothing_speaks_of_goes_once_it_is_old(monkeypatch):
+    young = Path(preview.tempfile.mkdtemp(prefix=preview._PREFIX))
+    old = Path(preview.tempfile.mkdtemp(prefix=preview._PREFIX))
+    try:
+        os.utime(old, (time.time() - preview._STALE - 60,) * 2)
+        preview._sweep()
+        assert young.exists() and not old.exists()
+    finally:
+        shutil.rmtree(young, ignore_errors=True)
+        shutil.rmtree(old, ignore_errors=True)
+
+
+def test_nothing_ends_a_preview_at_a_connectors_exit():
+    source = Path(preview.__file__).read_text(encoding="utf-8")
+    assert "atexit" not in source and "stop_all" not in source
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_time_limit_that_passed_is_told_and_it_starts_again(signed_in, workspaces, turned_on, pids, monkeypatch):
+    monkeypatch.setattr(preview, "TIME_LIMIT", 4)
+    name, _ = project(signed_in, declaration(pids))
+    assert show(name)["status"] == "ready"
+    numbers = json.loads(pids.read_text())
     assert gone(*numbers, wait=20)
-    shutil.rmtree(started["folder"], ignore_errors=True)
-    preview._state_file("watcher-gone").unlink(missing_ok=True)
+    deadline = time.time() + 10
+    while preview._state_file(name).exists() and time.time() < deadline:
+        time.sleep(0.05)
+    monkeypatch.setattr(preview, "TIME_LIMIT", 60)
+    pids.unlink()
+    answer = show(name)
+    assert answer["status"] == "ready" and answer["ended_before"] == "time_limit", answer
 
 
 @pytest.mark.preview
@@ -944,7 +1052,7 @@ def test_a_child_a_setup_step_left_stops_with_the_preview(signed_in, workspaces,
     gitops.save(name, "A step that leaves a child")
     assert show(name)["status"] == "ready"
     child = int(left.read_text())
-    assert preview._alive(child)
+    assert alive(child)
     tools.app_preview_stop(name)
     assert gone(child), "a child of a setup step survived the stop"
 
@@ -965,7 +1073,7 @@ def test_the_groups_of_every_step_still_alive_are_in_the_state(signed_in, worksp
 def test_a_process_group_is_killed_only_while_the_preview_is_still_there(tmp_path, monkeypatch, marker, called):
     """After a reboot or long after, the number in a state file may be someone else's by now."""
     killed = []
-    monkeypatch.setattr(preview, "_end_groups", lambda groups: killed.append(groups))
+    monkeypatch.setattr(preview, "_end_groups", lambda groups, folder: killed.append(groups))
     folder = tmp_path / f"{preview._PREFIX}x"
     folder.mkdir()
     if marker:
@@ -979,7 +1087,7 @@ def test_a_process_group_is_killed_only_while_the_preview_is_still_there(tmp_pat
 
 def test_a_folder_already_gone_kills_nothing(tmp_path, monkeypatch):
     killed = []
-    monkeypatch.setattr(preview, "_end_groups", lambda groups: killed.append(groups))
+    monkeypatch.setattr(preview, "_end_groups", lambda groups, folder: killed.append(groups))
     state = preview._state_file("group-gone")
     state.parent.mkdir(parents=True, exist_ok=True)
     state.write_text(json.dumps({"folder": str(tmp_path / f"{preview._PREFIX}y"), "owner": 0, "token": "t", "groups": [1]}))
@@ -996,21 +1104,19 @@ def test_junk_in_a_state_file_never_blocks_a_preview(junk):
     preview._sweep()
     assert not state.exists()
     state.write_text(junk)
-    preview._clear_left_over("junk")
+    preview._clear(state)
     assert not state.exists()
 
 
-def test_a_state_file_is_written_whole(tmp_path, monkeypatch):
-    """Another connector's sweep must never read half of one and take a live preview for a dead one."""
-    moved = []
-    real = preview.os.replace
-    monkeypatch.setattr(preview.os, "replace", lambda a, b: (moved.append(Path(b)), real(a, b)))
+def test_a_state_file_is_written_whole():
+    """Another connector must never read half of one: it is written beside the real one and moved over it."""
+    source = Path(watcher.__file__).read_text(encoding="utf-8")
+    assert "os.replace(temporary, self.path)" in source
     current = preview._Preview("atomic", "0" * 40)
     try:
-        assert preview._state_file("atomic") in moved
+        assert json.loads(preview._state_file("atomic").read_text())["token"] == current.token
     finally:
         current.close()
-        preview._state_file("atomic").unlink(missing_ok=True)
     assert not list(preview._state_file("atomic").parent.glob("*.tmp"))
 
 
@@ -1069,8 +1175,8 @@ def test_one_folder_is_one_preview_whatever_the_case_of_its_name(signed_in, work
     name, _ = project(signed_in, declaration(pids))
     first = show(name)
     second = show(name.upper())
-    assert first["url"] == second["url"] and len(preview._previews) == 1
-    assert tools.app_preview_stop(name.upper())["status"] == "stopped" and preview._previews == {}
+    assert first["url"] == second["url"] and second["already_running"] is True and len(folders()) == 1
+    assert tools.app_preview_stop(name.upper())["status"] == "stopped" and folders() == []
 
 
 def test_every_kind_of_state_is_kept_by_the_folder_not_the_spelling(signed_in, workspaces, monkeypatch):
@@ -1279,14 +1385,15 @@ def test_a_state_file_can_never_name_a_folder_that_is_not_a_previews(tmp_path):
 
 @pytest.mark.preview
 @needs_uv
-def test_a_connector_whose_preview_was_replaced_leaves_the_new_ones_state_alone(signed_in, workspaces, turned_on, pids):
-    name, _ = project(signed_in, declaration(pids))
-    assert show(name)["status"] == "ready"
-    current = next(iter(preview._previews.values()))
-    state = preview._state_file(name)
-    theirs = {"workspace": name, "folder": "elsewhere", "owner": os.getpid() + 1, "token": "theirs", "groups": []}
-    state.write_text(json.dumps(theirs))  # as another connector does when it takes the workspace over
+def test_a_connector_whose_preview_was_replaced_leaves_the_new_ones_state_alone():
+    current = preview._Preview("taken-over", "0" * 40)
+    state = preview._state_file("taken-over")
+    theirs = {"workspace": "taken-over", "folder": "elsewhere", "token": "theirs", "groups": []}
+    state.write_text(json.dumps(theirs))  # as another connector's watcher does when it has the workspace
     current.close()
+    deadline = time.time() + 20
+    while preview._watching(state) and time.time() < deadline:
+        time.sleep(0.05)
     assert json.loads(state.read_text()) == theirs
     state.unlink()
 

@@ -65,6 +65,50 @@ from dulwich.server import DictBackend  # noqa: E402
 from dulwich.web import make_wsgi_chain  # noqa: E402
 
 
+def alive(pid: int) -> bool:
+    """Whether a process is still running. A zombie is not: it only waits for its parent to read how it ended."""
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+        kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel32.OpenProcess(0x00100000, False, pid)  # to wait on it
+        if not handle:
+            return False
+        try:
+            return kernel32.WaitForSingleObject(handle, 0) == 0x102  # still running
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    stat = Path(f"/proc/{pid}/stat")
+    return not stat.exists() or stat.read_text().rpartition(")")[2].split()[0] != "Z"
+
+
+def stop_previews() -> None:
+    """Everything previews a test left running: a preview outlives what started it, a test run included."""
+    from eunomai_business import data_dir, preview
+
+    for current in list(preview._previews.values()):
+        current.close()
+    preview._previews.clear()
+    preview._unread.clear()
+    folder = data_dir() / "previews"
+    for state in folder.glob("*.json") if folder.is_dir() else ():
+        if preview._watching(state):
+            preview._end(state)
+        preview._clear(state)
+    for note in folder.glob("*.ended") if folder.is_dir() else ():
+        note.unlink(missing_ok=True)
+
+
 def free_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))

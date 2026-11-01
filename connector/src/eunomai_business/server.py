@@ -250,15 +250,19 @@ def app_preview(workspace: str) -> dict:
     this only after they agree in the conversation. Works where IT turned it on and the project declares it; refused
     unless the audit allows the saved version. `status`: "ready" (with `url`), "starting" (call again with the same
     workspace to follow it), or a refusal to show with `user_message`: "not_turned_on", "not_declared", "no_lockfile",
-    "audit_refused", "audit_unavailable", "needs_it". It stops by itself after 60 minutes and with the connector; a
-    newer saved version replaces the one running. `unsaved_changes` true means what is on screen lacks them."""
+    "audit_refused", "audit_unavailable", "needs_it". Once running it stays, whatever happens to this task or to the
+    host, until `app_preview_stop` or the 60 minutes pass: say so in the person's words, and `minutes` is what is left.
+    Calling this for the same saved version answers the one running (`already_running` true); a newer saved version
+    replaces it. `keeps_running` false means the host holds it, and it ends with the task. `ended_before` says it had
+    stopped by itself and was started again. `unsaved_changes` true means what is on screen lacks them."""
     return _safe(preview.start, workspace)
 
 
 @mcp.tool()
 def app_preview_stop(workspace: str) -> dict:
-    """Stop the application running on the person's computer: every process it started, and its temporary copy.
-    `status` "not_stopped" means another task holds it and it may still be running: say so with `user_message`."""
+    """Stop the application running on the person's computer, whichever task started it: every process it started,
+    and its temporary copy. `status` "stopped" only if it was running and no longer is; "not_running" if there was
+    nothing to stop; "not_stopped" if it may still be running: say so with `user_message`."""
     return _safe(preview.stop, workspace)
 
 

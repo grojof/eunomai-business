@@ -56,6 +56,15 @@ def test_the_risk_of_a_preview_is_said_where_it_is_decided():
         assert "reduce that risk and do not remove it" in text, page
 
 
+def test_a_person_is_told_that_a_preview_outlasts_the_task():
+    build = " ".join(reference("build").split())
+    assert "keeps running until they say stop or the hour ends, even if they close Claude" in build
+    docs = Path(__file__).resolve().parents[2] / "docs"
+    for page in ("decisions.md", "configuration.md", "barriers.md"):
+        assert "60 minutes" in (docs / page).read_text(encoding="utf-8"), page
+    assert "Closing Claude is not a stop" in " ".join((docs / "barriers.md").read_text(encoding="utf-8").split())
+
+
 def plain(text: str) -> str:
     return " ".join(text.split())
 

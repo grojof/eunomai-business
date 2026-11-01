@@ -1261,6 +1261,12 @@ def saved_head(workspace: str) -> str:
         return commit.decode()
 
 
+def saved_summary(workspace: str) -> dict:
+    """The version a workspace is on, and whether its folder has changes not saved."""
+    with _repo(workspace) as repo:
+        return {"unsaved_changes": _dirty(repo), "branch": _branch(repo)}
+
+
 @_one_at_a_time
 def export_saved(workspace: str, target: Path, main: str, head: str | None = None) -> dict:
     """Write the saved version's files to `target`, outside the workspace: what was saved, never what is in the

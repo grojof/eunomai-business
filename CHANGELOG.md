@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A preview belongs to its watcher** (first real test in Cowork): the application died seconds after each turn, as
+  Cowork starts a process per turn and the connector lives one. A detached process now owns a preview: it starts every
+  step, keeps the tree, enforces the 60 minutes, and survives a tree kill, a host's job that allows leaving, and a
+  group kill. **So a preview now outlasts the task and Claude Desktop, for up to 60 minutes**, and the specialist says
+  so. Any connector finds a running preview, with the time left and no restart, and stops it; another saved version
+  replaces it; one that died by itself is told and started again; `stopped` is said only when it stopped. Liveness is
+  a lock the watcher holds, so a process number that came back is not trusted. A host job that refuses is respected
+  and told.
 - **`workspace_clone` takes `owner/repo`**, on the signed-in server: a task that was given one failed, then guessed
   github.com. Anything else says the only server there is, and to try no other.
 - **A business user's computer** (add-on to the fourth review): the connector's start, a preview of the base application
