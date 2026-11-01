@@ -20,6 +20,7 @@ How to work in this repository, for people and AI assistants alike. What the pro
 | Only Cowork tasks on the user's computer; a task in the cloud is refused | Decision 1, [barriers](docs/barriers.md) |
 | A local connector; git without Git; configuration fixed at build time; no secrets in a build | Decisions 1, 3, 4 |
 | Business users never install or run anything; IT provides the runtime (uv) | Decisions 6, 7, 9 |
+| The one thing that runs on a person's computer is a preview through the connector, off by default, with two keys; its risk is stated, not hidden | Decision 7, [barriers](docs/barriers.md#the-preview-on-the-persons-computer) |
 | Host-agnostic: GitHub or Gitea, any Linux server, any identity proxy | [Architecture](docs/architecture.md#what-is-tied-to-a-git-hosting) |
 | A base for every organization; projects bring their capabilities in project plugins from the template | Decisions 10, 11 |
 | One recommended stack for business users' applications; React only for IT | Decisions 13, 14, [recommended stack](docs/recommended-stack.md) |

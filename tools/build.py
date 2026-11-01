@@ -27,7 +27,7 @@ CONNECTOR_SRC = ROOT / "connector"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache",
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov")
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies",
-                   "dependency_exceptions", "organization_context", "organization_skills"}
+                   "dependency_exceptions", "organization_context", "organization_skills", "app_preview"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers", "deny"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -59,8 +59,9 @@ def validate_specialist(cfg: dict) -> list[str]:
     for key in ("docs_language", "code_language"):
         if cfg.get(key) and not LANGUAGE.match(str(cfg[key])):
             errors.append(f"{key} must be a language code such as en or es")
-    if not isinstance(cfg.get("free_development", False), bool):
-        errors.append("free_development must be true or false")
+    for key in ("free_development", "app_preview"):
+        if not isinstance(cfg.get(key, False), bool):
+            errors.append(f"{key} must be true or false")
     if not _strings(cfg.get("allowed_technologies", [])):
         errors.append("allowed_technologies must be a list of names")
     context = cfg.get("organization_context", "")

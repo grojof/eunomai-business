@@ -69,6 +69,18 @@ def test_built_text_files_use_lf(tmp_path):
             assert b"\r" not in path.read_bytes(), path
 
 
+@pytest.mark.parametrize("value", [False, True])
+def test_app_preview_reaches_the_connector(tmp_path, value):
+    build.build(dict(EXAMPLE, app_preview=value), tmp_path)
+    mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
+    assert json.loads(mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_SPECIALIST"])["app_preview"] is value
+
+
+def test_app_preview_is_off_in_the_example_and_must_be_true_or_false():
+    assert EXAMPLE["app_preview"] is False
+    assert "app_preview must be true or false" in build.validate(dict(EXAMPLE, app_preview="yes"))
+
+
 def test_the_organizations_deny_rules_are_packaged_for_the_guard(tmp_path):
     deny = [{"rule": "Bash(npm *)", "reason": "not here", "examples": {"denied": ["npm ci"]}}]
     build.build(dict(EXAMPLE, deny=deny), tmp_path)

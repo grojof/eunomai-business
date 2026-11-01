@@ -9,6 +9,10 @@ configuration files are put back as the last save point has them, and an executa
 
 Executables are refused everywhere Claude writes. Context and configuration rules apply inside workspaces only, so
 the plugin does not get in the way of Cowork's own files elsewhere.
+
+The hook also keeps the sandbox shell out of a workspace's repository: Cowork's sandbox can create files there but
+not delete them, so a git command that touches .git leaves a lock or temporary objects behind, and the next save
+stops. Like every rule on a shell command, this sees text and prevents mistakes; it is not a boundary.
 """
 
 import argparse
@@ -16,6 +20,7 @@ import json
 import os
 import re
 import sys
+from typing import NamedTuple
 
 from . import data_dir, rules
 
@@ -54,6 +59,12 @@ REASONS = {
     "config": "{name} configures Claude, the repository or its automation, and only IT changes it",
     "executable": "{name} would run on the user's computer with a double click; nothing that runs there is "
                   "written, the work is tried inside the sandbox",
+    "git": "git from the sandbox shell leaves files in a workspace's .git that the sandbox cannot remove, and then "
+           "saving stops. Use workspace_status to see what changed and the version tools to save. git log, git show "
+           "and git diff --cached only read, and any git command works on a copy outside the workspace "
+           "(git -C <copy>)",
+    "repository": "a workspace's .git belongs to the connector: nothing in it is written or removed from the sandbox, "
+                  "not even a leftover lock. If a save stops, show its message; the connector or IT resolves it",
 }
 
 
@@ -88,17 +99,468 @@ def reason(path: str, in_workspace: bool = True) -> str | None:
     return REASONS[found].format(name=_parts(path)[-1]) if found else None
 
 
-def shell_reason(command: str, in_workspace: bool = True) -> str | None:
+def shell_reason(command: str, in_workspace: bool = True, folders: list[str] | None = None) -> str | None:
     """Best effort for the sandbox shell: a command that writes an executable, or a protected file in a workspace.
-    Removing one is allowed, so Claude can clean up what version_save refused."""
+    Removing one is allowed, so Claude can clean up what version_save refused. With the workspaces' `folders`, a
+    target elsewhere does not count, and .git is left to `_repository_reason`, which follows the command's folder."""
     match = _EXECUTABLE_WRITE.search(command or "")
     if match:
         return REASONS["executable"].format(name=match.group(1))
-    match = _PROTECTED_WRITE.search(command or "") if in_workspace else None
-    if match:
-        found = "context" if match.group(1).lower().endswith(".md") else "config"
-        return REASONS[found].format(name=match.group(1))
+    for match in _PROTECTED_WRITE.finditer(command or "") if in_workspace else ():
+        target = match.group(1)
+        if folders and (_is_repository(target) or (_ABSOLUTE.match(target) and not _at_workspace(target, folders))):
+            continue
+        return REASONS["context" if target.lower().endswith(".md") else "config"].format(name=target)
     return None
+
+
+# --- the sandbox shell and a workspace's repository ----------------------------------------------------------------
+
+# Measured with git 2.55 on a repository whose files all look changed, as they do when the index was written on
+# Windows and is read in the sandbox: only these leave .git as it was. `git status`, `git diff`, `git diff HEAD` and
+# `git diff HEAD a.txt` rewrite the index, `git describe --dirty` too, and `--no-optional-locks` stops that for status
+# but not for diff. A diff of two commits never reads the working tree.
+_GIT_READS = {"log", "show", "blame", "ls-files", "ls-tree", "cat-file", "rev-parse", "rev-list", "shortlog", "grep",
+              "merge-base", "show-ref", "for-each-ref", "name-rev", "version", "help"}
+_GIT_PROGRAM = re.compile(r"(?:.*[\\/])?git(?:\.exe)?\Z", re.IGNORECASE)
+_GIT_HARMLESS = {"--no-pager", "-P", "-p", "--paginate", "--no-optional-locks", "--no-replace-objects",
+                 "--literal-pathspecs"}
+_GIT_OTHER_OUTPUT = re.compile(r"--output(?:=|\Z)|--ext-diff\Z")
+_GIT_RANGE = re.compile(r"\.\.\.?(?:[^./]|\Z)")  # main..HEAD, not ../file
+# A word that cannot be a file. Two words with a file last compare the working tree: `git diff HEAD a.txt` writes.
+_GIT_COMMIT = re.compile(r"(?:(?:FETCH_|ORIG_)?HEAD|[0-9a-f]{7,40}|[\w./-]+(?=[~^]))(?:[~^]\d*)*\Z")
+_ABSOLUTE = re.compile(r"[\\/]|[A-Za-z]:")
+_SCRIPTED_REMOVAL = re.compile(r"(?:\bos\.(?:remove|unlink|rmdir)|\bshutil\.rmtree|\.unlink\(|\.rmdir\(|\bunlinkSync\b"
+                               r"|\brmSync\b).*?([\w./\\~-]*\.git)\b", re.IGNORECASE | re.DOTALL)
+_FIND_REMOVERS = {"rm", "unlink", "rmdir", "mv", "shred"}
+_POWERSHELL_WRITERS = {"set-content", "add-content", "clear-content", "out-file", "new-item", "remove-item",
+                       "move-item", "copy-item"}
+_ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
+_HEREDOC = re.compile(r"""\s*(?:\\?([\w.-]+)|'([^'\n]*)'|"([^"\n]*)")""")
+_STREAM = re.compile(r"\s*(?:\d+|-)(?:[\s;&|)]|\Z)")  # 2>&1 points at a stream, not a file
+_GIT_LISTS = {"--show-current", "-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "--list", "-l"}
+_GIT_CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--list", "-l", "get", "list"}
+_OPERATORS = ("&&", "||", ";;", "|&", ";", "&", "|", "(", ")")
+_SEPARATORS = {";", ";;", "&", "\n"}
+_KEYWORDS = {"if", "then", "elif", "else", "while", "until", "do", "!", "{", "}", "fi", "done", "esac"}
+_SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
+# What runs another command, with the options that take a value and the words between them and the command.
+_WRAPPERS = {"command": ((), 0), "builtin": ((), 0), "noglob": ((), 0), "nohup": ((), 0), "setsid": ((), 0),
+             "exec": (("-a",), 0), "coproc": ((), 0), "time": (("-f", "-o"), 0), "stdbuf": (("-i", "-o", "-e"), 0),
+             "env": (("-u", "--unset", "-C", "--chdir", "-S"), 0), "nice": (("-n", "--adjustment"), 0),
+             "sudo": (("-u", "-g", "-h", "-p", "-C", "-D", "-R", "-U", "-T", "-r", "-t"), 0),
+             "ionice": (("-c", "-n", "-p", "-P", "-u", "--class", "--classdata"), 0),
+             "timeout": (("-s", "-k", "--signal", "--kill-after"), 1), "flock": (("-w", "-E", "--timeout"), 1),
+             "xargs": (("-I", "-E", "-d", "-L", "-n", "-P", "-s", "-a"), 0)}
+
+
+class _Step(NamedTuple):
+    spot: str | None  # the folder it runs in, as far as the text shows
+    words: list[str]  # past keywords, assignments and wrappers
+    writes: list[str]  # the targets of its redirections
+    variables: dict[str, str]
+
+
+def _closing(text: str, start: int) -> int:
+    """Where the substitution that starts here ends."""
+    if text[start] == "`":
+        end = text.find("`", start + 1)
+        return len(text) if end < 0 else end
+    depth, index = 0, start
+    while index < len(text):
+        depth += (text[index] == "(") - (text[index] == ")")
+        if not depth:
+            return index
+        index += 1
+    return len(text)
+
+
+def _tokens(text: str) -> list[tuple[str, str]]:
+    """A command as a shell reads it: words without their quotes, operators, redirections, and apart, the text of each
+    substitution and heredoc. A quoted word is data, so a mention is not a command; what runs is found again in
+    `_walk`: the argument of `sh -c`, `eval`, a heredoc fed to a shell."""
+    tokens, word, index, heredocs = [], None, 0, []
+
+    def flush() -> None:
+        nonlocal word
+        if word is not None:
+            tokens.append(("word", word))
+        word = None
+
+    def substitution() -> None:
+        nonlocal word, index
+        opened = 1 if text[index] == "`" else 2
+        end = _closing(text, index + opened - 1)
+        tokens.append(("inner", text[index + opened:end]))
+        word = (word or "") + text[index:end + 1]
+        index = end + 1
+
+    while index < len(text):
+        char = text[index]
+        if char == "\\":
+            if text[index + 1:index + 2] != "\n":
+                word = (word or "") + text[index + 1:index + 2]
+            index += 2
+        elif char == "'":
+            end = text.find("'", index + 1)
+            end = len(text) if end < 0 else end
+            word = (word or "") + text[index + 1:end]
+            index = end + 1
+        elif char == '"':
+            word, index = word or "", index + 1
+            while index < len(text) and text[index] != '"':
+                if text[index] == "\\":  # as a shell does: `C:\\Users` keeps its backslash inside double quotes
+                    following = text[index + 1:index + 2]
+                    word += "" if following == "\n" else following if following in '$`"\\' else "\\" + following
+                    index += 2
+                elif text.startswith("$(", index) or text[index] == "`":
+                    substitution()
+                else:
+                    word, index = word + text[index], index + 1
+            index += 1
+        elif text.startswith("$(", index) or char == "`":
+            substitution()
+        elif text.startswith(("<(", ">("), index):
+            flush()
+            end = _closing(text, index + 1)
+            tokens.append(("inner", text[index + 2:end]))
+            index = end + 1
+        elif char == "#" and word is None:
+            end = text.find("\n", index)
+            index = len(text) if end < 0 else end
+        elif char == "\n":
+            flush()
+            tokens.append(("op", "\n"))
+            index += 1
+            for delimiter, tabs in heredocs:
+                lines = text[index:].split("\n")
+                body = next((n for n, line in enumerate(lines) if (line.lstrip("\t") if tabs else line) == delimiter),
+                            len(lines))
+                tokens.append(("body", "\n".join(lines[:body])))
+                index += len("\n".join(lines[:body + 1])) + 1
+            heredocs = []
+        elif char.isspace():
+            flush()
+            index += 1
+        elif text.startswith("<<", index) and not text.startswith("<<<", index):
+            flush()
+            tabs = text.startswith("<<-", index)
+            index += 3 if tabs else 2
+            found = _HEREDOC.match(text, index)
+            if found:
+                heredocs.append((next(group for group in found.groups() if group is not None), tabs))
+                index = found.end()
+        elif text.startswith("<<<", index):
+            flush()
+            tokens.append(("redirect", "<<<"))
+            index += 3
+        elif char in "<>" or text.startswith("&>", index):
+            if word is not None and word.isdigit():
+                word = None
+            flush()
+            index += 1 + (text.startswith("&>", index) or text[index + 1:index + 2] in (">", "|"))
+            if text[index:index + 1] == "&":
+                index += 1
+                tokens.append(("redirect", ">" if char != "<" and not _STREAM.match(text, index) else "<"))
+            else:
+                tokens.append(("redirect", ">" if char != "<" else "<"))
+        else:
+            operator = next((op for op in _OPERATORS if text.startswith(op, index)), None)
+            if operator:
+                flush()
+                tokens.append(("op", operator))
+                index += len(operator)
+            else:
+                word, index = (word or "") + char, index + 1
+    flush()
+    return tokens
+
+
+def _unwrap(words: list[str]) -> tuple[list[str], dict[str, str], str | None]:
+    """A simple command past keywords, assignments and wrappers: its words, the variables it sets for itself, and a
+    folder a wrapper moves it to."""
+    variables, folder = {}, None
+    while words:
+        name = words[0].rsplit("/", 1)[-1]
+        if words[0] in _KEYWORDS:
+            words = words[1:]
+        elif _ASSIGNMENT.match(words[0]):
+            key, _, value = words[0].partition("=")
+            variables[key] = value
+            words = words[1:]
+        elif name in _WRAPPERS:
+            if name == "command" and words[1:2] and words[1] in ("-v", "-V"):
+                return [], variables, folder  # only asks where a program is
+            takes, between = _WRAPPERS[name]
+            index = 1
+            while index < len(words) and words[index].startswith("-") and words[index] != "--":
+                if name == "env" and words[index] in ("-C", "--chdir"):
+                    folder = words[index + 1] if index + 1 < len(words) else None
+                index += 2 if words[index] in takes else 1
+            index += words[index:index + 1] == ["--"]
+            words = words[index + between:]
+        else:
+            break
+    return words, variables, folder
+
+
+def _join(base: str | None, path: str) -> str | None:
+    """A folder as far as the text shows it: absolute, relative to a place not known, or None when a variable, a
+    wildcard or the home folder makes it impossible to tell."""
+    if not path or path[0] == "~" or set(path) & set("$`*?["):
+        return None
+    return path if _ABSOLUTE.match(path) or base is None else f"{base}/{path}"
+
+
+def _walk(text: str, spot: str | None, variables: dict[str, str], found: list[_Step], depth: int = 0) -> None:
+    """Every simple command in `text`, in order, with the folder each runs in. A `cd` holds only as far as it surely
+    ran: to the end of its bracket, not past a pipe or `&`, whose command runs apart, and past `||` or a block only until
+    what follows no longer depends on it."""
+    if depth > 8:
+        return
+    words, writes, target, brackets, pushed, fed = [], [], None, [], [], []
+    blocks, either, unsure, piped, entered = 0, False, False, False, spot
+
+    def run(raw: list[str]) -> None:
+        nonlocal spot, unsure, blocks
+        plain, own, folder = _unwrap(raw)
+        if plain and plain[0] in ("cd", "pushd"):
+            if plain[0] == "pushd":
+                pushed.append(spot)
+            spot = _join(spot, next((word for word in plain[1:] if not word.startswith("-")), ""))
+            unsure = unsure or either or blocks > 0
+            return
+        if plain and plain[0] == "popd":
+            spot = pushed.pop() if pushed else None
+            return
+        if plain and plain[0] == "export":
+            variables.update(dict(word.split("=", 1) for word in plain[1:] if _ASSIGNMENT.match(word)))
+            return
+        if not plain and own:
+            variables.update(own)
+        where = _join(spot, folder) if folder else spot
+        name = plain[0].rsplit("/", 1)[-1] if plain else ""
+        found.append(_Step(where, plain, writes[:], {**variables, **own}))
+        writes.clear()
+        if name == "eval":
+            _walk(" ".join(plain[1:]), where, dict(variables), found, depth + 1)
+        elif name in _SHELLS or name == "flock" or (plain and plain[0] == "-c"):
+            for index, word in enumerate(plain):
+                if re.fullmatch(r"-\w*c\w*", word) and index + 1 < len(plain):
+                    _walk(plain[index + 1], where, dict(variables), found, depth + 1)
+            for text_fed in fed if name in _SHELLS else ():
+                _walk(text_fed, where, dict(variables), found, depth + 1)
+        elif name == "find":
+            for index, word in enumerate(plain):
+                if word in ("-exec", "-execdir", "-ok", "-okdir"):
+                    end = next((n for n in range(index + 1, len(plain)) if plain[n] in (";", "+")), len(plain))
+                    run(plain[index + 1:end])
+        fed.clear()
+
+    def finish() -> None:
+        nonlocal blocks, words, unsure
+        raw, words = words, []
+        if raw[:1] and raw[0] in ("if", "while", "until", "for", "case"):
+            blocks += 1
+        elif raw[:1] and raw[0] in ("fi", "done", "esac"):
+            blocks = max(0, blocks - 1)
+        run([] if raw[:1] and raw[0] in ("for", "case") else raw)
+
+    for kind, value in _tokens(text):
+        if kind == "inner":
+            _walk(value, spot, dict(variables), found, depth + 1)
+        elif kind == "body":
+            if found and found[-1].words[:1] and found[-1].words[0].rsplit("/", 1)[-1] in _SHELLS:
+                _walk(value, found[-1].spot, dict(variables), found, depth + 1)
+        elif kind == "redirect":
+            target = value
+        elif kind == "word":
+            if target:
+                if target == ">":
+                    writes.append(value)
+                elif target == "<<<":
+                    fed.append(value)
+                target = None
+            else:
+                words.append(value)
+        else:
+            finish()
+            if value in ("|", "|&", "&") or piped:
+                spot = entered
+            if value == "(":
+                brackets.append(spot)
+            elif value == ")" and brackets:
+                spot = brackets.pop()
+            either, piped = value == "||", value in ("|", "|&")
+            if piped and found and found[-1].words:
+                fed.append(" ".join(found[-1].words[1:]))
+            if value in _SEPARATORS and unsure and not blocks:
+                spot, unsure = None, False
+            entered = spot
+    finish()
+
+
+def _steps(command: str, here: str | None) -> list[_Step]:
+    found: list[_Step] = []
+    _walk(command, here, {}, found)
+    return found
+
+
+def _at_workspace(place: str | None, folders: list[str], unknown: bool = False) -> bool:
+    """Whether a folder is a workspace or inside one, as the computer or the sandbox sees it. A copy that has the same
+    name is not one, elsewhere or in the sandbox's own output folders; a place the text does not show is `unknown`."""
+    if place is None or not _ABSOLUTE.match(place):
+        return unknown
+    names = [part.lower() for part in rules.parts(place)]
+    workspaces = {rules.parts(folder)[-1].lower() for folder in folders if rules.parts(folder)}
+    mounted = names[names.index("mnt") + 1:] if "mnt" in names else []
+    if mounted[:1] in (["outputs"], ["uploads"]):
+        mounted = []
+    return rules.relative(place, folders) is not None or bool(workspaces.intersection(mounted))
+
+
+def _is_repository(path: str | None) -> bool:
+    return bool(path) and ".git" in [part.lower() for part in rules.parts(path)]
+
+
+def _git_call(arguments: list[str]) -> tuple[list[tuple[str, str]], list[str], bool]:
+    """A git command's folders (-C, --git-dir, --work-tree), its subcommand with arguments, and whether every option
+    before the subcommand is known not to change what it does."""
+    folders, index, known = [], 0, True
+    while index < len(arguments) and arguments[index].startswith("-"):
+        word = arguments[index]
+        name, _, value = word.partition("=")
+        if word in ("--version", "--help", "--exec-path"):
+            return folders, ["version"], known
+        if word.startswith("-C") or name in ("--git-dir", "--work-tree"):
+            value = word[2:] if word.startswith("-C") else value
+            if not value:
+                index += 1
+                value = arguments[index] if index < len(arguments) else ""
+            folders.append(("-C" if word.startswith("-C") else name, value))
+        elif word not in _GIT_HARMLESS:
+            known = False
+        index += 1
+    return folders, arguments[index:], known
+
+
+def _git_diff_only_reads(words: list[str]) -> bool:
+    if any(word in ("--cached", "--staged", "--no-index") for word in words):
+        return True
+    named = [word for word in words if not word.startswith("-")]
+    if any(word not in ("..", "...") and _GIT_RANGE.search(word) for word in named):
+        return True
+    return len(named) == 2 and bool(_GIT_COMMIT.fullmatch(named[1]))
+
+
+def _git_only_reads(subcommand: list[str], known: bool) -> bool:
+    if not known:
+        return False
+    if not subcommand:
+        return True
+    name, rest = subcommand[0], subcommand[1:]
+    options = rest[:rest.index("--")] if "--" in rest else rest  # what follows -- is a path, whatever it looks like
+    if any(_GIT_OTHER_OUTPUT.match(word) for word in options):
+        return False
+    if name == "grep" and any(re.match(r"-[A-Za-z]*O", word) or (
+            len(word) > 3 and "--open-files-in-pager".startswith(word.split("=")[0])) for word in options):
+        return False
+    if name == "diff":
+        return _git_diff_only_reads(options)
+    if name == "reflog":
+        return not options or options[0] == "show" or options[0].startswith("-")
+    if name == "branch":
+        return all(word in _GIT_LISTS for word in options)
+    if name == "tag":
+        return not options or options[0] in ("-l", "--list")
+    if name == "remote":
+        return options in ([], ["-v"], ["--verbose"])
+    if name == "config":
+        return options[:1] != [] and options[0] in _GIT_CONFIG_READS
+    return name in _GIT_READS
+
+
+def _shown_folder(tool: str, cwd: str, folders: list[str]) -> str | None:
+    """The folder a command starts in, when the hook can know it. The computer's shell reports it; the sandbox shell
+    keeps its own, which reaches the hook only when it is a workspace's (H19)."""
+    if not _ABSOLUTE.match(cwd):
+        return None
+    return cwd if tool == "Bash" or _at_workspace(cwd, folders) else None
+
+
+def _names_a_copy(value: str, folders: list[str]) -> bool:
+    """Whether a relative folder can be taken for a copy: it does not climb, stay here or name a workspace."""
+    parts = [part.lower() for part in re.split(r"[\\/]+", value) if part]
+    names = {rules.parts(folder)[-1].lower() for folder in folders if rules.parts(folder)}
+    return _join(None, value) == value and bool(parts) and parts != ["."] and ".." not in parts and not names & set(parts)
+
+
+def _git_reason(command: str, tool: str, cwd: str, folders: list[str]) -> str | None:
+    """A git command that can write, run in a workspace. In the sandbox shell, where the hook cannot see the folder,
+    only a command that shows it runs elsewhere stays out; a relative -C is taken as showing that, unless the command
+    or the folder the hook receives puts it in a workspace."""
+    if not folders:
+        return None
+    unknown = tool != "Bash" or _at_workspace(cwd, folders)
+    for step in _steps(command, _shown_folder(tool, cwd, folders)):
+        if not step.words or not _GIT_PROGRAM.fullmatch(step.words[0]):
+            continue
+        named, subcommand, known = _git_call(step.words[1:])
+        positional = [word for word in subcommand[1:] if not word.startswith("-")]
+        if subcommand[:1] == ["clone"] and len(positional) > 1 and _ABSOLUTE.match(positional[-1]) \
+                and not _at_workspace(positional[-1], folders):
+            continue  # it reads the workspace and writes the copy
+        base, relative_copy = step.spot, False
+        for option, value in named:
+            if option == "-C":
+                relative_copy = relative_copy or (base is None and _names_a_copy(value, folders))
+                base = _join(base, value)
+        repositories = [value for option, value in named if option == "--git-dir"]
+        trees = [value for option, value in named if option == "--work-tree"]
+        repositories += [step.variables["GIT_DIR"]] if "GIT_DIR" in step.variables else []
+        trees += [step.variables["GIT_WORK_TREE"]] if "GIT_WORK_TREE" in step.variables else []
+        # --work-tree moves the files, not the repository: without --git-dir that is still the one found from here
+        places = [_join(base, value) for value in repositories] or ([] if relative_copy else [base])
+        places += [_join(base, value) for value in trees]
+        if any(_at_workspace(place, folders, unknown) for place in places) and not _git_only_reads(subcommand, known):
+            return REASONS["git"]
+    return None
+
+
+def _targets(words: list[str]) -> list[str]:
+    """What a simple command writes, moves or removes, beyond its redirections."""
+    if not words:
+        return []
+    verb, arguments = words[0].rsplit("/", 1)[-1], [word for word in words[1:] if not word.startswith("-")]
+    if verb == "sed" and not any(word.startswith("-i") or word == "--in-place" for word in words[1:]):
+        return []
+    if verb == "find" and len(words) > 1 and ("-delete" in words or _FIND_REMOVERS.intersection(words)):
+        return [words[1]]
+    if verb in rules._ALL_ARGUMENTS or verb.lower() in _POWERSHELL_WRITERS:
+        return arguments
+    return arguments[-1:] if verb in rules._LAST_ARGUMENT else []
+
+
+def _repository_reason(command: str, tool: str, cwd: str, folders: list[str]) -> str | None:
+    """A shell command that writes or removes something inside a workspace's .git, wherever it stands. A place the
+    text cannot show counts as a workspace's when it names .git: `$WS/.git/config`, `~/x/.git/config`."""
+    if not folders:
+        return None
+    unknown = tool != "Bash" or _at_workspace(cwd, folders)
+
+    names = {rules.parts(folder)[-1].lower() for folder in folders if rules.parts(folder)}
+
+    def inside(target: str, spot: str | None) -> bool:
+        place = _join(spot, target)
+        shown = place is not None and bool(_ABSOLUTE.match(place))
+        return _is_repository(place or target) and (
+            _at_workspace(place, folders, unknown) or (not shown and _inside(target, names)))
+
+    here = _shown_folder(tool, cwd, folders)
+    for step in _steps(command, here):
+        if any(inside(target, step.spot) for target in [*step.writes, *_targets(step.words)]):
+            return REASONS["repository"]
+    return REASONS["repository"] if any(inside(found, here) for found in _SCRIPTED_REMOVAL.findall(command)) else None
 
 
 def _workspace_folders() -> list[str]:
@@ -144,8 +606,11 @@ def decide(payload: dict, policy: list[dict] | None = None) -> str | None:
         path = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
         found = reason(path, _inside(path, _workspace_names()))
     elif tool in _SHELL_TOOLS:
-        command = str(tool_input.get("command") or "")
-        found = shell_reason(command, _inside(command + " " + str(payload.get("cwd") or ""), _workspace_names()))
+        command, folder = str(tool_input.get("command") or ""), str(payload.get("cwd") or "")
+        workspaces = _workspace_folders()
+        found = (_git_reason(command, tool, folder, workspaces)
+                 or _repository_reason(command, tool, folder, workspaces)
+                 or shell_reason(command, _inside(command + " " + folder, _workspace_names()), workspaces))
     if found or not policy or tool not in _WRITE_TOOLS | _SHELL_TOOLS:
         return found
     cwd = str(payload.get("cwd") or "")

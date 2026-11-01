@@ -925,3 +925,290 @@ def test_pins_only_other_platforms_install_are_listed_apart(monkeypatch, tmp_pat
     result = deps.audit(tmp_path)
     assert result["not_installed_on_computers"] == ["requirements.txt: httpx2-jsfetch==1.0 (only on emscripten)"]
     assert any(b["package"] == "pywin32-ctypes" for b in result["blocked"])  # a Windows pin is still audited
+
+
+# --- ways around the audit, found by an independent review ---------------------------------------------------------
+
+def tree(folder, files: dict):
+    for path, text in files.items():
+        (folder / path).parent.mkdir(parents=True, exist_ok=True)
+        (folder / path).write_text(text, newline="\n", encoding="utf-8")
+
+
+LEFT_PAD = {"version": "1.3.0", "integrity": "sha512-x",
+            "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz"}
+
+
+def npm_lock(root: dict, **packages) -> str:
+    return json.dumps({"lockfileVersion": 3, "packages": {"": root, "node_modules/left-pad": LEFT_PAD, **packages}})
+
+
+def test_a_package_json_that_asks_for_what_its_lockfile_omits_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"package.json": json.dumps({"dependencies": {"evil": "*"}, "scripts": {"postinstall": "node x.js"}}),
+                    "package-lock.json": npm_lock({"name": "x"})})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "package.json" in result["not_pinned"][0]
+
+
+def test_a_lockfile_root_that_lists_a_package_it_does_not_hold_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    declared = {"dependencies": {"evil": "*", "left-pad": "1.3.0"}}
+    tree(tmp_path, {"package.json": json.dumps(declared), "package-lock.json": npm_lock({"name": "x", **declared})})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_package_json_its_lockfile_answers_passes(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    declared = {"dependencies": {"left-pad": "1.3.0"}, "peerDependencies": {"left-pad": "*"}}
+    tree(tmp_path, {"package.json": json.dumps({"name": "x", **declared}),
+                    "package-lock.json": npm_lock({"name": "x", **declared})})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("entry", [{"resolved": "https://evil.example/e.tgz", "integrity": "sha512-x"},
+                                   {"link": True, "resolved": "../evil", "version": "1.0.0"},
+                                   {"link": True, "resolved": "packages/evil"}])
+def test_an_npm_entry_with_no_version_or_a_link_is_refused_not_skipped(monkeypatch, tmp_path, entry):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"package-lock.json": json.dumps({"lockfileVersion": 3, "packages": {
+        "": {"name": "x"}, "node_modules/left-pad": LEFT_PAD, "node_modules/evil": entry}})})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "node_modules/evil" in result["not_pinned"][0]
+
+
+@pytest.mark.parametrize("field", ["peerDependencies", "optionalDependencies"])
+def test_packages_declared_as_peers_or_optional_must_be_pinned(tmp_path, field):
+    tree(tmp_path, {"package.json": json.dumps({field: {"evil": "*"}})})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_pyproject_that_asks_for_what_the_list_beside_it_omits_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements.txt": "left-pad==1.3.0 --hash=sha256:ab\n",
+                    "pyproject.toml": '[project]\nname = "x"\nversion = "1"\ndependencies = ["evil"]\n'})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "evil (in pyproject.toml" in result["not_pinned"][0]
+
+
+def test_a_pyproject_the_list_beside_it_answers_passes(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements.txt": "left-pad==1.3.0 --hash=sha256:ab\n",
+                    "pyproject.toml": '[project]\nname = "x"\nversion = "1"\nrequires-python = ">=3.12"\ndependencies = '
+                                      '["Left_Pad>=1", "tomli; python_version < \'3.11\'", "x[extra]"]\n'})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("manifest, text", [
+    ("services/api/pyproject.toml", '[project]\nname = "x"\nversion = "1"\ndependencies = ["evil"]\n'),
+    ("services/api/package.json", '{"name": "api", "dependencies": {"evil": "*"}}'),
+    ("services/api/package.json", '{"dependencies": {"evil": "*"}}'),  # with or without a name
+    ("services/web/requirements.in", "evil\n"),
+    ("api/pyproject.toml", '[tool.poetry]\nname = "x"\nversion = "1"\n[tool.poetry.dependencies]\nevil = "*"\n'),
+    ("services/vendor/package.json", '{"name": "x", "dependencies": {"evil": "*"}}'),  # not a copied library's place
+    ("services/templates/pyproject.toml", '[project]\nname = "x"\nversion = "1"\ndependencies = ["evil"]\n'),
+])
+def test_a_project_in_a_subfolder_needs_a_list_of_its_own(monkeypatch, tmp_path, manifest, text):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements.txt": "left-pad==1.3.0 --hash=sha256:ab\n", manifest: text})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and manifest in result["reasons"][0]
+
+
+def test_a_list_for_another_ecosystem_does_not_answer_for_a_manifest(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements.txt": "left-pad==1.3.0\n", "package.json": '{"dependencies": {"evil": "*"}}'})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_folder_called_archive_is_read_like_any_other(tmp_path):
+    tree(tmp_path, {"archive/requirements.txt": "evil>=1\n"})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_lists_in_a_requirements_folder_are_read(monkeypatch, tmp_path):
+    registry(monkeypatch, {"evil": {"6.6.6": 100}}, vulns={("evil", "6.6.6"): ["GHSA-x"]})
+    tree(tmp_path, {"requirements/base.txt": "evil==6.6.6\n"})
+    result = deps.audit(tmp_path)
+    assert result["files"] == ["requirements/base.txt"] and [b["package"] for b in result["blocked"]] == ["evil"]
+
+
+def test_a_requirements_folder_answers_for_the_project_above_it(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements/base.txt": "left-pad==1.3.0\n",
+                    "pyproject.toml": '[project]\nname = "x"\nversion = "1"\ndependencies = ["left-pad"]\n'})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("name", ["app.py.lock", "tools/run.py.lock", "x.pyw.lock", "y.pyz.lock", "APP.PY.LOCK"])
+def test_a_lockfile_the_audit_does_not_read_is_refused(tmp_path, name):
+    """`uv run script.py` honours a `script.py.lock` beside it: it installs what no audit saw."""
+    tree(tmp_path, {name: "version = 1\n"})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "a lockfile the audit does not read" in result["not_pinned"][0]
+
+
+def test_a_wheel_with_a_local_path_beside_its_address_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    files = 'wheels = [{ url = "https://files.pythonhosted.org/x.whl", path = "../../x.whl", hash = "sha256:aa" }]'
+    uv_project(tmp_path, locked("fastapi", "0.1.0", files=files))
+    assert deps.audit(tmp_path)["not_pinned"] == ["uv.lock: fastapi (only the public index)"]
+
+
+# --- what is not a project's list: found by a second review, since the audit now decides every send ---------------
+
+UV_LOCK = 'version = 1\nrevision = 3\nrequires-python = ">=3.12"\n\n[[package]]\nname = "demo"\nversion = "0.1.0"\n' \
+          'source = { virtual = "." }\n'
+PROJECT = '[project]\nname = "demo"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = []\n'
+A_PROJECT = {"pyproject.toml": PROJECT, "uv.lock": UV_LOCK}
+
+
+@pytest.mark.parametrize("files", [
+    {"requirements/what-sales-wants.txt": "The list of orders must show the customer.\nExport to Excel.\n"},
+    {"docs/requirements/login.txt": "A person signs in with single sign-on.\n"},
+    {"requirements-notes.txt": "Must work on phones.\n"},
+    {"requirements.txt": "# Notes\nWhat the users asked for in the meeting.\n- Faster exports\n"},
+    {"data/import.lock": ""}, {"flake.lock": "{}"}, {"tools/x/Cargo.lock": "x"}, {"site/Gemfile.lock": "x"},
+    {"composer.lock": "{}"},
+    {"app/static/vendor/chartjs/package.json": '{"name": "chart.js", "dependencies": {"x": "1"}}'},
+    {"tests/fixtures/p/pyproject.toml": '[project]\nname = "p"\nversion = "1"\ndependencies = ["evil"]\n'},
+    {"tests/fixtures/sample/package.json": '{"dependencies": {"x": "1"}}'},
+    {"templates/new-app/requirements.in": "fastapi\n"},
+    {"setup.cfg": "[flake8]\nmax-line-length = 120\n[tool:pytest]\naddopts = -q\n"},
+])
+def test_a_file_that_only_looks_like_a_projects_list_blocks_nothing(tmp_path, files):
+    tree(tmp_path, {**A_PROJECT, **files})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "allowed", result
+
+
+@pytest.mark.parametrize("name, text", [
+    ("requirements.txt", "left-pad==1.3.0\nevil>=1\n"),
+    ("requirements.txt", "left-pad==1.3.0\ngit+https://example.com/evil.git\n"),
+    ("requirements.txt", "left-pad==1.3.0\nThis sentence should not be here.\n"),
+    ("requirements.txt", "fastapi\nuvicorn\n"),
+    ("requirements/base.txt", "evil @ https://example.com/evil.whl\n"),
+    ("requirements-dev.txt", "--extra-index-url https://x.example\n"),
+])
+def test_a_real_list_with_one_bad_line_is_still_blocked(monkeypatch, tmp_path, name, text):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {name: text})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_setup_cfg_counts_when_it_installs_something(tmp_path):
+    tree(tmp_path, {"setup.cfg": "[options]\ninstall_requires =\n    evil\n"})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_uv_lock_answers_for_its_project_with_a_docs_list_in_a_requirements_folder(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}, "fastapi": {"0.1.0": 100}})
+    uv_project(tmp_path, locked("fastapi", "0.1.0"))
+    tree(tmp_path, {"requirements/docs.txt": "left-pad==1.3.0\n"})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_a_runtime_list_answers_for_the_runtime_only(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements.txt": "left-pad==1.3.0\n", "pyproject.toml":
+                    '[project]\nname = "x"\nversion = "1"\ndependencies = ["left-pad"]\n'
+                    '[project.optional-dependencies]\ndev = ["pytest"]\n[dependency-groups]\nlint = ["ruff"]\n'})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_a_byte_order_mark_is_not_a_reason_to_refuse(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    declared = {"dependencies": {"left-pad": "1.3.0"}}
+    tree(tmp_path, {"package.json": "\ufeff" + json.dumps({"name": "x", **declared}),
+                    "package-lock.json": npm_lock({"name": "x", **declared})})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+def test_an_npm_workspace_stays_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    root = {"name": "x", "workspaces": ["packages/*"]}
+    tree(tmp_path, {"package.json": json.dumps(root), "packages/a/package.json": '{"name": "a", "version": "1.0.0"}',
+                    "package-lock.json": npm_lock(root, **{"node_modules/a": {"resolved": "packages/a", "link": True}})})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_project_a_parent_declares_needs_no_list_of_its_own(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    declared = {"dependencies": {"left-pad": "1.3.0"}}
+    tree(tmp_path, {"pyproject.toml": '[project]\nname = "x"\nversion = "1"\n', "uv.lock": UV_LOCK,
+                    "package.json": json.dumps({"name": "root", "workspaces": ["web"], **declared}),
+                    "package-lock.json": npm_lock({"name": "root", "workspaces": ["web"], **declared}),
+                    "web/package.json": '{"name": "web", "dependencies": {"left-pad": "*"}}'})
+    assert not any("web/package.json" in reason for reason in deps.audit(tmp_path).get("reasons", []))
+
+
+@pytest.mark.parametrize("files, named", [
+    ({"requirements.txt": "evil>=1\n"}, "requirements.txt"),
+    ({"services/api/pyproject.toml": '[project]\nname = "api"\nversion = "1"\ndependencies = ["evil"]\n'},
+     "services/api/pyproject.toml"),
+])
+def test_what_a_person_reads_names_the_file_not_a_list_they_never_saw(monkeypatch, tmp_path, files, named):
+    registry(monkeypatch, {})
+    tree(tmp_path, {**A_PROJECT, **files})
+    message = deps.refusal("w", {**deps.audit(tmp_path), "head": "0" * 40}, "This version was not sent")["user_message"]
+    assert named in message and "incomplete" not in message
+
+
+@pytest.mark.parametrize("line", [
+    "evil (>=1.0)", "evil [x]", "evil [x]==1.0", "evil\t# the core", "wheels/evil-1.0-py3-none-any.whl",
+    "wheels\\evil-1.0-py3-none-any.whl", "file:C:/x/evil.whl", "file:./evil.whl", "${EVIL}",
+    "HTTPS://host/evil.whl", "evil-1.0-py3-none-any.whl", "evil\nother\t# x",
+])
+def test_what_pip_would_install_is_read_as_a_list(tmp_path, line):
+    """pip refuses a whole file on one line it cannot read, so a file is prose only if some line could not install."""
+    tree(tmp_path, {"requirements.txt": line + "\n"})
+    result = deps.audit(tmp_path)
+    assert result["files"] == ["requirements.txt"] and result["verdict"] == "blocked", result
+
+
+@pytest.mark.parametrize("text", [
+    "The list of orders must show the customer.\nExport to Excel.\n", "See: https://intranet/x for details\n",
+    "Must work on phones.\n", "# Notes\nWhat the users asked for in the meeting.\n- Faster exports\n",
+    "evil (>=1.0)\nThis line would make pip refuse the file.\n",
+])
+def test_sentences_stay_prose(tmp_path, text):
+    tree(tmp_path, {**A_PROJECT, "requirements.txt": text})
+    result = deps.audit(tmp_path)
+    assert result["files"] == ["uv.lock"] and result["verdict"] == "allowed", result
+
+
+EVIL = '{"name": "x", "dependencies": {"evil": "*"}}'
+
+
+@pytest.mark.parametrize("files", [
+    {"package.json": '{"workspaces": ["none"]}', "package-lock.json": '{"lockfileVersion": 3, "packages": {"": {"workspaces": ["none"]}}}',
+     "frontend/package.json": EVIL},  # a parent that does not take it in
+    {"package.json": '{"workspaces": ["frontend"]}', "frontend/package.json": EVIL},  # a parent with no lockfile
+    {"pyproject.toml": '[project]\nname = "r"\nversion = "1"\n[tool.uv.workspace]\nmembers = ["none"]\n',
+     "api/pyproject.toml": '[project]\nname = "x"\nversion = "1"\ndependencies = ["evil"]\n'},
+    {"pyproject.toml": '[project]\nname = "r"\nversion = "1"\n[tool.uv.workspace]\nmembers = ["api"]\n',
+     "api/pyproject.toml": '[project]\nname = "x"\nversion = "1"\ndependencies = ["evil"]\n'},
+])
+def test_a_parent_answers_only_with_its_lockfile_and_for_the_folders_it_names(tmp_path, files):
+    tree(tmp_path, files)
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+@pytest.mark.parametrize("pattern", ["web", "*", "w*"])
+def test_a_parent_with_its_lockfile_answers_for_its_members(monkeypatch, tmp_path, pattern):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    declared = {"dependencies": {"left-pad": "1.3.0"}}
+    root = {"name": "root", "workspaces": [pattern], **declared}
+    tree(tmp_path, {"package.json": json.dumps(root), "package-lock.json": npm_lock(root),
+                    "web/package.json": '{"name": "web", "dependencies": {"left-pad": "*"}}'})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("name", [
+    "vendor/lib/package.json", "fixtures/p/package.json", "templates/new-app/package.json", "app/static/vendor/chartjs/package.json",
+    "src/assets/vendor/x/package.json", "public/vendor/x/package.json", "tests/fixtures/sample/package.json",
+    "tests/unit/fixtures/sample/package.json", "test/fixtures/p/package.json",
+])
+def test_a_library_copied_in_or_a_tests_sample_blocks_nothing(tmp_path, name):
+    tree(tmp_path, {**A_PROJECT, name: EVIL})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"

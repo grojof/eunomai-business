@@ -403,7 +403,7 @@ def test_every_pull_request_carries_the_connectors_own_checks(signed_in, workspa
     name, ws = workspace_with_context(signed_in)
     (ws / "index.html").write_bytes(b"<p>Hello</p>")
     gitops.save(name, "Page")
-    gitops.push(name)
+    gitops.push(name, gitops.project_files(name)["tip"])
     monkeypatch.setattr(deps, "_get", lambda url: None)
     first = server.version_propose(name, "Page", "Summary by the specialist.")
     pull = signed_in.pulls[-1]

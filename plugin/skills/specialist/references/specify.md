@@ -15,7 +15,7 @@ OpenSpec files directly, exactly in this format; no command-line tool is needed.
   The system SHALL <one sentence>.
 
   #### Scenario: <name>
-  - **WHEN** <situation, with concrete sample values from the prototype>
+  - **WHEN** <situation, with concrete sample values from what the user tried>
   - **THEN** <expected result, with the exact text the user will see when it matters>
   ```
 
@@ -41,8 +41,8 @@ the content is in `docs_language`.
 
 ## Before showing it: do the pieces agree?
 
-Read `proposal.md`, the prototype (if there is one), the specs and the tasks side by side. Every screen and
-button in the prototype has a requirement; every requirement has a task; the scope in `## What Changes` matches;
+Read `proposal.md`, the agreed screens or the prototype, the specs and the tasks side by side. Every screen and
+button the user tried has a requirement; every requirement has a task; the scope in `## What Changes` matches;
 no requirement answers an open question; nothing contradicts the project's context. Fix what does not agree before the user sees it.
 
 ## With the user

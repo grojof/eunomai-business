@@ -8,14 +8,15 @@ Run it now, not from memory, and last: anything changed after it, a fix the revi
 running it again. Each line holds, or goes into the summary under *Not settled* or *Skipped*:
 
 - the whole test suite passes in a run made now; every requirement has a scenario, and every scenario a test;
-- the `verdict` of `dependency_audit(workspace)` is `allowed`;
+- the `verdict` of `dependency_audit(workspace)` is `allowed`: this line has to hold, since the connector refuses to
+  send otherwise;
 - review your own changes with two lenses, as a reviewer would: does it do what the specs say, no more and no less;
   and does it meet the table in `build.md`. If the organization provides a code or security review skill, run it
   too;
 - the README, `design.md`, `proposal.md` and `docs/` say what the code does (scope, settings, how to run it),
   nothing more: every setting they name exists;
-- the application matches the approved prototype and specs, or the user agreed each difference (noted is not
-  agreed);
+- the application matches the agreed screens or the approved prototype, and the specs, or the user agreed each
+  difference (noted is not agreed);
 - the history has one save per task;
 - assumptions confirmed by the user; open questions listed;
 - no secrets, no external resources, no dead code, no debugging leftovers, nothing meant to run on the user's
@@ -38,8 +39,19 @@ to Propose.
 
 `version_send(workspace)`, then `version_propose(workspace, <title>, <summary>)`. If it answers `created: false`,
 the pull request was already open: the version just sent updates it, and its description is replaced. The connector
-appends its own checks (the dependency audit) below your summary; do not repeat them. The summary, in
-`docs_language` (its headings too), has these sections, each short:
+appends its own checks (the dependency audit) below your summary; do not repeat them.
+
+Both audit what is saved and refuse unless it is `allowed`, whatever the project declares; nothing was sent then.
+`version_to_test` does the same. Never explain a refusal away, and never send the work another way:
+
+| Answer | Next |
+|---|---|
+| `audit_refused` | Back to the dependency steps in `build.md`, save, and send again. What only IT can lift (`reasons` that no allowed version solves): show `user_message` and offer `email_link`, and wait for IT |
+| `audit_unavailable` | Show `user_message`, and its `email_link` if there is one: an address stays closed until IT opens it. Try again when the network is back |
+| `not_sent` | The latest save is not on the server: `version_send`, then propose again. If the send is refused, as above |
+| `main_missing`, `not_a_version` | Show `user_message`, and its `email_link` if there is one; these are not for you to work around |
+
+The summary, in `docs_language` (its headings too), has these sections, each short:
 
 | Section | Content |
 |---|---|

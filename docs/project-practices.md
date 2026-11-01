@@ -111,8 +111,9 @@ branch = "pruebas"                        # the branch the test environment foll
 url = "https://app-test.example.internal" # where users see it (optional)
 ```
 
-In Cowork the specialist offers it after a save whose tests pass (`version_to_test`). What protects it is on the
-servers, so it holds whichever way someone tries, from Cowork or not:
+In Cowork the specialist offers it after a save whose tests pass (`version_to_test`), which refuses a version the
+[dependency audit](barriers.md#dependencies) does not allow. What protects it is on the servers, so it holds whichever
+way someone tries, from Cowork or not:
 
 | Layer | What IT sets up | What it prevents |
 |---|---|---|
@@ -125,6 +126,36 @@ servers, so it holds whichever way someone tries, from Cowork or not:
 
 Deploying from the git server's CI with repository secrets is not recommended: anyone who can push a branch can
 read them, and Gitea has no secrets per environment ([sources](sources.md#outside-claude)).
+
+## Seeing the application on a person's computer
+
+Where IT turned on [`app_preview`](configuration.md#seeing-the-application-on-a-persons-computer), a project can let
+people see the real application on their own computer, for up to an hour. It runs code nobody has reviewed yet, with
+their rights: [what that means](barriers.md#the-preview-on-the-persons-computer). Declare it in
+`.eunomai/project.toml` on `main`:
+
+```toml
+[preview]
+setup = [["python", "-m", "app.demo.generate"]]   # optional: commands that run before, in order
+run = ["uvicorn", "app.main:app", "--no-proxy-headers", "--host", "127.0.0.1", "--port", "{port}"]
+
+[preview.environment]
+APP_ENVIRONMENT = "development"
+```
+
+| Rule | Why |
+|---|---|
+| Each command is a list of words, run as `uv run --frozen <words>`, with no shell text (`&&`, `\|`, `;`, `>`, `$(`) in a word | What IT reviewed is what runs |
+| The program is `python <a file of the project>`, `python -m <module>` other than `pip`, `ensurepip` or `venv`, or a console script of a package in `uv.lock`. Never `python -c`, nor a script as the program (`app.py`): write `python app.py` | The last is checked once the packages are installed. A script as the program would bring its own metadata and lockfile |
+| `{port}` is the only substitution, in `run` only, and `run` must use it | The connector picks a free port |
+| `run` says `--host 127.0.0.1`, `--bind` or `-b 127.0.0.1:{port}`, or a bare `127.0.0.1:{port}`, and no other host, wildcard, socket or file descriptor. `-h` is not read: use the long option. The connector cannot know every option: IT does not declare `--ip 0`, and if it did, the listening table would catch it as the application starts | Nothing is offered to the network |
+| `[preview.environment]` takes names and text. `GUNICORN_CMD_ARGS`, `FLASK_RUN_HOST`, `UVICORN_HOST`, `HOST` and `BIND`, if set, name 127.0.0.1. It cannot set `PATH`, the home and temporary folders, proxies, or `UV_*`, `PYTHON*`, `PIP_*`, `LD_*`, `DYLD_*`, `SSL_*`, `GIT_*`, `NODE_*`, `CONDA_*` | The connector builds the environment from a short list; no secrets here either, this file is in the repository |
+| A `.python-version`, if the project has one, holds one plain version such as `3.13`; blank lines and `#` comments are ignored | It is the Python the preview installs and runs on. Without one, uv chooses |
+| The project has a `uv.lock`, and what it needs at run time is in its main dependencies | Development packages are not installed, the project itself is not built, and only wheels are used |
+| The application starts with example data and without credentials | A person's computer has no database or secrets of the project's. Production stays the default: development only when set explicitly |
+
+A declaration that breaks a rule shows nothing and goes to IT. These rules catch slips, not malice: **IT reviews the
+declaration**, so protect it like `AGENTS.md`.
 
 ## Checks on the server
 

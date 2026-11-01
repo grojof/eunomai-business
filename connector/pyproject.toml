@@ -41,3 +41,4 @@ cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }]
 testpaths = ["tests"]
 # A deprecated call breaks the tests now rather than the connector after an upgrade.
 filterwarnings = ["error::DeprecationWarning"]
+markers = ["preview: starts a real application with uv on this computer, and checks its processes and folder"]

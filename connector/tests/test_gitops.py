@@ -48,7 +48,7 @@ def test_user_joins_saves_sends_and_proposes(signed_in, workspaces):
 
     with pytest.raises(Exception, match="404"):
         gitops.pull_request("joined", "Proposal")  # not sent yet
-    sent = gitops.push("joined")
+    sent = gitops.push("joined", gitops.project_files("joined")["tip"])
     assert sent["pushed"]
 
     proposal = gitops.pull_request("joined", "Proposal", "Made in Cowork")
@@ -79,7 +79,7 @@ def test_main_branch_is_protected_whatever_its_name(signed_in, workspaces):
     with pytest.raises(PermissionError, match="main branch"):
         gitops.save("develop-main", "straight to develop")
     with pytest.raises(PermissionError):
-        gitops.push("develop-main")
+        gitops.push("develop-main", gitops.project_files("develop-main")["tip"])
     with pytest.raises(PermissionError):
         gitops.pull_request("develop-main", "from develop")
     for name in ("main", "master", "develop"):

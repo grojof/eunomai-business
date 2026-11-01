@@ -14,16 +14,18 @@ related: [architecture.md, decisions.md]
 
 The specialist is developer, analyst and consultant at the business user's side. Business users often start
 from a vague idea, or from a clear idea that is not the right one; building straight away turns the application
-into something nobody can maintain. The specialist analyses first, agrees on something the user can see, and only
-then builds, so that the reviewer receives work that is specified, tested and documented.
+into something nobody can maintain. The specialist analyses first, agrees on something the user can try, and only
+then builds the rest, so that the reviewer receives work that is specified, tested and documented.
 
 ## How the specialist talks
 
-One question at a time, as a choice with a recommendation; short answers (a sentence, a table, a diagram or a
-prototype); assumptions in the open; something to try before anything is built; plain words; and initiative: it
-handles versions and proposals on its own. The journey is sized to the request: a wording change skips the
-prototype, something new goes through every stage. Nothing is claimed without fresh evidence, and nothing runs on
-the user's computer ([decision 7](decisions.md#7--nothing-runs-on-the-users-computer)). The
+One question at a time, as a choice with a recommendation, and a question not answered means waiting: no default
+is taken in the user's name for anything that changes the project; short answers (a sentence, a table, a diagram or
+a screen to try); everything shown in the user's language and in plain words, status lines between tools included,
+with no stage names and no commands; assumptions in the open; something to try early; and initiative: it handles
+versions and proposals on its own. The journey is sized to the request: a wording change has nothing to try
+first, something new goes through every stage. Nothing is claimed without fresh evidence, and nothing runs on
+the user's computer but a preview IT turned on ([decision 7](decisions.md#7--nothing-runs-on-the-users-computer-except-a-preview-it-turns-on)). The
 rules it follows are in the skill itself ([`SKILL.md`](../plugin/skills/specialist/SKILL.md)); when it is not
 certain, it stops and hands IT a report ([decision 6](decisions.md#6--the-user-never-resolves-a-technical-problem)).
 
@@ -32,7 +34,7 @@ certain, it stops and hands IT a report ([decision 6](decisions.md#6--the-user-n
 ```mermaid
 flowchart LR
     idea([Idea]) --> understand["1 Understand<br/>what and why"]
-    understand --> shape["2 Shape<br/>clickable prototype"]
+    understand --> shape["2 Shape<br/>first real screens"]
     shape --> specify["3 Specify<br/>requirements, scenarios"]
     specify --> build["4 Build<br/>code and tests"]
     build --> deliver["5 Deliver<br/>pull request"]
@@ -50,9 +52,9 @@ flowchart LR
 | Stage | The user sees | Behind the scenes | Moves on when |
 |---|---|---|---|
 | **1 Understand** | A few questions, then "what I understood" in a short table, and a roadmap | Latest changes brought, a version created and named after the goal | The user confirms the summary |
-| **2 Shape** | A clickable prototype with sample data, a diagram of the flow | The prototype kept with the change, as the contract for Build | The user approves the prototype |
-| **3 Specify** | Requirements and examples of expected behaviour, in plain language | A short OpenSpec change: proposal, specs with scenarios, tasks. Business rules cite their source or are marked open; prototype, proposal, specs and tasks checked against each other | Every requirement has a scenario; open questions are listed |
-| **4 Build** | Progress along the roadmap, and screenshots from the sandbox | Tests first from the scenarios, never bent to the code; the whole dependency tree pinned and audited; a save point per task | Every scenario has a passing test, shown by a fresh run |
+| **2 Shape** | The first real screens with example data, tried on their computer or in the test environment; a diagram of the flow | Unfinished screens on the project's own base, saved, listed in `proposal.md` as the contract for Build | The user approves what they tried |
+| **3 Specify** | Requirements and examples of expected behaviour, in plain language | A short OpenSpec change: proposal, specs with scenarios, tasks. Business rules cite their source or are marked open; what was tried, proposal, specs and tasks checked against each other | Every requirement has a scenario; open questions are listed |
+| **4 Build** | Progress along the roadmap, and the application as it grows, on their computer, in the test environment or in screenshots from the sandbox | Tests first from the scenarios, never bent to the code; the whole dependency tree pinned and audited; a save point per task | Every scenario has a passing test, shown by a fresh run |
 | **5 Deliver** | "Sent for review" | A readiness check run now (tests, dependency audit, a review of its own changes, docs true to the code), the version sent, the pull request opened with the reviewer's summary | The pull request is open |
 
 After the review, the specialist brings the accepted work back on its own and suggests the next step. When IT
@@ -61,14 +63,21 @@ the specialist explains them to the user in plain words, asks them about anythin
 reworks in the same version as a small change, and proposes again with a *Review* section: each request and what
 was done.
 
+| What the user tries in Shape | When | Why |
+|---|---|---|
+| The first real screens, through [`app_preview`](barriers.md#the-preview-on-the-persons-computer) or the [test environment](project-practices.md#a-test-environment-without-waiting-for-it) | The project allows code and has one of them | They agree on the real thing, on the project's own base, before tests and the full specification are written. An unfinished screen is not polished, so a change of mind costs little |
+| The same screens as screenshots, or nothing until review, said plainly | The project allows code and has neither | The sandbox may not take pictures ([H14](validation/hypotheses.md)) |
+| A clickable HTML prototype | The project does not allow code | It is the only thing that can be made, and IT builds from it |
+
 ## What the reviewer receives
 
 Every pull request opens with the same short summary: the goal, what was built mapped to the requirements, the
 test of each scenario, what is **not settled** (unconfirmed assumptions, rules without a source, open questions),
 what was skipped, the skills used besides the specialist and any conflict with its rules, lines proposed for the
 project's context, and course changes that matter. Below it, the connector appends its own checks (the dependency
-audit), which the model does not write. Gaps are visible instead of hidden, and the reviewer can take any of them
-straight back to the user. The template is in
+audit), which the model does not write, and a version the audit does not allow is not sent at all
+([barriers](barriers.md#dependencies)). Gaps are visible instead of hidden, and the reviewer can take
+any of them straight back to the user. The template is in
 [`deliver.md`](../plugin/skills/specialist/references/deliver.md).
 
 ## Keeping it clean
@@ -101,7 +110,7 @@ Languages, dependency exceptions, and the organization's context and skills are 
 plugin ([configuration](configuration.md#the-specialist)). Where code may be written, and with which technologies,
 each project declares in its repository ([`.eunomai/project.toml`](project-practices.md#where-code-may-be-written)),
 and its context is an `AGENTS.md` IT keeps there ([decision 8](decisions.md#8--the-projects-context-belongs-to-it)). Without permission to write
-code, the specialist still analyses, shapes and specifies, and delivers that to IT as a proposal.
+code, the specialist still analyses, shapes with a prototype and specifies, and delivers that to IT as a proposal.
 
 ## To validate
 

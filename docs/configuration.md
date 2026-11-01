@@ -65,7 +65,8 @@ python tools\build.py --all             # the configuration and every variant, e
 | `free_development` | `false` | `true` lets the specialist write code in any workspace, with `allowed_technologies`. It applies to everyone who installs this build: for IT, make a separate build |
 | `allowed_technologies` | `[]` | With free development, the technologies allowed; empty means any |
 | `deny` | `[]` | `{"rule": "Bash(<command>)" or "Edit(<path>)", "reason": "...", "examples": {"denied": [...], "allowed": [...]}}`: what Claude may not do, in Claude Code's permission syntax. `Bash` rules apply anywhere, `Edit` rules in workspaces; the build checks the examples ([hooks and rules](hooks.md)) |
-| `dependency_exceptions` | `[]` | `{"package": "pypi:<name>" or "npm:<name>", "reason": "..."}`: packages IT vetted despite failing the origin or activity rules. A known vulnerability is never excepted. A common case: `colorama`, which `pytest` and `click` need on Windows, has had no release in over three years. Another: `httpx2-jsfetch`, which `httpx2` needs only in a web browser, publishes no source repository |
+| `app_preview` | `false` | `true` lets people see the real application on their own computer, through the connector, where a project declares it. It runs code nobody has reviewed yet, with the person's rights, outside any sandbox: [read this first](#seeing-the-application-on-a-persons-computer). It applies to everyone who installs this build |
+| `dependency_exceptions` | `[]` | `{"package": "pypi:<name>" or "npm:<name>", "reason": "..."}`: packages IT vetted despite failing the origin or activity rules. A known vulnerability is never excepted. A common case: `colorama`, which `pytest` and `click` need on Windows, has had no release in over three years. Another: `httpx2-jsfetch`, which `httpx2` needs only in a web browser, publishes no source repository. Without these two, a clone of the base application cannot be sent: the [audit decides the send](barriers.md#dependencies), for every project |
 | `organization_context` | `""` | Up to 4,000 characters the specialist should know about the organization: what it does, the systems that already exist (so it can propose them before building something new) |
 | `organization_skills` | `[]` | `{"skill": "<plugin:skill>", "use_for": "..."}`: the organization's own skills and what the specialist uses them for (for example, its brand for web pages). They apply only where they agree with eunomai-business's rules; conflicts are reported in the pull request. Review them first with the `review-skills` skill |
 
@@ -103,6 +104,27 @@ up to 20,000 characters, so a copy edited in the folder does not count), `organi
 **`workspaces_root`:** avoid folders synced by OneDrive (a synced `.git` folder breaks) and anything under
 `AppData` (Claude Desktop may redirect it). The folder holds the users' work; see
 [data-on-computers.md](data-on-computers.md).
+
+### Seeing the application on a person's computer
+
+With `app_preview` on, and `[preview]` in a project's declaration
+([how a project declares it](project-practices.md#seeing-the-application-on-a-persons-computer)), the specialist can
+show the real application in the person's browser, for up to 60 minutes.
+
+**The risk is yours to accept.** This runs code an AI wrote and nobody has reviewed yet, on the person's computer,
+with their rights, outside any sandbox. It can read what they can read, reach what they can reach and act as them on
+the git server. The [barriers](barriers.md#the-preview-on-the-persons-computer) reduce that risk and do not remove it:
+they keep a mistake from becoming an incident, and do not stop code written to do harm. Leave it off unless the
+people who will use it, and what they can reach, make that acceptable.
+
+| Before turning it on | Why |
+|---|---|
+| A [test environment](project-practices.md#a-test-environment-without-waiting-for-it) | If a project has one, try versions there: it needs none of this on people's computers |
+| A limited account for the people who use it | What the code can do is what they can do |
+| A separate build for them, if only some should have it | The setting applies to everyone who installs the build; on Enterprise a plugin can be limited to a group |
+| Application control | It runs Python from a temporary folder, `%TEMP%\eunomai-preview-*`. A policy that blocks programs there stops it, which is a good reason to allow it for a group, not for everyone |
+| Network | The first preview of a project downloads its packages, and its Python unless it was deployed: allow the [addresses](#installing-uv-in-an-organization) through the proxy, like the connector's |
+| `dependency_exceptions` | A preview is refused unless the audit allows the version, whatever the project declares |
 
 ## Sign-in providers
 
@@ -192,8 +214,9 @@ provide uv to a plugin, so IT deploys it ([decision 9](decisions.md#9--it-provid
 |---|---|
 | How to deploy | uv is one executable. IT distributes the version it has validated with its usual tools (Intune, Group Policy, a software catalogue) to a folder application control allows, such as `C:\Program Files\uv\uv.exe`, and sets that absolute path as `uv` in the build. An absolute path does not depend on the PATH Claude Desktop starts with. **Use uv 0.13.4 or later**: earlier versions are affected by [GHSA-hq85-5cpj-mr62](https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62) (high). Tested with uv 0.13.5 |
 | For a test computer | The official per-user installer (`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`), then restart Claude Desktop |
-| Python | uv downloads its own Python 3.12 the first time, from GitHub (`python-build-standalone`). To avoid that download on users' computers, run `uv python install 3.12` as part of the deployment |
-| Network | uv downloads packages from `pypi.org` and `files.pythonhosted.org`, and Python from `github.com` unless it was installed beforehand. Allow them through the proxy |
+| Python | Always uv's own: **a Python from the Microsoft Store is neither needed nor used**, nor is any other on the computer. The connector runs on 3.12; a preview runs on what the project's `.python-version` says, and the base application says 3.13 (with no such file, the newest Python uv has). So IT does one of two things: deploys every version its base applications declare, run as each person since the folder is per user (`uv python install 3.12 3.13`), or allows the addresses below |
+| What a person downloads the first time | Measured on a computer with empty uv folders, connector and base application: 22 MB for each Python, 69 MB on disk, and 18 MB and 20 MB of packages, 50 MB and 70 MB in uv's cache. In all about 82 MB down and 257 MB on disk. Every audit also reads about 12 MB of package information, for 51 packages |
+| Network | Through the proxy, for uv: `files.pythonhosted.org` for packages, `pypi.org` for what builds the connector, and, unless the Pythons are deployed, `releases.astral.sh`, or else `github.com` with `release-assets.githubusercontent.com`. For the audit: `pypi.org`, `api.osv.dev`, `registry.npmjs.org` for npm packages, and the source repositories' hosts, mostly `github.com`. When one is closed, the person is told in plain words and the report for IT names it. A preview's installation receives the proxy variables and no `UV_` ones, so a mirror set there does not reach it |
 | Application control | Policies such as AppLocker often block programs in the user's profile. Allow uv where it is deployed |
 | Updates | IT updates uv like any other tool, after checking it against the connector's tests. A uv too old for an option the plugin uses fails to start the connector, with the error in Claude Desktop's logs |
 | Computers that already have uv | Developers and IT keep their own uv: with an absolute path in the build, the connector uses IT's. The download cache is shared, which is harmless. Environment variables starting with `UV_` still apply: do not set them globally on business users' computers |

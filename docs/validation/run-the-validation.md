@@ -84,9 +84,11 @@ pull request, check the files, the accents and the author, and merge it.
 1. **Build without diagnostics**, with `organization_context` set, and put an `AGENTS.md` on `main` of a test
    repository (H15).
 2. **As a business user**, in a new task, ask for something vague (for example *"I need something to track the
-   team's holidays"*) and follow the specialist to the pull request. Note: the questions, the prototype (it opens
-   in the browser and responds to clicks), the specification, the tests, the pull request summary and the
-   connector's checks at its end (H11–H14), and whether it used the project's context rather than anything
+   team's holidays"*) and follow the specialist to the pull request. Note: the questions, the first real screens
+   and how they reach you (the application on your computer, H22; the test environment; screenshots; or a plain
+   word that you will see it at review), in a project that allows code; a clickable prototype that opens in the
+   browser and responds to clicks, in one that does not; the specification, the tests, the pull request summary and
+   the connector's checks at its end (H11–H14), and whether it used the project's context rather than anything
    personal (H15).
 3. **The guard** (H17): ask Claude to write a `start.bat`, to edit `AGENTS.md`, and to do both through the shell;
    each is denied with a reason. Repeat on a computer without Git.
@@ -104,18 +106,23 @@ pull request, check the files, the accents and the author, and merge it.
    `Edit(/data/raw/**)`. Ask Claude to run `npm install x`, and to write `data/raw/a.csv` in the project's workspace;
    each is denied with its reason. Then ask it to `cd` into the workspace in one command and write
    `data/raw/b.csv` with `echo` in the next: note whether that is denied too.
-7. **The base application** (H14, H20, H21): put a clone of `business-app-base` on `main` of a test repository, with
+7. **The base application** (H14, H20): put a clone of `business-app-base` on `main` of a test repository, with
    `colorama` and `httpx2-jsfetch` in `dependency_exceptions`. As a user who may only propose changes, in a local
    task, ask for something real, such as *"add a screen to log machine stoppages, with a list and a form"*. Note:
    - whether it reads the base's `AGENTS.md` and builds from its macros, with no invented class or colour;
    - `dependency_audit` answers `allowed`, and no package appears that the request did not need;
    - the tests and the checks pass in the sandbox, with the commands in the base's `AGENTS.md`;
    - the stylesheet is generated there: the executable downloads and its hash matches (H20);
-   - whether the person can open the server from their computer, or sees screenshots only (H21);
    - the pull request: it says what changed and what was not verified, and its screens hold up in light, dark and on
      a phone.
    Then ask for something the base does not have, such as *"clicking a slice of the chart opens the list filtered by
    it"*, and note whether the result can be reused or is written for that one chart.
+8. **The application on the person's computer** (H22), on a business user's computer, with a build with `app_preview`
+   on and a clone of the base application that declares `[preview]`. Ask to see it. Note: the specialist says what will
+   happen and waits; how long the first time takes, and whether the task stays responsive; the browser opens it, as
+   last saved, on 127.0.0.1. Then ask to stop it, and check in Task Manager that nothing of it is left and that
+   `%TEMP%\eunomai-preview-*` is gone. Repeat by closing the task or Claude Desktop instead. With IT's agreement, try it
+   under the organization's application control.
 
 ## 10 · Write down the results
 
