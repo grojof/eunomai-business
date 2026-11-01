@@ -138,7 +138,7 @@ reason to send what nobody audited, and the code in a test environment runs too.
 | `blocked` | Nothing is sent; the user reads why in plain words, and IT gets a report |
 | The audit cannot run (no network, a registry that does not answer) | Nothing is sent: deny by default, like the rest of the audit |
 | A version with no packages | `allowed`, without asking the network |
-| A commit that breaks the rules of a save | Not sent, and it does not run: `.git` is writable from the sandbox, so what a version changed since it left the main branch is checked on the host, against the main branch as the server has it |
+| A commit that breaks the rules of a save, at any point | Not sent, proposed or run: `.git` is writable from the sandbox, so each commit a version has beyond the main branch, as the server has it, is checked on the host, not only the last. A protected file added and taken out again would still travel in the history. A merge counts for what differs from all its parents, so taking in what IT changed is not changing it |
 | The server has no such main branch | Nothing is sent, and IT is told: it was renamed, or the repository is empty. A server that does not answer is the network, as always |
 | No history in common with the main branch | Nothing is sent, and IT is told: it was rewritten on the server |
 | A branch the connector did not make | Nothing is sent to it: the connector keeps, outside the workspace, the names `version_create` made, and the branch is read once and checked as it is sent. HEAD on the main or test branch is refused outright. For a workspace from before this list, a version counts if the server has no such branch yet or has a proposal from it; anything else goes to IT |
@@ -208,7 +208,9 @@ The sandbox can write `.git`, so nothing there is taken on trust. What dulwich c
 | `refs/replace/` | An object for another | Ignored: dulwich does not follow them |
 | `objects/info/alternates`, `commondir` | Where objects come from | Refused |
 | Objects, packs and their indexes, `multi-pack-index` | What a name holds | Verified: reading an object by name hashes it against the name, and a mismatch stops |
-| `config` | Filters, hooks, the address, `core.commitGraph`, `extensions` | Allow-list, then pinned for the operation |
+| Trees and commits in what goes | What the checks see against what git uses: of two entries with one name dulwich keeps the last, git the first | Verified: every commit beyond the main branch and every tree in it, from their raw entries. Refused: two entries with one name, adjacent or not, wrong order, modes or names git would not write, names one folder cannot hold apart (case, Unicode), malformed commits. What is already on the main branch is not judged |
+| What travels | Objects nobody checked | Only what commits reach: the pack is built from them, so a stray object stays, and a blob a tree reaches is covered by the rules on its path |
+| `config` | Filters, hooks, the address, `core.commitGraph`, `extensions`, other files through `include` and `includeIf` | Allow-list, then pinned for the operation. An include is never followed: its section is refused |
 | `HEAD`, `refs/`, `packed-refs` | Which commit, which branch | Not believed for a decision: what is sent goes by commit id, audited first, to a branch checked as it is sent. The main branch's commit comes from the server |
 | `hooks/` | Commands | Never run |
 | `index` | What a save takes | Paths validated, and the tree committed is checked again |

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **What goes is well formed before anything reads it** (fourth review): a tree listing `AGENTS.md`, a workflows folder or
+  `requirements.txt` twice showed dulwich's checks an innocent twin while git used the other, and it reached the server
+  and a real merge. Every commit beyond the main branch and every tree in it are now read from their raw entries, for
+  send, proposal, test environment, preview and the audit's copy: duplicates, order, modes, names that collide by case
+  or Unicode, malformed commits. The rules of a save hold for each commit, not only the last. `include` is never
+  followed in `.git/config`.
 - **Real lists are lists, and a manifest cannot opt out** (third review): `evil (>=1.0)`, `wheels/evil.whl`, `file:./x.whl`
   or `${EVIL}` read as prose and went unaudited. A file is prose only if some line could not install, since pip refuses
   it then. Every folder that declares packages counts, named or not, poetry included; a parent answers only with its

@@ -265,13 +265,13 @@ def test_what_was_audited_is_what_goes_even_if_the_reference_moves_during_the_se
     ref = ws / ".git" / "refs" / "heads" / "draft" / "work"
     ref.write_bytes(good.encode() + b"\n")  # the sandbox can write this
     audit_answers(monkeypatch, ALLOWED)
-    real = gitops._check_changes
+    real = gitops._send_commit
 
-    def the_sandbox_moves_it(*args):  # the last check before the send
+    def the_sandbox_moves_it(*args):  # the moment of the send
         ref.write_bytes(bad.encode() + b"\n")
         return real(*args)
 
-    monkeypatch.setattr(gitops, "_check_changes", the_sandbox_moves_it)
+    monkeypatch.setattr(gitops, "_send_commit", the_sandbox_moves_it)
     tools.version_send(name)
     assert signed_in.repos[name].refs[b"refs/heads/draft/work"].decode() == good
 
@@ -320,13 +320,13 @@ def test_the_test_environment_gets_the_commit_that_was_audited(signed_in, worksp
     with gitops._repo(name) as repo:
         gitops.porcelain.reset(repo, "hard", good.encode())  # a clean version, at the commit the audit will see
     audit_answers(monkeypatch, ALLOWED)
-    real = gitops._forbidden_changes
+    real = gitops._send_commit
 
-    def the_sandbox_moves_it(*args):  # the last check before the send
+    def the_sandbox_moves_it(*args):  # the moment of the send
         ref.write_bytes(bad.encode() + b"\n")
         return real(*args)
 
-    monkeypatch.setattr(gitops, "_forbidden_changes", the_sandbox_moves_it)
+    monkeypatch.setattr(gitops, "_send_commit", the_sandbox_moves_it)
     assert tools.version_to_test(name)["status"] == "sent"
     assert signed_in.repos[name].refs[b"refs/heads/pruebas"].decode() == good
 
@@ -370,7 +370,7 @@ def test_a_saved_link_is_copied_as_a_plain_file_never_as_a_link(signed_in, works
         repo.object_store.add_object(commit)
         repo.refs[b"refs/heads/draft/work"] = commit.id
     target = tmp_path / "copy"
-    gitops.export_saved(name, target)
+    gitops.export_saved(name, target, gitops.project_files(name)["tip"])
     assert not (target / "link").is_symlink() and (target / "link").read_bytes() == b"../../somewhere/secret"
 
 
@@ -390,7 +390,7 @@ def test_a_path_that_leaves_the_copy_stops_it(signed_in, workspaces, tmp_path):
             repo.object_store.add_object(item)
         repo.refs[b"refs/heads/draft/work"] = commit.id
     with pytest.raises(support.NeedsIT):
-        gitops.export_saved(name, tmp_path / "copy")
+        gitops.export_saved(name, tmp_path / "copy", gitops.project_files(name)["tip"])
     assert not (workspaces.parent / "con.txt").exists()
 
 
@@ -661,13 +661,13 @@ def test_head_moved_after_the_check_does_not_choose_the_target(signed_in, worksp
     main = signed_in.repos[name].refs[b"refs/heads/main"]
     signed_in.repos[name].refs[b"refs/heads/release"] = main
     (ws / ".git" / "refs" / "heads" / "release").write_bytes(gitops.saved_head(name).encode() + b"\n")
-    real = gitops._check_changes
+    real = gitops._send_commit
 
     def moved(*args):
         (ws / ".git" / "HEAD").write_bytes(b"ref: refs/heads/release\n")
         return real(*args)
 
-    monkeypatch.setattr(gitops, "_check_changes", moved)
+    monkeypatch.setattr(gitops, "_send_commit", moved)
     audit_answers(monkeypatch, ALLOWED)
     assert tools.version_send(name)["pushed"]
     assert signed_in.repos[name].refs[b"refs/heads/release"] == main and on_server(signed_in, name)

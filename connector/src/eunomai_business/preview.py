@@ -620,9 +620,9 @@ def _bring_up(current: _Preview, declared: dict) -> None:
 
 def _prepare(current: _Preview, declared: dict) -> dict:
     """The saved version in the temporary folder, checked, and running. Refusals come back as answers."""
-    saved = gitops.export_saved(current.workspace, current.app, current.head, current.main)
+    saved = gitops.export_saved(current.workspace, current.app, current.main, current.head)
     try:
-        audit = gitops.audit_saved(current.workspace, current.head, current.app)
+        audit = gitops.audit_saved(current.workspace, current.main, current.head, current.app)
     except support.Unreachable:
         return {"workspace": current.workspace, "status": "audit_unavailable",
                 "user_message": "The application cannot be shown now: the checks on what it uses could not run. Check "

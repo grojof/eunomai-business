@@ -97,12 +97,20 @@ def version_save(workspace: str, message: str) -> dict:
     return _safe(gitops.save, workspace, message)
 
 
-def _audit_gate(workspace: str, head: str | None = None) -> tuple[dict | None, dict | None]:
-    """(the audit of what is saved, or of `head`, the refusal). It goes on only if the audit says `allowed`, whatever
-    the project declares; an audit that cannot run refuses too. A version with no packages is allowed without the
-    network."""
+def _main_missing(workspace: str) -> dict:
+    """An unreachable server raises before this: here it answered, without its main branch."""
+    stop = support.NeedsIT("This version was not sent: the project's main version is not on the server, or has another "
+                           "name now. Your work is safe on this computer; IT can look at it.",
+                           "the main branch is not on the server", {"Workspace": workspace})
+    return {**support.report(stop), "status": "main_missing", "workspace": workspace}
+
+
+def _audit_gate(workspace: str, main: str, head: str | None = None) -> tuple[dict | None, dict | None]:
+    """(the audit of what is saved, or of `head`, the refusal). It goes on only if it passes the checks against `main`
+    and the audit says `allowed`, whatever the project declares; an audit that cannot run refuses too. A version with
+    no packages is allowed without the network."""
     try:
-        audit = gitops.audit_saved(workspace, head)
+        audit = gitops.audit_saved(workspace, main, head)
     except support.Unreachable:
         return None, {"workspace": workspace, "status": "audit_unavailable",
                       "user_message": "This version was not sent: the checks on what it uses could not run. Check the "
@@ -113,18 +121,15 @@ def _audit_gate(workspace: str, head: str | None = None) -> tuple[dict | None, d
 def _send(workspace: str) -> dict:
     """What leaves the computer is checked here, on the host: the sandbox can write `.git`, HEAD included."""
     files = gitops.project_files(workspace)
-    if not files.get("tip"):  # an unreachable server raises before this: here it answered, without its main branch
-        stop = support.NeedsIT("This version was not sent: the project's main version is not on the server, or has "
-                               "another name now. Your work is safe on this computer; IT can look at it.",
-                               "the main branch is not on the server", {"Workspace": workspace})
-        return {**support.report(stop), "status": "main_missing", "workspace": workspace}
+    if not files.get("tip"):
+        return _main_missing(workspace)
     test_branch = (settings.test(files["declaration"]) or {}).get("branch")
     version = gitops.current_version(workspace, test_branch)
     if version is None:
         return {"workspace": workspace, "status": "not_a_version",
                 "user_message": "This copy of the project is not on a version of yours, so nothing was sent. Your work "
                                 "is safe on this computer."}
-    audit, refused = _audit_gate(workspace)
+    audit, refused = _audit_gate(workspace, files["tip"])
     return refused or gitops.push(workspace, files["tip"], audit["head"], version, test_branch)
 
 
@@ -155,7 +160,10 @@ def _propose(workspace: str, title: str, description: str) -> dict:
         return {"workspace": workspace, "status": "not_sent",
                 "user_message": "Your latest saved work has not been sent yet, so nothing was proposed. It is safe on "
                                 "this computer."}
-    audit, refused = _audit_gate(workspace, held)
+    main = gitops.project_files(workspace).get("tip")
+    if not main:
+        return _main_missing(workspace)
+    audit, refused = _audit_gate(workspace, main, held)
     return refused or gitops.pull_request(workspace, title, description + _checks(audit))
 
 
@@ -213,7 +221,9 @@ def _to_test(workspace: str) -> dict:
         return {"workspace": workspace, "status": "no_test_environment", "reason": reason,
                 "user_message": "This project has no test environment to try versions in; your version goes "
                                 "through IT's review as usual."}
-    audit, refused = _audit_gate(workspace)
+    if not files.get("tip"):
+        return _main_missing(workspace)
+    audit, refused = _audit_gate(workspace, files["tip"])
     if refused:
         return refused
     result = gitops.to_test(workspace, declared["branch"], audit["head"])
