@@ -26,7 +26,7 @@ def proposed(server, name: str, version: str, files: dict) -> Path:
         (ws / path).parent.mkdir(parents=True, exist_ok=True)
         (ws / path).write_bytes(data)
     gitops.save(name, "My change")
-    gitops.push(name)
+    gitops.push(name, gitops.project_files(name)["tip"])
     gitops.pull_request(name, "My change")
     return ws
 
@@ -304,7 +304,7 @@ def test_sending_never_overwrites_the_server(signed_in, workspaces):
     elsewhere = signed_in.server_commit("no-force", "draft/v", {"b.md": b"from another computer\n"})
     (ws / "c.md").write_bytes(b"c\n")
     gitops.save("no-force", "Local change")
-    result = tools._safe(gitops.push, "no-force")
+    result = tools._safe(gitops.push, "no-force", gitops.project_files("no-force")["tip"])
     assert result["status"] == "needs_it" and "changes this computer does not have" in result["it_report"]
     assert signed_in.repos["no-force"].refs[b"refs/heads/draft/v"] == elsewhere
 

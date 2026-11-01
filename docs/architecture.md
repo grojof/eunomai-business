@@ -76,6 +76,7 @@ sequenceDiagram
     Claude->>Connector: version_save
     Note over Connector: hooks off, .git/config checked
     Claude->>Connector: version_send
+    Note over Connector: refused unless the audit allows what is saved
     Connector->>Git: Push the version (HTTPS, user's token)
     Claude->>Connector: version_propose
     Connector->>Git: Open the pull request
@@ -142,7 +143,7 @@ sequenceDiagram
 | Build tool | `tools/build.py`: organization configuration + source → `eunomai-business.zip`, after validating the configuration | Built |
 | Bill of materials | `tools/sbom.py` → `connector/sbom.cdx.json`, regenerated whenever `connector/uv.lock` changes | Built |
 | Maintenance | GitHub workflows: tests on every pull request (Linux, Windows); daily dependency update (`tools/update_dependencies.py`) | Built |
-| Tests | `connector/tests/`: sign-in, workspaces, versions, updates, barriers, the file guard, the dependency check and audit, the hooks, the build and the tool list, against a fake git server (`uv run --frozen --group dev pytest` in `connector/`) | Built |
+| Tests | `connector/tests/`: sign-in, workspaces, versions, updates, barriers, the file guard, the dependency check and audit, the hooks, the build and the tool list, against a fake git server (`uv run --frozen --group dev pytest` in `connector/`). Those marked `preview` start real processes with uv | Built |
 
 ## Connector modules
 
@@ -151,9 +152,10 @@ sequenceDiagram
 | `auth` | Sign-in with any OAuth 2.0 provider (authorization code + PKCE, loopback redirect), token refresh | Standard OAuth 2.0; nothing server-specific |
 | `store` | Keeps sign-in records encrypted per user | The operating system (DPAPI on Windows, keyring elsewhere) |
 | `gitops` | Workspaces, versions, save points, sending, pull requests | Standard git over HTTPS (dulwich), except two Gitea-specific parts below |
-| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`, `specialist_settings`, `dependency_check`, `dependency_audit`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
+| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`, `specialist_settings`, `dependency_check`, `dependency_audit`, `app_preview`, `app_preview_stop`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
+| `preview` | `app_preview`, off by default: the saved version in a temporary folder, audited, run through uv on 127.0.0.1, with its whole process tree stopped on request, with the connector and after 60 minutes ([barriers](barriers.md#the-preview-on-the-persons-computer)) | uv; a job object on Windows, a process group elsewhere |
 | `support` | The stop: the user's message, IT's report, the e-mail link | — |
-| `settings` | The specialist's settings: languages, the organization's context and skills, where code may be written | — |
+| `settings` | The specialist's settings: languages, the organization's context and skills, where code may be written, and what a project declares, the preview included | — |
 | `deps` | `dependency_check`: which package version may be used; `dependency_audit`: every package a workspace pins | PyPI, npm and OSV public APIs; the source repositories' web addresses |
 | `guard` | The file guard: the PreToolUse hook, and the rules `version_save` enforces | — |
 | `hook` | Measurement hook (diagnostics only): logs each tool call and denies two guard-test markers | — |
@@ -164,7 +166,8 @@ sequenceDiagram
 - **The workspace is named by its path.** Under the current MCP protocol (`2026-07-28`) the client does not share
   its folders with the connector (roots are deprecated), so the connector cannot discover the folder selected in
   Cowork. It keeps workspaces in its own folder and returns their path; in a local Cowork session on Windows,
-  Claude's file tools and the connector see the same path.
+  Claude's file tools and the connector see the same path. A task opened without the folder asks Cowork for it and
+  carries on (H23).
 - **Per-user data lives in `%LOCALAPPDATA%\eunomai-business`**, not in `CLAUDE_PLUGIN_DATA`, which points inside
   each task's folder and does not outlive the task. Claude Desktop installed as a Windows package (MSIX) redirects
   that folder for the processes it starts unless it already exists ([where](data-on-computers.md)).
@@ -209,6 +212,10 @@ Claude can act on:
 A path is a workspace's when one of its folders has a registered workspace's name. Names Windows treats as the
 same file count as protected too: trailing dots and spaces, alternate streams (`run.bat::x`), 8.3 short names.
 The guard is set to `onFailure: "block"`: a guard that cannot run stops the write instead of letting it through.
+
+From the shell it also denies git commands that can write in a workspace, and anything that writes or removes inside
+its `.git`: the sandbox cannot delete what git leaves there, and the next save stops
+([hooks and rules](hooks.md#git-from-the-sandbox-shell)).
 
 `version_save` enforces the same rules on the host, where the sandbox cannot reach: every path must be valid on
 Windows and stay inside the workspace; context and configuration files go back to how the last save point has them

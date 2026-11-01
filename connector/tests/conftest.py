@@ -161,6 +161,9 @@ class FakeServer:
                 pull.update(state="closed", merged=True)
         del repo.refs[f"refs/heads/{version}".encode()]
 
+    def pulls_of(self, name: str) -> list[dict]:
+        return [pull for pull in self.pulls if pull["repo"] == name]
+
     def provider(self, client_id: str = "test-client") -> dict:
         return {"authorize_url": f"{self.url}/login/oauth/authorize",
                 "token_url": f"{self.url}/login/oauth/access_token", "client_id": client_id,

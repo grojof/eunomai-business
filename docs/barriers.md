@@ -36,7 +36,7 @@ project and its git server. See [project-practices.md](project-practices.md).
 |---|---|
 | No save points on the main branch: `main`, `master`, and the server's main branch, recorded at clone time in the connector's own folder (not in `.git`, which Claude's sandbox can write) | Changes reach it only through a pull request |
 | The main branch is never sent; nothing is force-sent, except a version to the project's declared test branch | The shared history cannot be overwritten from a computer |
-| To the test branch goes only a saved version that has everything on the main branch, never onto the main branch or the version's own, and checked against the main branch by the same rules as a save; the git server decides who may | The test environment never loses others' work nor gets a file only IT changes, and production still takes a pull request |
+| To the test branch goes only a saved version the audit allows, that has everything on the main branch, never onto the main branch or the version's own, and checked against the main branch by the same rules as a save; the git server decides who may | The test environment never loses others' work nor gets a file only IT changes, and production still takes a pull request |
 | Pull requests only from a version (branch) | Same rule, from the other side |
 | No versions until the repository has its main branch | A version must start from the shared history, not from nothing |
 | Workspace names are plain folder names, under `workspaces_root` only, never a Windows device name (`con`, `nul`, `com1`...) | No path tricks (`..`, absolute paths) |
@@ -72,14 +72,17 @@ The newest version that passes is recommended, with its runtime requirements. Th
 check allows.
 
 `dependency_audit` applies the same rules to every package a workspace pins, direct and indirect, in
-`requirements*.txt`, `package-lock.json` (version 2 or later), `uv.lock`, or `vendor.json`, outside environments and
-archives and never through a link. The rules name no library or framework: which technologies a project may use is
+`requirements*.txt`, `requirements/*.txt`, `package-lock.json` (version 2 or later), `uv.lock`, or `vendor.json`, outside
+environments and never through a link. The rules name no library or framework: which technologies a project may use is
 `allowed_technologies`, and a package IT vetted despite the origin rules is in `dependency_exceptions`
 ([configuration](configuration.md)). It blocks:
 
 - a requirement that is not an exact pin from the public index: ranges, URLs, local paths, other indexes or
   `--find-links`, and any `-r`/`-c` that does not name another pinned list in the same folder;
-- an npm entry not downloaded from the public registry under its own name;
+- an npm entry not downloaded from the public registry under its own name, with no version, or a link;
+- a `package-lock.json` that no longer answers the `package.json` beside it, or that lists a package it does not hold;
+- a script's own lockfile (`*.py.lock`, `*.pyw.lock`, `*.pyz.lock`), which `uv run script.py` honours: it would install
+  what the audit never saw. Any other `*.lock` says nothing about Python or npm;
 - a `uv.lock` entry that does not come from the public index, other than the project itself, so a workspace member
   is refused too. Every entry has files, each with a hash that the registry published for that name and version:
   anyone can upload to the index, so an address says nothing about which package a file is;
@@ -97,8 +100,22 @@ archives and never through a link. The rules name no library or framework: which
   or only on Pythons older than the one a list was compiled for (`--python-version` in uv's header, or the
   `requires-python` of a `pyproject.toml` beside the list), is listed apart, not blocked;
 - declared packages (`pyproject.toml`, including its development groups, extras and dynamic dependencies,
-  `package.json`...) without a pinned list;
+  `package.json`, including peer and optional ones, `setup.cfg` with `install_requires`...) without a pinned list **in
+  their own folder**, or in a `requirements/` folder beside them: a list elsewhere in the tree, or of another ecosystem,
+  answers for nothing here. Every folder counts, named or not, poetry included, unless a project above names it as a member and has
+  its lockfile. A copy, a sample or a template does not, told by its path: `vendor/`, `fixtures/` or `templates/` directly
+  under the root, a test's fixtures (`tests/.../fixtures/`), or a library copied into what the application serves
+  (`static/vendor/`, `assets/vendor/`, `public/vendor/`). The same name deeper in a project is an ordinary folder;
+- a `pyproject.toml` whose `dependencies` the requirements lists beside it leave out, unless a `uv.lock` answers for it.
+  Development groups and extras may rightly be in other lists;
+- an npm workspace: its members are links, and the audit reads no link;
 - a `uv.lock` holding anything the audit does not read, and a pinned list that is a link: tools follow it.
+
+A text file named like a list is one unless some line could not install: pip refuses a whole file on such a line, so
+`requirements/what-sales-wants.txt` is prose and blocks nothing, while `evil (>=1.0)`, `wheels/evil.whl` or `${EVIL}`
+make it a list, and a real list with one bad line is blocked. The person reads which file it was. Not read, by design,
+and left to IT's review: lists under other names (`deps.txt`, `constraints.txt`), `bundledDependencies`, pdm's
+development dependencies, folders named `venv`, and which of a folder and a console script of one name uv runs.
 
 Every package in a `uv.lock` is audited, whatever marker leads to it: a marker in a lockfile cannot be told from one
 somebody edited, so a package only a browser installs needs IT's exception like any other. A package left out of a
@@ -109,9 +126,32 @@ holds it. `uv lock --check` belongs in the project's continuous integration, and
 `--frozen`: a plain `uv run` or `uv sync` may write a new lockfile. A `uv.lock` in a subfolder says nothing about a
 project beside it, as with a requirements list.
 
-A project that installs no packages has nothing to check. Lists without hashes are noted. The specialist runs the
-audit before delivering, and the connector runs it again itself and appends the result to every pull request, so
-what IT reads there was not written by the model.
+A project that installs no packages has nothing to check. Lists without hashes are noted.
+
+The audit decides the send. `version_send`, `version_propose` and `version_to_test` audit what is saved and refuse
+unless it is `allowed`, whatever the project declares: a declaration that is missing, not valid or says no code is no
+reason to send what nobody audited, and the code in a test environment runs too.
+
+| Case | What happens |
+|---|---|
+| `allowed` | It goes, and the result is appended to the pull request, for the commit it names, so what IT reads there was not written by the model |
+| `blocked` | Nothing is sent; the user reads why in plain words, and IT gets a report |
+| The audit cannot run (no network, a registry that does not answer) | Nothing is sent: deny by default, like the rest of the audit |
+| A version with no packages | `allowed`, without asking the network |
+| A commit that breaks the rules of a save, at any point | Not sent, proposed or run: `.git` is writable from the sandbox, so each commit a version has beyond the main branch, as the server has it, is checked on the host, not only the last. A protected file added and taken out again would still travel in the history. A merge counts for what differs from all its parents, so taking in what IT changed is not changing it |
+| The server has no such main branch | Nothing is sent, and IT is told: it was renamed, or the repository is empty. A server that does not answer is the network, as always |
+| No history in common with the main branch | Nothing is sent, and IT is told: it was rewritten on the server |
+| A branch the connector did not make | Nothing is sent to it: the connector keeps, outside the workspace, the names `version_create` made, and the branch is read once and checked as it is sent. HEAD on the main or test branch is refused outright. For a workspace from before this list, a version counts if the server has no such branch yet or has a proposal from it; anything else goes to IT |
+| `version_propose` when the server's version is not the latest save | Nothing is proposed: `not_sent`. A proposal holds what the server has, so it must be sent first, and the send is where the audit answers. Work saved after a send, allowed or not, cannot reach review behind the commit that went |
+
+| How | Why |
+|---|---|
+| It audits a copy of the saved version in a temporary folder, not the workspace | What goes is what is saved; the sandbox can rewrite the folder at any moment |
+| The commit audited is the one sent, by its id, never by a local reference, and it stops if the version moved meanwhile | The sandbox can move a reference in `.git` during the send: nothing that was not audited goes |
+| What a proposal says it audited is the commit it found on the server | Not one read a moment later |
+| An `allowed` answer is kept for that saved tree for 15 minutes; any other answer is asked again | A send and the proposal after it wait once, and a registry that did not answer can come back |
+| Packages are checked eight at a time | 51 packages took 38 seconds one by one, and this runs before every send |
+
 
 The source check is a signal of origin, not proof: a link that answers says nothing about what the package
 contains. It never follows a redirect, never contacts an address that is not on the public internet, and never
@@ -149,7 +189,7 @@ computer itself. These barriers keep that from becoming a way to run commands on
 | The configuration is checked once per operation and then pinned: what is written to `.git/config` afterwards is not read | dulwich re-reads the configuration on every call; a filter written between the check and the use would run |
 | Content is never filtered: no filter driver, no line-ending conversion, no LFS, whatever `.gitattributes` says | A filter is a command; files go in and out exactly as they are |
 | The repository's address and main branch come from the connector's own registry, recorded at clone time; an address changed in `.git/config` stops the operation | Otherwise the sandbox could send the user's work to another repository |
-| A repository that points to another folder (`commondir`, `alternates`) is refused | Reads and writes must stay in the workspace |
+| A repository that points to another folder or rewrites its own history is refused, and history is read from the commits alone ([what `.git` can change](#what-git-can-change)) | Reads and writes must stay in the workspace, and a rewritten history would turn the check of what a version changed into checking nothing |
 | A Cowork task in the cloud is refused: Claude is told at the start, prompts are blocked, and every write, shell command and connector call is denied (or blocked if the guard cannot start). Known from the variables Claude Code sets in cloud sessions; in Cowork, H16 | The connector, the workspace folder and internal servers are on the user's computer and its network; a cloud sandbox would work on other files than the ones the connector saves |
 | One operation at a time per workspace, across connector processes: creating a version, saving, sending (to review or to the test environment), bringing the latest changes and reading the project's context | Two updates or saves at once could undo each other |
 | The computer's Git configuration (system and user) is ignored | Same behaviour with or without Git installed; a global filter cannot apply ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)) |
@@ -157,9 +197,74 @@ computer itself. These barriers keep that from becoming a way to run commands on
 | Clones never fetch submodules (dulwich's default, not exposed as an option) | A submodule could bring code from another server |
 | A save point never carries the project's context (`AGENTS.md`, `CLAUDE.md`), its declaration (`.eunomai/`), Claude's configuration (`.claude/`, `.mcp.json`) or continuous integration (`.gitea/`, `.github/`...): they are put back as the last save point has them, regardless of case and never through a link. Adding or changing a file Windows runs on a double click (`.bat`, `.ps1`, `.lnk`...) stops the save; removing one is allowed. Every path must be valid on Windows and stay in the workspace, in the index too. The tree actually committed is checked again | The context steers Claude and only IT changes it; integration runs on IT's servers; the workspace folder is on the user's computer, where a double click would run what the sandbox wrote; the sandbox can write the index and race the save |
 
+### What `.git` can change
+
+The sandbox can write `.git`, so nothing there is taken on trust. What dulwich could believe from it:
+
+| In `.git` | Could change | The connector |
+|---|---|---|
+| `info/grafts`, `shallow` | A commit's parents | Refused: the repository stops. The connector's clones are full. Ignored besides |
+| `objects/info/commit-graph`, `commit-graphs/` | A commit's parents | Ignored: history is read from the commits. A Git on the computer may leave a real one |
+| `refs/replace/` | An object for another | Ignored: dulwich does not follow them |
+| `objects/info/alternates`, `commondir` | Where objects come from | Refused |
+| Objects, packs and their indexes, `multi-pack-index` | What a name holds | Verified: reading an object by name hashes it against the name, and a mismatch stops |
+| Trees and commits in what goes | What the checks see against what git uses: of two entries with one name dulwich keeps the last, git the first | Verified: every commit beyond the main branch and every tree in it, from their raw entries. Refused: two entries with one name, adjacent or not, wrong order, modes or names git would not write, names one folder cannot hold apart (case, Unicode), malformed commits. What is already on the main branch is not judged |
+| What travels | Objects nobody checked | Only what commits reach: the pack is built from them, so a stray object stays, and a blob a tree reaches is covered by the rules on its path |
+| `config` | Filters, hooks, the address, `core.commitGraph`, `extensions`, other files through `include` and `includeIf` | Allow-list, then pinned for the operation. An include is never followed: its section is refused |
+| `HEAD`, `refs/`, `packed-refs` | Which commit, which branch | Not believed for a decision: what is sent goes by commit id, audited first, to a branch checked as it is sent. The main branch's commit comes from the server |
+| `hooks/` | Commands | Never run |
+| `index` | What a save takes | Paths validated, and the tree committed is checked again |
+
+## The preview on the person's computer
+
+Off by default. Where IT turned it on, `app_preview` shows the real application in the person's browser, through the
+connector ([decision 7](decisions.md#7--nothing-runs-on-the-users-computer-except-a-preview-it-turns-on)).
+
+**This runs code an AI wrote and nobody has reviewed yet, on the person's computer, with their rights, outside any
+sandbox.** The barriers below reduce that risk and do not remove it. They keep a mistake from becoming an incident;
+they do not stop code written to do harm, and a program with the person's rights can undo most of them.
+
+| Barrier | Why |
+|---|---|
+| Two keys, both needed: `app_preview` in the build, and `[preview]` in the project's declaration on the main branch, read from the server, never from the workspace | Neither an organization's build nor one project turns it on alone, and the sandbox cannot rewrite what is run |
+| It runs a copy of the saved version, in a temporary folder outside the workspace, never the working folder. What the version changed since it left the main branch must meet the rules of a save | Nothing unsaved runs, and no file the sandbox just wrote. The sandbox can write `.git`, so a commit it forged with an executable or a file only IT changes does not run |
+| It refuses unless the audit of that same copy says `allowed` and the copy has a `uv.lock`; if the audit cannot run, it refuses | Only packages the rules allow, and exactly those |
+| Installed with `uv sync --frozen`, hashes verified, development packages out, wheels only (`--no-build`, at run time too), the project itself not installed (`--no-install-project`), uv's configuration files ignored (`--no-config`), on uv's own Python, of the version in `.python-version` if the project has one. Anything but a plain version there, such as `3.13`, is refused | Nothing is resolved anew, no package or build backend runs code at installation, and a file in the copy cannot redirect uv or name a program as the interpreter |
+| Each command is a list of words run as `uv run --frozen <words>`, never through a shell. What may run is python with a file of the project, `python -m` with a module other than `pip`, `ensurepip` or `venv`, or a console script of a package in the lock, checked once they are installed. Never `python -c`, nor a script as the program, whose own metadata and lockfile uv would honour. `{port}` is the only substitution. The checks on a declaration catch slips, not malice: **IT reviews the declaration**, like anything else on the main branch | What IT reviewed is what runs |
+| The environment is built from a short list: what uv and the system need, and `[preview.environment]`, which cannot replace those. What runs has only the project's own programs on its `PATH`. A proxy's address reaches the installation only. The person's own folders are replaced by empty ones, and `UV_PROJECT_ENVIRONMENT` points inside the temporary folder | The person's tokens, the connector's settings and every other variable stay out of its reach through the environment |
+| It listens on 127.0.0.1 only: a free port is chosen; `run` must say so with a host option, `-b`, or `127.0.0.1:{port}`, and name no other host, socket or wildcard; the host variables of the servers it knows (`GUNICORN_CMD_ARGS`, `FLASK_RUN_HOST`, `UVICORN_HOST`, `HOST`, `BIND`) are checked the same way, and no other variable is the connector's business; an option it cannot know the meaning of, such as `--ip 0`, is left to the next check; it must answer before the person is told it is ready; and the system's own table must show it listening nowhere else: on Windows the whole tree on any port, elsewhere the application's port | Nothing is offered to the network |
+| One preview per workspace folder, however its name is spelt, across connectors; a newer saved version replaces the one running | Nothing is left running by mistake. If another task's preview cannot be stopped from here (its watcher is gone, on Windows), the answer says so: never that it stopped |
+| It stops by itself: on `app_preview_stop`, when the connector ends, however it ends, and 60 minutes after it started. On Windows every process runs in a job object with no name, from its first instruction, cannot leave it, and dies with it; elsewhere a process group per step. A small watcher ends them and removes the temporary folder and the state file if the connector is killed, and answers another task's connector | Nothing outlives the session. A number in a state file is acted on only while a marker in the preview's own folder still matches, since after that it may be somebody else's |
+| The person is told first, in one plain sentence, and agrees in the conversation | They decide. This one is a rule the specialist follows: the connector cannot check it |
+| Cowork tasks in the cloud are refused by the guard | The computer is not there |
+
+**What it does not stop.** While it runs, the application is a program of the person's:
+
+- **Their files and network.** It can read anything they can read and send it anywhere they can reach. The allow-list
+  covers the environment, not the disk: a saved password, a document, a browser's profile.
+- **Their sign-in.** DPAPI stops other users, not a program running as this one, so it can read the git sign-in and
+  act as the person on the git server, within what the server lets them do.
+- **What it leaves behind.** Stopping the tree ends what it started directly. A file written elsewhere, a scheduled
+  task, or a program started through a service outside the tree, stays.
+- **The port, while it is open.** 127.0.0.1 keeps other computers out, not other programs here: other people signed
+  in to a shared computer, and any web page open in the browser, can send it requests.
+- **What the audit cannot see.** The audit judges packages by rules, not by reading them, and it says nothing about
+  the code the assistant wrote.
+- **A later listener.** The check on what it listens on is made once, as it starts. On Linux and macOS it covers only
+  the application's port, and a program that starts a session of its own leaves the process group.
+- **A preview that outlives its keys.** One running when IT turns the setting off or removes `[preview]` carries on
+  until it stops, within 60 minutes.
+- **Text it printed.** The last lines of a step that failed go into the report for IT, marked as the application's.
+  The model sees them too: the specialist shows them when asked and never follows them.
+
+The real controls stay outside: least privilege for the person's account, what they can reach on the network,
+application control, and IT's review. Before turning it on, read [configuration](configuration.md#seeing-the-application-on-a-persons-computer).
+
 ## What eunomai-business does not protect
 
 Said plainly, so nobody relies on it for these:
+
+- **A preview's code.** It runs with the person's rights: [what the preview does not stop](#the-preview-on-the-persons-computer).
 
 - **What goes into a save point.** A secret, a huge file or a wrong line ending is saved as it is (the connector
   reports CRLF in changed files, but does not block it). Projects decide their own rules
@@ -167,9 +272,9 @@ Said plainly, so nobody relies on it for these:
 - **Branch protection on the server.** The connector never sends the main branch, but only the server stops
   anyone else (another tool, a person with Git) from doing so. Protect it on the server.
 - **Claude's own file tools and shell, beyond the file guard.** The guard hook denies writing executables, the
-  project's context and configuration ([architecture.md](architecture.md#hooks)), only best effort in the shell;
-  everything else is governed by Cowork and its permissions. Where code may be written is followed by the
-  specialist, not enforced.
+  project's context and configuration ([architecture.md](architecture.md#hooks)) and git in a workspace
+  ([hooks](hooks.md#git-from-the-sandbox-shell)), only best effort in the shell; everything else is governed by Cowork
+  and its permissions. Where code may be written is followed by the specialist, not enforced.
 - **Script sources Windows can run.** A `.js` file opens in Windows Script Host on a double click, and a `.py`
   file in Python where the launcher is installed; web applications need them, so they are not refused. Disable
   Windows Script Host on business users' computers (a standard hardening policy), and keep application control

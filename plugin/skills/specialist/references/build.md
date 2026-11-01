@@ -24,13 +24,16 @@ your sandbox.
   `recommended` one from `dependency_check` in the `.in` file (newer than two weeks only when it fixes a
   vulnerability: add `--exclude-newer-package <name>=<YYYY-MM-DD of today>`) and compile again. A package it blocks that the
   tooling needs, such as an indirect one without recent releases, goes to IT, who can vet it once for the
-  organization: list it in the pull request. Repeat after any dependency change.
+  organization: the connector refuses to send until then, so say so early, not at delivery. Repeat after any
+  dependency change.
 - **Open questions:** declared assumptions, as `SKILL.md` says; never a setting the code does not have.
 
 ## Tests first
 
 - One test per scenario, named after it, with the scenario's values and its exact texts. Write it, run it, see it
-  fail; then write the code that makes it pass.
+  fail; then write the code that makes it pass. Screens agreed in Shape are a start, not finished work: they get
+  their tests here like any code, and a test that passes at once proves nothing until you have broken the screen
+  and seen it fail.
 - **A test never moves to meet the code.** If they disagree, the code changes, or the scenario goes back to
   Specify and the user decides.
 - For each important rule, break the code for a moment, see its test fail, restore the code and run it again: a
@@ -64,15 +67,22 @@ your sandbox.
 
 - **One task, one save:** tick it in `tasks.md` and `version_save(workspace, <message>)`, with its tests and code
   together. IT follows the build save by save; one save for the whole application cannot be reviewed.
-- Show the user the roadmap moving in one or two lines. Show them the application through screenshots taken in the
-  sandbox, as images, saying they are pictures. If the sandbox cannot take one, say so: never a saved copy of the
-  application's pages, which looks usable and is not. Never a launcher for their computer.
+- Show the user the roadmap moving in one or two lines. Show them the application the first way that exists: on
+  their computer, in the test environment (both below), or through screenshots taken in the sandbox, as images,
+  saying they are pictures. If the sandbox cannot take one, say so: never a saved copy of the application's pages,
+  which looks usable and is not. Never a launcher for their computer.
+- **On the person's computer,** when `specialist_settings` returns `preview.available` true. It runs what is saved,
+  so save first. Say first, in one plain sentence, what will happen: what was built so far will start on their
+  computer, with their permissions, for up to an hour, and nobody has reviewed it yet. Wait for their yes. Then
+  `app_preview(workspace)`; while it says `starting`, call it again. With `ready`, show `user_message`. Any other
+  answer: show `user_message`, and do not offer it again in this task. `app_preview_stop(workspace)` when they are
+  done. If `unsaved_changes` is true, what they see lacks the latest changes: say so.
 - **The project's test environment,** when `specialist_settings` returns `test`: after a save whose tests pass,
   offer in one line to try it there. On yes, `version_to_test(workspace)`; with `sent`, give its `url` and say it
   takes a few minutes and replaces what was being tried. `not_saved` and `behind_main` say what to do first.
   `not_allowed`, `refused`, `no_test_environment` or an `error` mean it is not available now: give its
-  `user_message` (or say so in one line), and do not offer it again in this task. It never replaces Deliver:
-  production always takes IT's review.
+  `user_message` (or say so in one line), and do not offer it again in this task. `audit_refused` and
+  `audit_unavailable` are as in `deliver.md`. It never replaces Deliver: production always takes IT's review.
 - Something unclear means going back to Specify and asking; never guess.
 
 ## Done

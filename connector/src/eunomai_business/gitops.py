@@ -1,8 +1,8 @@
 """Workspaces, versions (branches) and save points (commits), without Git installed (dulwich).
 
 Each workspace is a clone in the workspaces folder the organization sets when it builds the plugin (default
-~/eunomai-business-workspaces/<workspace>). The user selects the workspace's folder in Cowork, so Claude edits the
-same files the connector saves. The git sign-in token goes only to the git server's own origin, as HTTP basic auth
+~/eunomai-business-workspaces/<workspace>). The task has access to the workspace's folder, so Claude edits the same
+files the connector saves. The git sign-in token goes only to the git server's own origin, as HTTP basic auth
 (login + OAuth access token); it is never written to .git/config, only to the encrypted sign-in record.
 """
 
@@ -14,8 +14,11 @@ import re
 import shutil
 import socket
 import ssl
+import stat
+import tempfile
 import threading
 import time
+import unicodedata
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -26,15 +29,15 @@ from dulwich import porcelain
 from dulwich.client import get_transport_and_path
 from dulwich.config import ConfigFile, StackedConfig
 from dulwich.diff_tree import tree_changes
-from dulwich.errors import GitProtocolError, HangupException, NotTreeError
+from dulwich.errors import GitProtocolError, HangupException, NotTreeError, ObjectFormatException
 from dulwich.graph import can_fast_forward, find_merge_base
 from dulwich.index import validate_path, validate_path_element_default, validate_path_element_ntfs
 from dulwich.merge import recursive_merge
 from dulwich.object_store import iter_tree_contents
-from dulwich.objects import Blob, Commit, SubmoduleEncountered
-from dulwich.repo import Repo
+from dulwich.objects import Blob, Commit, SubmoduleEncountered, Tree, parse_tree
+from dulwich.repo import ParentsProvider, Repo
 
-from . import auth, data_dir, guard
+from . import auth, data_dir, deps, guard
 from .support import NeedsIT, Unreachable, clean
 
 # Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
@@ -60,6 +63,8 @@ DECLARATION = ".eunomai/project.toml"  # what IT declares for the project, read 
 # A prototype opens in the user's browser: it must say, itself, that it loads nothing from other sites.
 _PROTOTYPE = re.compile(r"(^|/)openspec/changes/.+/prototype/[^/]+\.html?$", re.IGNORECASE)
 _CSP = re.compile(r"<meta[^>]+http-equiv=[\"']?content-security-policy[\"']?[^>]*default-src\s+'none'", re.IGNORECASE)
+_AUDIT_KEPT_SECONDS = 900  # a send and the proposal after it read the same answer
+_GITLINK = 0o160000
 
 
 def root() -> Path:
@@ -95,24 +100,44 @@ class _NoFilters:
         pass
 
 
+class _CommitsOnly(ParentsProvider):
+    """A commit's parents as the commit itself says them. Reading it by name hashes it, so nothing beside it (grafts,
+    shallow, a commit graph) can give history another shape. docs/barriers.md lists what `.git` can and cannot change."""
+
+    def get_parents(self, commit_id, commit=None):
+        return self.store[commit_id].parents
+
+
 class _Workspace(Repo):
     """A repository the connector can trust while Claude's sandbox writes into the same folder, `.git` included.
 
-    Hooks never run (dulwich runs post-commit even with no_verify). Content is never filtered. Once validated, the
-    configuration is pinned: dulwich re-reads .git/config on every call, so a filter written between the check and
-    the use would otherwise run on this computer."""
+    Hooks never run (dulwich runs post-commit even with no_verify). Content is never filtered. History comes from the
+    commits alone: a commit graph is a cache anyone can write, and a Git on the computer may leave a real one there.
+    Once validated, the configuration is pinned: dulwich re-reads .git/config on every call, so a filter written
+    between the check and the use would otherwise run on this computer."""
 
     _pinned: ConfigFile | None = None  # Repo.__init__ already reads the configuration
 
     def __init__(self, path: str):
         super().__init__(path)
         self.hooks.clear()
+        self.object_store.get_commit_graph = lambda: None  # not a setting: `core.commitGraph` is in .git/config
+
+    def parents_provider(self) -> ParentsProvider:
+        return _CommitsOnly(self.object_store)
 
     def pin(self, config: ConfigFile) -> None:
         self._pinned = config
 
     def get_config(self) -> ConfigFile:
-        return self._pinned if self._pinned is not None else super().get_config()
+        """Without following `include` or `includeIf`: the section stays in what is read, so the allow-list refuses it,
+        and no file it names is opened."""
+        if self._pinned is not None:
+            return self._pinned
+        try:
+            return ConfigFile.from_path(os.path.join(self.commondir(), "config"), expand_includes=False)
+        except FileNotFoundError:
+            return ConfigFile()
 
     def get_config_stack(self) -> StackedConfig:
         if self._pinned is None:
@@ -135,7 +160,7 @@ def _repo(workspace: str) -> _Workspace:
         raise FileNotFoundError(f"no workspace named {workspace!r} in {root()}; see workspace_list")
     repo = _open(str(folder))
     try:
-        config = Repo.get_config(repo)
+        config = repo.get_config()
         _check_config(repo, config)
         repo.pin(config)
     except Exception:
@@ -154,6 +179,9 @@ def _check_config(repo: Repo, config: ConfigFile) -> None:
         stop("the repository points to another folder (commondir)", repo.commondir())
     if (controldir / "objects" / "info" / "alternates").exists():
         stop("the repository borrows objects from another folder (alternates)", "objects/info/alternates")
+    for rewrites in ("info/grafts", "shallow"):  # a connector's clones are full: this would rewrite what is checked
+        if (controldir / rewrites).exists():
+            stop("the repository rewrites its own history", rewrites)
     registered = _registry().get(str(Path(repo.path).resolve()), {}).get("origin")
     try:
         configured = config.get((b"remote", b"origin"), b"url").decode()
@@ -249,9 +277,14 @@ def _exclusive(name: str, wait: float = 15.0):
         lock.unlink(missing_ok=True)
 
 
+def key(workspace: str) -> str:
+    """What identifies a workspace: its folder, which on Windows two spellings of a name share."""
+    return str(_folder(workspace).resolve())
+
+
 def _one_at_a_time(operation):
     def wrapped(workspace: str, *args):
-        with _exclusive(f"workspace:{workspace}"):
+        with _exclusive(f"workspace:{key(workspace)}"):
             return operation(workspace, *args)
     wrapped.__name__, wrapped.__doc__ = operation.__name__, operation.__doc__
     return wrapped
@@ -274,6 +307,20 @@ def _remember(folder: Path, **values) -> None:
         tmp = data_dir() / f"workspaces.json.{os.getpid()}.tmp"
         tmp.write_text(json.dumps(registry, indent=1), encoding="utf-8")
         os.replace(tmp, data_dir() / "workspaces.json")
+
+
+def _note_version(repo: Repo, name: str) -> None:
+    with _exclusive("registry"):
+        folder = Path(repo.path)
+        versions = _registry().get(str(folder.resolve()), {}).get("versions", [])
+        _remember(folder, versions=sorted({*versions, name}))
+
+
+def _forget_version(repo: Repo, name: str) -> None:
+    with _exclusive("registry"):
+        folder = Path(repo.path)
+        versions = _registry().get(str(folder.resolve()), {}).get("versions", [])
+        _remember(folder, versions=[version for version in versions if version != name])
 
 
 def _branch(repo: Repo) -> str | None:
@@ -357,7 +404,8 @@ def clone(repo_url: str, workspace: str = "") -> dict:
         else:  # empty repository (no branch yet): set it up the way `git clone` would
             Repo.init(str(folder), mkdir=True).close()
         repo = _open(str(folder))
-        config = Repo.get_config(repo)
+        config = repo.get_config()
+        config.path = os.path.join(repo.commondir(), "config")
         config.set((b"remote", b"origin"), b"url", repo_url.encode())
         config.set((b"remote", b"origin"), b"fetch", b"+refs/heads/*:refs/remotes/origin/*")
         config.set((b"core",), b"autocrlf", b"false")  # a Git on this computer sees the files as they are
@@ -434,6 +482,7 @@ def branch(workspace: str, name: str) -> dict:
                                   "keep working on it, or bring the latest changes once it is accepted")
         repo.refs[ref] = repo.head()
         repo.refs.set_symbolic_ref(b"HEAD", ref)  # same commit, so the working tree stays as it is
+        _note_version(repo, name)
         return {"workspace": workspace, "branch": name, "from": previous, "head": _head(repo)}
 
 
@@ -559,20 +608,151 @@ def _check_no_links(repo: Repo, path: str) -> None:
                       {"Folder": repo.path, "Path": path})
 
 
+def _send_commit(repo: Repo, origin: str, current: dict, commit: bytes, target: bytes, force: bool, out):
+    """Send one commit to one reference. By its id, not by a local reference: the sandbox can move those between the
+    check and the send, so what goes is what was checked."""
+    client, path = get_transport_and_path(origin, **_remote(current))
+
+    def update_refs(refs: dict) -> dict:
+        if not force and target in refs:
+            porcelain.check_diverged(repo, refs[target], commit)
+        return {target: commit}
+
+    return _network(lambda: client.send_pack(path.encode(), update_refs, repo.generate_pack_data, progress=out.write))
+
+
+def _reachable(repo: Repo, start: bytes, stop: set[bytes] = frozenset()) -> set[bytes]:
+    """Every commit reachable from `start`, not going past `stop`, by what the commits themselves say."""
+    found, stack = set(), [start]
+    while stack:
+        commit = stack.pop()
+        if commit not in found and commit not in stop:
+            found.add(commit)
+            stack += repo.get_parents(commit)
+    return found
+
+
+def _trees_under(repo: Repo, tree: bytes) -> set[bytes]:
+    found, stack = set(), [tree]
+    while stack:
+        current = stack.pop()
+        if current not in found:
+            found.add(current)
+            stack += [sha for _, mode, sha in repo[current].iteritems() if stat.S_ISDIR(mode)]
+    return found
+
+
+def _folded(name: bytes) -> str:
+    """A name as a file system that ignores case or composes accents may take it."""
+    return unicodedata.normalize("NFC", unicodedata.normalize("NFC", name.decode("utf-8", "replace")).casefold())
+
+
+def _tree_problem(repo: Repo, root: bytes, checked: set[bytes]) -> str | None:
+    """What is wrong in a tree and everything under it, read from its raw entries. dulwich keeps entries in a dict, so
+    of two with one name it shows the last, while git uses the first: a check that reads through it sees an innocent
+    twin. `Tree.check` compares neighbours only, and a file and a folder of one name are not neighbours. Two names one
+    folder cannot hold apart would collapse into one file in the copy the audit reads."""
+    stack = [(root, "")]
+    while stack:
+        current, where = stack.pop()
+        if current in checked:
+            continue
+        checked.add(current)
+        tree = repo[current]
+        if not isinstance(tree, Tree):
+            return f"{where or '/'}: not a folder"
+        try:
+            tree.check()
+        except ObjectFormatException as exc:
+            return f"{where or '/'}: {exc}"
+        names, folded = set(), set()
+        for name, mode, sha in parse_tree(tree.as_raw_string(), sha_len=tree.object_format.oid_length, strict=True):
+            if name in names or _folded(name) in folded:
+                return f"{where or '/'}: two entries for {name.decode('utf-8', 'replace')}"
+            names.add(name)
+            folded.add(_folded(name))
+            if stat.S_ISDIR(mode):
+                stack.append((sha, f"{where}{name.decode('utf-8', 'replace')}/"))
+    return None
+
+
+def _changed_by(repo: Repo, commit: bytes) -> set[str]:
+    """What a commit itself brought that no save may carry. A merge brings only what differs from all its parents: taking
+    in what IT changed on the main branch is not changing it."""
+    parents = repo[commit].parents or [None]
+    return set.intersection(*(_forbidden_changes(repo, parent, commit) for parent in parents))
+
+
+def _check_changes(repo: Repo, workspace: str, commit: bytes, main: str) -> None:
+    """Every commit a version has beyond the main branch on the server, and every tree in them, must be what git would
+    write, and each commit must keep to the rules of a save: the sandbox can write .git, so what was forged past
+    version_save neither leaves the computer nor runs on it, on the way or at the end. Send, proposal, test environment
+    and preview all pass through here, before anything reads the files. What is on the main branch is not judged."""
+    tip = main.encode()
+    bases = find_merge_base(repo, [tip, commit])
+    if not bases:
+        raise NeedsIT("This version no longer shares its history with the project, which was rewritten on the server, "
+                      "so it went no further. Your work is safe on this computer; IT can bring it across.",
+                      "no common history with the main branch", _facts(repo, workspace))
+    commits = _reachable(repo, commit, _reachable(repo, tip))
+    checked = {tree for known in [tip, *bases] for tree in _trees_under(repo, repo[known].tree)}
+    for sha in commits:
+        saved = repo[sha]
+        try:
+            saved.check()
+            problem = _tree_problem(repo, saved.tree, checked)
+        except ObjectFormatException as exc:
+            problem = f"commit {sha.decode()[:12]}: {exc}"
+        if problem:
+            raise NeedsIT("This version has something the connector does not accept, so it went no further. Your work "
+                          "is safe on this computer; IT can look at it.", "a malformed object in a saved version",
+                          _facts(repo, workspace, Detail=problem))
+    found = set().union(*(_changed_by(repo, sha) for sha in commits))
+    if found:
+        raise NeedsIT("This version has a file only IT changes, so it went no further. Your work is safe on this "
+                      "computer.", "a protected or executable file in a saved version",
+                      _facts(repo, workspace, Paths=", ".join(sorted(found)[:20])))
+
+
+def _check_version(repo: Repo, workspace: str, name: str, origin: str, current: dict) -> None:
+    """Only what this connector made as a version is sent: HEAD is in .git, and a branch of the server's is not the
+    sandbox's to choose. A workspace from before it kept them, or a version it lost track of, is taken as one if the
+    server has no such branch yet, or has a proposal from it; anything else goes to IT."""
+    if name in _registry().get(str(Path(repo.path).resolve()), {}).get("versions", []):
+        return
+    client, path = get_transport_and_path(origin, **_remote(current))
+    advertised = _network(lambda: client.get_refs(path.encode()))
+    if f"refs/heads/{name}".encode() in (getattr(advertised, "refs", None) or {}) \
+            and not _proposal_for(origin, current, name):
+        raise NeedsIT("This copy of the project is on something that is not one of your versions, so nothing was sent. "
+                      "Your work is safe on this computer; IT can look at it.", "a branch the connector did not create",
+                      _facts(repo, workspace))
+    _note_version(repo, name)
+
+
 @_one_at_a_time
-def push(workspace: str) -> dict:
-    """Send the current version to the server (never the main branch, never forced)."""
+def push(workspace: str, main: str, expected: str | None = None, version: str | None = None,
+         test_branch: str | None = None) -> dict:
+    """Send the current version to the server (never the main branch, never forced). `main` is the main branch's commit
+    on the server, which what goes is checked against. `expected` and `version` are the commit that was audited and the
+    branch it was audited on: that commit goes to that branch, and only if the version still is both. The branch name
+    is read once, here: HEAD is in .git, and what follows does not look at it again."""
     current = _git_session()
     with _repo(workspace) as repo:
         name = _branch(repo)
-        if name is None or name in _protected(repo):
+        shared = {branch.casefold() for branch in _protected(repo) | ({test_branch} if test_branch else set())}
+        if name is None or name.casefold() in shared:
             raise PermissionError("only versions are sent; the main branch changes through a pull request")
+        if (version and name != version) or (expected and repo.head().decode() != expected):
+            raise PermissionError("the version changed while it was being checked; send it again")
         origin = _registered_origin(repo, workspace)
         _check_host(origin, current)
         out = io.BytesIO()
+        commit = expected.encode() if expected else repo.head()
+        _check_changes(repo, workspace, commit, main)
+        _check_version(repo, workspace, name, origin, current)
         try:
-            result = _network(lambda: porcelain.push(repo, origin, f"refs/heads/{name}:refs/heads/{name}".encode(),
-                                                     outstream=out, errstream=out, **_remote(current)))
+            result = _send_commit(repo, origin, current, commit, f"refs/heads/{name}".encode(), False, out)
         except porcelain.DivergedBranches as exc:  # never forced: the server keeps what it has
             raise NeedsIT("This version was changed on the server from somewhere else, so it was not sent. Your work "
                           "is safe on this computer; IT can combine both.",
@@ -583,15 +763,16 @@ def push(workspace: str) -> dict:
             raise NeedsIT("The server did not accept this version. Your work is safe on this computer.",
                           "the server rejected the version", _facts(repo, workspace, rejected=errors))
         web = origin.removesuffix(".git")
-        return {"workspace": workspace, "branch": name, "pushed": True, "head": _head(repo),
+        return {"workspace": workspace, "branch": name, "pushed": True, "head": commit.decode()[:12],
                 "web_url": f"{web}/src/branch/{name}"}
 
 
 @_one_at_a_time
-def to_test(workspace: str, test_branch: str) -> dict:
+def to_test(workspace: str, test_branch: str, expected: str | None = None) -> dict:
     """Put the current version, as last saved, on the project's test branch on the server, replacing what it had:
     the branch shows one version at a time, and the project's CI applies it to the test environment. Whether this
-    user may update that branch is the git server's to say (a protected branch limited to a team)."""
+    user may update that branch is the git server's to say (a protected branch limited to a team). `expected` is the
+    commit that was audited: it is what goes, and only if the version still is that commit."""
     current = _git_session()
     with _repo(workspace) as repo:
         name = _branch(repo)
@@ -614,23 +795,17 @@ def to_test(workspace: str, test_branch: str) -> dict:
             return {"workspace": workspace, "status": "refused",
                     "user_message": "The project's main branch could not be read on the server, so nothing was sent "
                                     "to the test environment. Your version goes through IT's review as usual."}
-        head = repo.head()
+        head = expected.encode() if expected else repo.head()
+        if repo.head() != head:
+            raise PermissionError("the version changed while it was being checked; try again")
         if not can_fast_forward(repo, tip, head):  # the test environment would lose others' work
             return {"workspace": workspace, "status": "behind_main",
                     "user_message": "The project has changes your version does not have yet. Bring them in first "
                                     "(workspace_update), save, and try again."}
-        # The version's refs live in .git, which the sandbox can write: what goes to the test environment is checked
-        # here too, against main, by the same rules as a save.
-        found = _forbidden_changes(repo, tip, head)
-        if found:
-            raise NeedsIT("This version has a file only IT changes, so it was not sent to the test environment. Your "
-                          "work is safe on this computer.", "a protected or executable file in a version for the "
-                          "test environment", _facts(repo, workspace, Paths=", ".join(sorted(found)[:20])))
+        _check_changes(repo, workspace, head, tip.decode())
         out = io.BytesIO()
         try:
-            result = _network(lambda: porcelain.push(
-                repo, origin, f"refs/heads/{name}:refs/heads/{test_branch}".encode(), outstream=out, errstream=out,
-                force=True, **_remote(current)))
+            result = _send_commit(repo, origin, current, head, f"refs/heads/{test_branch}".encode(), True, out)
         except GitProtocolError as exc:
             if "403" not in str(exc):
                 raise
@@ -640,7 +815,7 @@ def to_test(workspace: str, test_branch: str) -> dict:
             # Gitea gives its reason as progress text; the ref's own status only says the hook declined.
             return _test_refused(workspace, test_branch, {"refs": errors, "server": clean(out.getvalue(), 500)},
                                  " ".join(errors.values()) + " " + out.getvalue().decode("utf-8", "replace"))
-        return {"workspace": workspace, "status": "sent", "branch": test_branch, "head": _head(repo),
+        return {"workspace": workspace, "status": "sent", "branch": test_branch, "head": head.decode()[:12],
                 "user_message": "Your version is on its way to the test environment: the project's checks apply it "
                                 "in a few minutes. It replaces whatever was being tried there."}
 
@@ -987,6 +1162,7 @@ def update(workspace: str) -> dict:
             result["backup"] = _backup(repo, name, main)
             _move(repo, main, remote_main, workspace)
             del repo.refs[f"refs/heads/{name}".encode()]
+            _forget_version(repo, name)
             return {**result, "status": "updated", "branch": main, "head": _head(repo), "retired_version": name,
                     "user_message": " ".join(notes + ["Your proposal was accepted. You now have the latest version "
                                                       "of the project; start a new version for your next change."])}
@@ -1031,6 +1207,90 @@ def update(workspace: str) -> dict:
                                                   "your work is kept."])}
 
 
+def current_version(workspace: str, test_branch: str | None) -> str | None:
+    """The current branch, or None if it is not one a version can be: HEAD is in .git, which the sandbox can write."""
+    with _repo(workspace) as repo:
+        name = _branch(repo)
+        shared = {branch.casefold() for branch in _protected(repo) | ({test_branch} if test_branch else set())}
+        return None if name is None or name.casefold() in shared else name
+
+
+def server_head(workspace: str) -> str | None:
+    """The commit the current version has on the server, which is what a proposal holds; None if it was never sent."""
+    current = _git_session()
+    with _repo(workspace) as repo:
+        name, origin_url = _branch(repo), _registered_origin(repo, workspace)
+    _check_host(origin_url, current)
+    client, path = get_transport_and_path(origin_url, **_remote(current))
+    advertised = _network(lambda: client.get_refs(path.encode()))
+    found = (getattr(advertised, "refs", None) or {}).get(f"refs/heads/{name}".encode())
+    return found.decode() if found else None
+
+
+def saved_head(workspace: str) -> str:
+    """The commit of what is saved."""
+    with _repo(workspace) as repo:
+        commit = _ref(repo, b"HEAD")
+        if commit is None:
+            raise PermissionError("nothing is saved yet")
+        return commit.decode()
+
+
+@_one_at_a_time
+def export_saved(workspace: str, target: Path, main: str, head: str | None = None) -> dict:
+    """Write the saved version's files to `target`, outside the workspace: what was saved, never what is in the
+    folder. The objects are in .git, which the sandbox can write, so the version is checked first, against `main`, the
+    main branch's commit, and every path again; a saved link becomes a plain file holding its target, and a submodule
+    stays out."""
+    with _repo(workspace) as repo:
+        commit = head.encode() if head else _ref(repo, b"HEAD")
+        if commit is None:
+            raise PermissionError("nothing is saved yet")
+        _check_changes(repo, workspace, commit, main)
+        entries = list(iter_tree_contents(repo.object_store, repo[commit].tree))
+        invalid = sorted(entry.path.decode("utf-8", "replace") for entry in entries
+                         if not _valid(entry.path.decode("utf-8", "replace")))
+        if invalid:
+            raise NeedsIT("This version has a file name the connector does not accept. Your work is safe on this "
+                          "computer.", "a path that leaves the workspace or is not valid on Windows",
+                          {"Folder": repo.path, "Paths": ", ".join(invalid[:20])})
+        target.mkdir(parents=True, exist_ok=True)
+        for entry in entries:
+            if entry.mode != _GITLINK:
+                file = target / entry.path.decode("utf-8")
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(repo[entry.sha].data)
+        return {"head": commit.decode(), "unsaved_changes": _dirty(repo), "branch": _branch(repo)}
+
+
+_audits: dict[str, tuple[bytes, float, dict]] = {}  # workspace: its tree, when, and the `allowed` answer
+
+
+def audit_saved(workspace: str, main: str, head: str | None = None, copy: Path | None = None) -> dict:
+    """The dependency audit of what is saved, with the commit it answers for in `head`, once that passes the checks
+    against `main`, the main branch's commit. An `allowed` answer is kept for that tree for a while, so a send and the
+    proposal after it wait once; any other answer is asked again, since a registry that did not answer may come back.
+    `copy` is that commit's files, already exported."""
+    with _repo(workspace) as repo:
+        commit = head.encode() if head else _ref(repo, b"HEAD")
+        if commit is None:
+            raise PermissionError("nothing is saved yet")
+        tree = repo[commit].tree
+        _check_changes(repo, workspace, commit, main)
+    kept = _audits.get(key(workspace))
+    if kept and kept[0] == tree and time.time() - kept[1] < _AUDIT_KEPT_SECONDS:
+        return {**kept[2], "head": commit.decode()}
+    if copy is not None:
+        result = deps.audit(copy)
+    else:
+        with tempfile.TemporaryDirectory(prefix="eunomai-audit-", ignore_cleanup_errors=True) as folder:
+            export_saved(workspace, Path(folder), main, commit.decode())
+            result = deps.audit(Path(folder))
+    if result["verdict"] == "allowed":
+        _audits[key(workspace)] = (tree, time.time(), result)
+    return {**result, "head": commit.decode()}
+
+
 def folder(workspace: str) -> Path:
     """A registered workspace's folder."""
     with _repo(workspace) as repo:
@@ -1049,7 +1309,7 @@ def project_files(workspace: str) -> dict:
     (`context`: AGENTS.md, else CLAUDE.md, at the repository's root) and its declaration (`declaration`:
     .eunomai/project.toml). Never a copy edited in the folder or a reference rewritten in .git. Each is None when
     the project has none; `read` says whether the main branch could be read at all."""
-    found = {"context": None, "declaration": None, "read": False}
+    found = {"context": None, "declaration": None, "read": False, "tip": None}
     current = _git_session()
     with _repo(workspace) as repo:
         main = _main_branch(repo)
@@ -1063,7 +1323,7 @@ def project_files(workspace: str) -> dict:
         if not tip:
             return found
         tree = repo[repo[tip].tree]
-        found["read"] = True
+        found["read"], found["tip"] = True, tip.decode()
 
         def text_of(name: str) -> str | None:
             # missing, a file where a folder should be, a submodule, or an object the server did not send

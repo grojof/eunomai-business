@@ -36,8 +36,9 @@ every change goes through the connector's `workspace_*` and `version_*` tools. R
 10. `version_propose(workspace, "eunomai validation: proposal from Cowork", "<one line saying what changed>")`.
     Give the user the pull request `url` and ask them to open it, check the changes, the accents and the author,
     and merge it if they agree.
-11. Read-only observation, only if you have a shell: `git -C <your path> status --short` and
-    `git -C <your path> log --oneline -3`. Report the output or the error as it is.
+11. Read-only observation, only if you have a shell: `git -C <your path> log --oneline -3`. Report the output or the
+    error as it is. Nothing else in git from the shell: most of it writes into `.git`, which the sandbox then cannot
+    clean, and the guard denies it.
 12. `version_save(workspace, "nothing")` again: expected `saved: false` (nothing changed).
 
 ## Part C · After the pull request is merged (H8f)

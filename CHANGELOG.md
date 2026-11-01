@@ -2,6 +2,122 @@
 
 ## Unreleased
 
+- **A business user's computer** (add-on to the fourth review): the connector's start, a preview of the base application
+  and the whole path against a fake server now run on uv and Windows' own folders, with no git and no Python, and a
+  repository test keeps it so. When a download cannot get through the person reads one plain sentence and the report
+  names the address, or the Python to deploy; uv's own three tries are the only ones. With `github.com` closed, every
+  package seemed not to show where it comes from: it is now told as an audit that could not run, and still stops.
+  [Configuration](docs/configuration.md#installing-uv-in-an-organization) says which Pythons to deploy, how much a
+  person downloads, every address, and that a Python from the Microsoft Store is neither needed nor used.
+- **What goes is well formed before anything reads it** (fourth review): a tree listing `AGENTS.md`, a workflows folder or
+  `requirements.txt` twice showed dulwich's checks an innocent twin while git used the other, and it reached the server
+  and a real merge. Every commit beyond the main branch and every tree in it are now read from their raw entries, for
+  send, proposal, test environment, preview and the audit's copy: duplicates, order, modes, names that collide by case
+  or Unicode, malformed commits. The rules of a save hold for each commit, not only the last. `include` is never
+  followed in `.git/config`.
+- **Real lists are lists, and a manifest cannot opt out** (third review): `evil (>=1.0)`, `wheels/evil.whl`, `file:./x.whl`
+  or `${EVIL}` read as prose and went unaudited. A file is prose only if some line could not install, since pip refuses
+  it then. Every folder that declares packages counts, named or not, poetry included; a parent answers only with its
+  lockfile and for the folders it names; copies, samples and templates are told by their path. In the git rule, a
+  folder with a wildcard could be anywhere.
+- **History comes from the commits, and the connector chooses the target** (third review): a commit graph of 1 KB made a
+  forged commit look like an ancestor of the main branch, the third such trick, so history is now read only from
+  commit objects, which are hashed against their names. [Barriers](docs/barriers.md#what-git-can-change) lists what `.git`
+  can change. The branch is read once and checked as it is sent, and only versions the connector made are sent. A main
+  branch the server no longer has, and a history rewritten on the server, are told as such.
+- **The git rule: daily commands pass, and a few mistakes no longer do** (second review): `git clone` to a copy, a `cd`
+  after `&&` on a following line, `branch --show-current`, `branch -a`, `remote -v`, `tag -l`, `config --get` and
+  `--exec-path` pass, as real git shows they do not write, as do heredocs with `<<\\EOF` and quoted delimiters. A
+  relative `git -C` that climbs, stays here or names a workspace is refused; a `cd` in a pipe or behind `&` no longer
+  moves what follows; text piped or `<<<` into a shell counts; Windows paths read alike in both quotes. The rule stays
+  a helper: `docs/hooks.md` lists what text matching does not see.
+- **A preview's declaration, fewer holes and fewer false refusals** (second review): `python.exe` no longer skips the
+  shape check, and `pip3.13` is refused as an installer. `127.0.0.1:{port}` and `gunicorn -b` are accepted, and the
+  environment check is limited to the host variables of the servers it knows: a database's address or a version is
+  not its business. `.python-version` may have a byte order mark, blank lines and comments. A stop file left behind no
+  longer ends the next preview, and a stop that cannot reach another task's preview says so.
+- **The audit stops refusing what is not a list** (second review): since it decides every send, these blocked real
+  projects. Prose in a file named like a list, any `*.lock` but a script's, a `package.json`, `pyproject.toml` or
+  `requirements.in` that is not the project (under `vendor`, `fixtures`, `templates`, or with no project name), a
+  `setup.cfg` with tool settings only, a `requirements/docs.txt` beside a `uv.lock`, a runtime list next to development
+  groups, and a byte order mark. What a person reads now names the file. An npm workspace stays refused.
+- **A forged commit does not leave the computer** (second review): a commit written straight into `.git` reached the
+  server with workflows, the project's declaration and `AGENTS.md`, since only a save checked them. `version_send` now
+  checks what a version changed against the main branch on the server, and refuses without it. HEAD on the main or test
+  branch sends nothing. A repository with grafts or marked shallow stops: grafts emptied that very check. A proposal
+  audits the commit it compared.
+- **A preview stops more surely** (independent review): every process group of every step is kept, not only the last;
+  the job has no name, so nothing in it can keep it open, and the watcher holds a handle of its own; the watcher
+  removes the state file, and a number in one is acted on only while a marker in the preview's folder matches. The
+  time limit counts from the start, and an application that answers slowly cannot hold the check. One preview per
+  folder, however its name is spelt. A state file is written whole, and junk in one no longer stops every preview. A
+  commit forged past the rules of a save does not run. A stale failure is no longer told for a version shown again,
+  and a stop during the copy leaves nothing. What an application printed is marked as such in IT's report.
+- **`.python-version` is honoured:** `--no-config` made uv ignore it, so an application could run on another Python than
+  its own. A plain version goes to uv as `--python`; anything else is refused for IT.
+- **What a preview may run is an allow-list** (independent review): a saved script with its own lockfile ran packages no
+  audit saw, because `uv run app.py` honours them. A script is no longer a program, `--no-build` applies at run time
+  too, and a program must be python with a file of the project, `python -m` with a module other than `pip`,
+  `ensurepip` or `venv`, or a console script of a package in the lock, checked once installed. `python -c` is
+  refused. What runs has only the project's own programs on its `PATH`. A host option must say exactly `127.0.0.1`:
+  the address anywhere else in the command no longer passes, and `[preview.environment]` is checked too. On Linux and
+  macOS the listening table is read instead of trying the computer's addresses. These checks catch slips, not malice:
+  IT reviews the declaration. `app_preview` must be exactly `true`.
+- **Ways around the audit closed** (independent review): `package.json` and the root of `package-lock.json` must agree;
+  npm entries with no version or a link are refused, not skipped; peer and optional dependencies count; each folder
+  that declares packages needs a pinned list of its own and its kind; a `pyproject.toml` must be answered by the
+  requirements lists beside it; a folder called `archive` is read; `requirements/*.txt` are read; a lockfile the audit
+  does not read, such as `script.py.lock`, is refused, as is a `uv.lock` wheel with a local path.
+- **The audit gate holds for every send** (independent review): it no longer depends on what a project declares, since
+  a declaration that was not valid turned it off. `version_to_test` goes through it too: that code runs in an
+  environment. A version with no packages needs no network. `version_propose` judges what the server holds: if the
+  latest save is not there it answers `not_sent`, so a proposal never says `allowed` for a commit it does not hold,
+  and the audit's line names the commit. The commit audited is the one sent, by its id: a reference the sandbox moved
+  during the send no longer changes what goes.
+- **The git rule reads a command as a shell does** (independent review): a regression had let `echo x > $WS/.git/config`,
+  `tee`, `touch`, `cp`, `~` paths, `Set-Content` and `New-Item` into `.git`; a place that cannot be worked out now
+  counts as a workspace's when it names `.git`. `--work-tree` alone no longer counts as elsewhere, a `cd` holds only
+  as far as it surely ran, and more wrappers are followed. A quoted word is data, so `echo "git add"`,
+  `grep -r "git status" docs` and heredocs are no longer refused, nor `git diff HEAD~1 HEAD`, `git diff main HEAD`,
+  `--output-indicator-new`, `--no-replace-objects`, a same-named copy in the sandbox's outputs, or a relative
+  `git -C`.
+- **Validation, first real test with the plugin built from main (2026-11-01):** H14, H17 and H19 updated with what
+  was measured; H21 failed; H23 is new, for asking Cowork for a folder during a task.
+- **Real screens instead of a prototype, where a project allows code:** the specialist builds the first real screens
+  with example data on the project's own base, and the person tries those through `app_preview` or the test
+  environment before tests and the full specification are written. Where neither exists, screenshots if the sandbox
+  can take them, otherwise it says the person will see it at review. An unfinished screen is not polished. The HTML
+  prototype stays only where a project does not allow code. `## Agreed screens` in `proposal.md` tells a new task
+  that Shape is done.
+- **Decision 7 changes: a person can see the real application on their own computer.** Off by default, with two keys:
+  `app_preview` in the build and `[preview]` in the project's declaration. New tools `app_preview` and
+  `app_preview_stop`, on the connector, so nothing is written for the person to run. It runs a copy of the saved
+  version, refused unless the audit allows it and it has a `uv.lock`, through `uv` with `--frozen`, never a shell, in an
+  environment built from a short list, on 127.0.0.1 only. It stops, its whole process tree and temporary folder with
+  it, on request, with the connector, and after 60 minutes. **This runs code nobody has reviewed yet, with the
+  person's rights, outside any sandbox; the limits reduce that risk and do not remove it** ([barriers](docs/barriers.md#the-preview-on-the-persons-computer)).
+  H21 failed: a server in the sandbox cannot be opened from the computer. To validate: H22.
+- **The specialist asks for the folder in the same task:** after `workspace_clone`, or when the folder is not
+  selected, it requests it with `mcp__cowork__request_cowork_directory` and carries on; the sentence asking for a new
+  task stays as the fallback when that tool is not there or fails. To validate: H23.
+- **Everything shown is in the user's language:** the first real test showed lines such as "Main branch, no open
+  change → Stage 1 Understand" and "Now generation", and told a business user to run `uv run uvicorn` in a terminal.
+  The rule now covers status lines between tool calls, stage names and commands.
+- **A question not answered means wait:** in the first real test the specialist asked, got no answer, and went on
+  with `uv add requests`, saying "no preference, I take the recommended one". No default is taken in the user's name
+  for anything that changes the project, and Understand no longer offers the recommended answer and moves on.
+- **The audit decides the send:** in the first real test the specialist got `blocked` from `dependency_audit`,
+  explained it away and sent the pull request; the rule was only in the skill. `version_send` and `version_propose`
+  now audit what is saved where a project declares code, and refuse unless it is `allowed`, in plain words; an audit
+  that cannot run refuses too. Nothing changes where a project declares no code. It audits a copy of the saved
+  version, the send names the commit it audited, and an `allowed` answer is kept for 15 minutes, so a send and the
+  proposal after it wait once. Packages are checked eight at a time: 51 took 38 seconds one by one.
+- **Git stays out of a workspace's sandbox shell:** the first real test left `.git/index.lock` after a `git status`,
+  which stopped `version_save`, temporary objects after a `git stash`, and the assistant then removed files inside
+  `.git`. The guard now denies, built in, git commands that can write in a workspace and anything that writes or
+  removes inside its `.git`, pointing to `workspace_status`; a copy elsewhere stays free. Measuring which commands
+  really write showed that `git diff` is not read-only: it rewrites the index, even with `--no-optional-locks`, so
+  only `--cached`, `--staged`, `--no-index` and ranges are allowed. `validate-git` no longer asks for `git status`.
 - **Recommended stack without Alpine.js:** `business-app-base` built every form without it, so a plain script of the
   application's own takes its place; a screen with a lot of browser state decides it on its own. The validation guide
   gains the test of the base application in Cowork.

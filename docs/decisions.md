@@ -81,18 +81,50 @@ plain words, and hands IT a report with an e-mail link ready to send ([barriers]
 - **Consequence:** the rules for projects and for the connector aim to make stops rare; every stop is a case for
   IT, never a dead end for the user.
 
-## 7 · Nothing runs on the user's computer
+## 7 · Nothing runs on the user's computer, except a preview IT turns on
 
-What the specialist builds is tried in Claude's sandbox and, for real, wherever IT runs it. The user tries a
-clickable prototype in the browser before anything is built, and sees the application through screenshots and
-results from the sandbox. The specialist never writes a launcher, a script or an installer for the user, never
-gives them a command, and a save point never carries a file Windows would run on a double click.
+The specialist never writes a launcher, a script or an installer for the user, never gives them a command, and a
+save point never carries a file Windows would run on a double click. What it builds is proved in Claude's sandbox
+and, for real, wherever IT runs it.
 
-- **Rejected:** a launcher in the workspace so the user can try the application (it ran a package installation
-  from the internet on the user's computer, outside every barrier); asking the user to run commands, even to get
-  past a stop.
-- **Consequence:** trying the real application needs a place IT provides (a preview environment per proposal is
-  the natural next step); until then, the prototype and the sandbox's evidence carry the review.
+There is one exception, off by default: where IT turns it on and a project declares it, a person sees the real
+application on their own computer, through the connector
+([how it is held](barriers.md#the-preview-on-the-persons-computer)).
+
+**What changed, and why.** This decision used to have no exception: a person tried a clickable prototype, and saw the
+application through pictures from the sandbox. The product's owner decided that a person can see the real application
+on their own computer, off by default and turned on by IT.
+
+| Reason | Evidence |
+|---|---|
+| A person judges the real thing better than a drawing of it, and a prototype is a second thing to agree on that then differs from the application | Two business-user tests (H11, H12): the prototype worked, the "screenshots" of the application could not be used, and the user tried to click them |
+| The sandbox cannot show it: it has only 127.0.0.1, and no process outlives its command | Measured on 2026-11-01 ([H21](validation/hypotheses.md), failed) |
+| The connector already runs on the user's computer and already uses uv | Decisions 1 and 9: nothing new is installed, nothing is written for the person to run, and every limit is enforced in code outside the sandbox |
+
+**The risk stays.** This runs code an AI wrote and nobody has reviewed yet, on the person's computer, with their
+rights, outside any sandbox. That code can do what the person can: read their files, use their network, and take
+their sign-in, since a program running as them can read what DPAPI protects. The limits reduce that risk and do not
+remove it: a program with those rights can undo most of them. They keep a mistake from becoming an incident; they do
+not stop code written to do harm. An organization that turns this on accepts that.
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| A launcher or script in the workspace | It ran a package installation from the internet on the user's computer, outside every barrier, from a file the sandbox can rewrite |
+| Asking the user to run commands, even to get past a stop | Decision 6; a business user cannot judge what a command does |
+| A server in the sandbox, opened from the computer | It cannot be reached (H21) |
+| Running the working folder | Anything the sandbox just wrote would run, saved or not, audited or not. It runs a copy of what was saved |
+| The commands in the workspace, or in the build | The sandbox can rewrite the workspace. A build would need a new base version per project (decision 10). They are in the project's declaration, on the main branch, read from the server |
+| Running commands through a shell | One string can be many commands. Each is a list of words, run as `uv run --frozen <words>` |
+| On for everyone, or on by the project's word alone | Two keys, so neither an organization's build nor one project's declaration turns it on by itself |
+| A container or virtual machine on the computer | It would be the real boundary, and it needs software and rights business users' computers do not have (decisions 6, 9). To look at again if Cowork offers one |
+
+- **Consequence:** where a project has a [test environment](project-practices.md#a-test-environment-without-waiting-for-it),
+  that carries none of this risk for the computer, and it stays the better place to try a version.
+- **Consequence:** the specialist builds real screens early instead of a prototype where it can show them
+  ([guided flows](guided-flows.md)).
+- **To validate:** on a business user's computer, in Cowork ([H22](validation/hypotheses.md)).
 
 ## 8 · The project's context belongs to IT
 
@@ -276,7 +308,7 @@ How each part holds against misuse is in the template's and the agent's pages, a
 |---|---|---|
 | **Tailwind with daisyUI** is the recommended visual layer | Tailwind CSS 4 and daisyUI 5, both MIT, behind Jinja macros: screens call macros, so an organization can replace the layer without touching a screen | Components free to customise: a utility overrides a component without fighting global styles, and a theme is a set of variables |
 | **No Node and no npm** for it | Tailwind's standalone executable and daisyUI's two files, each pinned by version and hash ([recommended stack](recommended-stack.md#the-stylesheet), [sources](sources.md#recommended-stack)) | The npm, Node and React rules of [decision 13](#13--one-recommended-stack-pages-made-on-the-server) stay as they are: business users' applications do not carry npm |
-| **The generated CSS is committed** | Generated wherever templates change: a developer's computer, the assistant's sandbox, CI | Servers need neither Node nor the executable, and a business user runs nothing ([decision 7](#7--nothing-runs-on-the-users-computer)). The executable ran in a real local Cowork sandbox ([measured](sources.md#measured-on-real-installations)) |
+| **The generated CSS is committed** | Generated wherever templates change: a developer's computer, the assistant's sandbox, CI | Servers need neither Node nor the executable, and a business user runs nothing ([decision 7](#7--nothing-runs-on-the-users-computer-except-a-preview-it-turns-on)). The executable ran in a real local Cowork sandbox ([measured](sources.md#measured-on-real-installations)) |
 | **Colours exist only in the organization's theme** | Tailwind's own palette is removed; a test refuses invented values such as `bg-[#ff0000]` | Removing the palette takes `bg-red-500` away but not an arbitrary value, so the test closes what is left |
 | The organization's layer is a **base application to clone**, not a plugin holding components | `business-app-base`, a separate repository: an organization clones it once and adds its brand, then clones that per application and deletes the demo | Each organization and application can change anything, with nothing to stay tied to |
 

@@ -37,7 +37,7 @@ served with Subresource Integrity. Exact versions live in each application's `uv
 Tailwind's standalone executable generates the stylesheet, without Node, wherever templates change: a developer's
 computer, the assistant's sandbox or CI. The generated CSS is committed, so servers need neither Node nor the
 executable. A business user runs nothing: in Cowork it runs in Claude's sandbox
-([decision 7](decisions.md#7--nothing-runs-on-the-users-computer)), which must be able to reach `github.com` and
+([decision 7](decisions.md#7--nothing-runs-on-the-users-computer-except-a-preview-it-turns-on)), which must be able to reach `github.com` and
 `release-assets.githubusercontent.com` under the organization's network settings; no network access is the default
 on Enterprise ([sources](sources.md#where-cowork-runs-and-local-connectors)). Where it cannot, a developer's computer
 or CI generates the stylesheet, as a case for IT ([decision 6](decisions.md#6--the-user-never-resolves-a-technical-problem)).
@@ -68,8 +68,9 @@ An organization does not install its layer: it clones it.
 
 A component is one macro, written only with the theme's colours. Components are not a package: each clone carries
 its own copy, so there is nothing to publish and no version to follow. When the base improves, an application
-compares versions and takes what it wants. The prototype a user tries comes before any clone, so its look still
-comes from the organization's skills (`organization_skills`, [configuration](configuration.md)).
+compares versions and takes what it wants. Where a project allows code, the first screens a user tries are built on
+its clone. A prototype, where it does not, comes before any clone, so its look comes from the organization's skills
+(`organization_skills`, [configuration](configuration.md)).
 
 ## Not allowed, and why
 
@@ -112,7 +113,7 @@ technologies = ["Python", "FastAPI", "Pydantic", "SQLAlchemy", "Alembic", "Postg
 | Claude builds three screens from the base application's catalogue | Count the defects; tune the checks in CI |
 | An organization clones the base application, adds its brand and clones it again for an application | Measure IT's effort |
 | Generating the stylesheet in Cowork under another organization's network rules ([H20](validation/hypotheses.md)) | In a local task there, download the executable, compare its hash and generate; it has run on one sandbox so far ([measured](sources.md#measured-on-real-installations)) |
-| A person opens, from their computer, a server running inside Cowork's sandbox ([H21](validation/hypotheses.md)) | Not documented: try it in a local task. Until it passes, the user sees screenshots and results from the sandbox |
+| A person sees the application on their own computer through the connector ([H22](validation/hypotheses.md)) | On a business user's computer, in Cowork, with a clone of the base application. A server in the sandbox cannot be opened from the computer (H21) |
 | `business-app-base` ready to clone | As of 2026-10-31 it holds lists over 50,000 rows, Excel, charts and forms, and its tests run on PostgreSQL; it is private, has no licence and is still to be tried in Cowork ([guide](validation/run-the-validation.md#9--the-business-user-test-and-the-newer-checks-h11h18)) |
 
 The first application built with this stack runs these checks first.
