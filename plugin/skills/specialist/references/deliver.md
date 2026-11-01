@@ -8,7 +8,8 @@ Run it now, not from memory, and last: anything changed after it, a fix the revi
 running it again. Each line holds, or goes into the summary under *Not settled* or *Skipped*:
 
 - the whole test suite passes in a run made now; every requirement has a scenario, and every scenario a test;
-- the `verdict` of `dependency_audit(workspace)` is `allowed`;
+- the `verdict` of `dependency_audit(workspace)` is `allowed`: this line has to hold, since the connector refuses to
+  send otherwise;
 - review your own changes with two lenses, as a reviewer would: does it do what the specs say, no more and no less;
   and does it meet the table in `build.md`. If the organization provides a code or security review skill, run it
   too;
@@ -38,8 +39,17 @@ to Propose.
 
 `version_send(workspace)`, then `version_propose(workspace, <title>, <summary>)`. If it answers `created: false`,
 the pull request was already open: the version just sent updates it, and its description is replaced. The connector
-appends its own checks (the dependency audit) below your summary; do not repeat them. The summary, in
-`docs_language` (its headings too), has these sections, each short:
+appends its own checks (the dependency audit) below your summary; do not repeat them.
+
+Where the project declares code, both audit what is saved and refuse unless it is `allowed`; nothing was sent then.
+Never explain a refusal away, and never send the work another way:
+
+| Answer | Next |
+|---|---|
+| `audit_refused` | Back to the dependency steps in `build.md`, save, and send again. What only IT can lift (`reasons` that no allowed version solves): show `user_message` and offer `email_link`, and wait for IT |
+| `audit_unavailable` | Show `user_message`; try again when the network is back |
+
+The summary, in `docs_language` (its headings too), has these sections, each short:
 
 | Section | Content |
 |---|---|

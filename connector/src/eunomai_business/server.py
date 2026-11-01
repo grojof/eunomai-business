@@ -119,16 +119,77 @@ def version_save(workspace: str, message: str) -> dict:
     return _safe(gitops.save, workspace, message)
 
 
+# What the audit says about a package, as a person can read it.
+_PLAIN_REASONS = (("known vulnerabilities", "has a known security problem"),
+                  ("two weeks", "is too new to trust yet"),
+                  ("source repository", "does not show where it comes from"),
+                  ("unmaintained", "is no longer maintained"),
+                  ("yanked", "was withdrawn by its authors"), ("deprecated", "was withdrawn by its authors"),
+                  ("pre-release", "is a test release"),
+                  ("registry published", "does not match what its authors published"),
+                  ("does not exist", "could not be found"))
+
+
+def _plain_reasons(audit: dict) -> list[str]:
+    found = {}
+    for item in audit["blocked"]:
+        for reason in item["reasons"]:
+            plain = next((words for key, words in _PLAIN_REASONS if key in reason), "did not pass a check")
+            found[f"{item['package']} {plain}"] = None
+    if audit["not_pinned"] or audit.get("reasons"):
+        found["the list of what the application uses is incomplete, out of date or names somewhere not allowed"] = None
+    return list(found) or ["what the application uses could not be confirmed"]
+
+
+def _audit_refused(workspace: str, audit: dict) -> dict:
+    reasons = _plain_reasons(audit)
+    message = (f"This version was not sent, because of what it uses: {'; '.join(reasons[:5])}. Your work is safe on "
+               "this computer.")
+    details = {"Workspace": workspace, "Version": audit["head"][:12], "Packages": "; ".join(
+        f"{item['package']} {item['version']}: {', '.join(item['reasons'])}" for item in audit["blocked"]),
+        "Not pinned": "; ".join(audit["not_pinned"])}
+    stop = support.report(support.NeedsIT(message, "the dependency audit refused a version", details))
+    return {**stop, "status": "audit_refused", "workspace": workspace, "reasons": reasons, "blocked": audit["blocked"],
+            "not_pinned": audit["not_pinned"]}
+
+
+def _code_declared(workspace: str) -> bool:
+    """Whether the project may hold code. A main branch that cannot be read says nothing, so it counts."""
+    files = gitops.project_files(workspace)
+    return not files["read"] or settings.development(files["declaration"])["code_allowed"]
+
+
+def _audit_gate(workspace: str) -> tuple[dict | None, dict | None]:
+    """(the audit of what is saved, the refusal). Where the project declares code, what is saved goes on only if the
+    audit says `allowed`; an audit that cannot run refuses too. Without code neither applies."""
+    if not _code_declared(workspace):
+        return None, None
+    try:
+        audit = gitops.audit_saved(workspace)
+    except support.Unreachable:
+        return None, {"workspace": workspace, "status": "audit_unavailable",
+                      "user_message": "This version was not sent: the checks on what it uses could not run. Check the "
+                                      "network or VPN and try again; your work is safe on this computer."}
+    return audit, None if audit["verdict"] == "allowed" else _audit_refused(workspace, audit)
+
+
+def _send(workspace: str) -> dict:
+    audit, refused = _audit_gate(workspace)
+    return refused or gitops.push(workspace, audit["head"] if audit else None)
+
+
 @mcp.tool()
 def version_send(workspace: str) -> dict:
-    """Send the current version (branch) to the git server. Never the main branch, never forced."""
-    return _safe(gitops.push, workspace)
+    """Send the current version (branch) to the git server. Never the main branch, never forced. Where the project
+    declares code, the connector audits what is saved first and refuses unless it is `allowed`: `status`
+    "audit_refused" with `reasons`, or "audit_unavailable" when the audit could not run. Nothing was sent then."""
+    return _safe(_send, workspace)
 
 
-def _checks(workspace: str) -> str:
+def _checks(workspace: str, audit: dict | None = None) -> str:
     """The connector's own checks, appended to every pull request: what IT reads there was not written by Claude."""
     try:
-        result = deps.audit(gitops.folder(workspace))
+        result = audit or deps.audit(gitops.folder(workspace))
     except support.Unreachable:
         lines = ["- Dependency audit: could not be run (a registry or OSV did not answer)"]
     else:
@@ -141,12 +202,17 @@ def _checks(workspace: str) -> str:
     return "\n\n---\n**Checks by the connector** (not written by the assistant)\n\n" + "\n".join(lines) + "\n"
 
 
+def _propose(workspace: str, title: str, description: str) -> dict:
+    audit, refused = _audit_gate(workspace)
+    return refused or gitops.pull_request(workspace, title, description + _checks(workspace, audit))
+
+
 @mcp.tool()
 def version_propose(workspace: str, title: str, description: str = "") -> dict:
     """Open a pull request that proposes the current version for the main branch, or update the description of the
-    one already open. Send it first (version_send). The connector appends its own checks to the description."""
-    return _safe(lambda name, head, body: gitops.pull_request(name, head, body + _checks(name)),
-                 workspace, title, description)
+    one already open. Send it first (version_send). The connector appends its own checks to the description, and
+    refuses like version_send where the project declares code and the audit is not `allowed`."""
+    return _safe(_propose, workspace, title, description)
 
 
 # --- the specialist ---------------------------------------------------------------------------------------

@@ -17,6 +17,12 @@ def test_the_specialist_never_runs_git_in_the_workspace():
     assert "`.git`" in SPECIALIST
 
 
+def test_a_refused_send_is_never_explained_away():
+    deliver = reference("deliver")
+    assert "`audit_refused`" in deliver and "`audit_unavailable`" in deliver and "Never explain" in deliver
+    assert "list it in the pull request" not in reference("build")  # a refused version has no pull request
+
+
 def test_no_skill_tells_claude_to_run_a_git_command_that_writes():
     for skill in SKILLS.rglob("*.md"):
         assert not re.search(r"`git (-C \S+(?: \S+)? )?(status|diff|stash)\b", skill.read_text(encoding="utf-8")), skill

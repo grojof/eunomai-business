@@ -14,6 +14,7 @@ import re
 import shutil
 import socket
 import ssl
+import tempfile
 import threading
 import time
 from contextlib import contextmanager
@@ -34,7 +35,7 @@ from dulwich.object_store import iter_tree_contents
 from dulwich.objects import Blob, Commit, SubmoduleEncountered
 from dulwich.repo import Repo
 
-from . import auth, data_dir, guard
+from . import auth, data_dir, deps, guard
 from .support import NeedsIT, Unreachable, clean
 
 # Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
@@ -60,6 +61,8 @@ DECLARATION = ".eunomai/project.toml"  # what IT declares for the project, read 
 # A prototype opens in the user's browser: it must say, itself, that it loads nothing from other sites.
 _PROTOTYPE = re.compile(r"(^|/)openspec/changes/.+/prototype/[^/]+\.html?$", re.IGNORECASE)
 _CSP = re.compile(r"<meta[^>]+http-equiv=[\"']?content-security-policy[\"']?[^>]*default-src\s+'none'", re.IGNORECASE)
+_AUDIT_KEPT_SECONDS = 900  # a send and the proposal after it read the same answer
+_GITLINK = 0o160000
 
 
 def root() -> Path:
@@ -560,13 +563,16 @@ def _check_no_links(repo: Repo, path: str) -> None:
 
 
 @_one_at_a_time
-def push(workspace: str) -> dict:
-    """Send the current version to the server (never the main branch, never forced)."""
+def push(workspace: str, expected: str | None = None) -> dict:
+    """Send the current version to the server (never the main branch, never forced). With `expected`, only if it is
+    still that commit: what was audited is what goes."""
     current = _git_session()
     with _repo(workspace) as repo:
         name = _branch(repo)
         if name is None or name in _protected(repo):
             raise PermissionError("only versions are sent; the main branch changes through a pull request")
+        if expected and repo.head().decode() != expected:
+            raise PermissionError("the version changed while it was being checked; send it again")
         origin = _registered_origin(repo, workspace)
         _check_host(origin, current)
         out = io.BytesIO()
@@ -1029,6 +1035,57 @@ def update(workspace: str) -> dict:
         return {**result, "status": "updated", "branch": name, "head": _head(repo),
                 "user_message": " ".join(notes + ["The latest changes of the project were added to your version; "
                                                   "your work is kept."])}
+
+
+@_one_at_a_time
+def export_saved(workspace: str, target: Path, head: str | None = None) -> dict:
+    """Write the saved version's files to `target`, outside the workspace: what was saved, never what is in the
+    folder. The objects are in .git, which the sandbox can write, so every path is checked again; a saved link
+    becomes a plain file holding its target, and a submodule stays out."""
+    with _repo(workspace) as repo:
+        commit = head.encode() if head else _ref(repo, b"HEAD")
+        if commit is None:
+            raise PermissionError("nothing is saved yet")
+        entries = list(iter_tree_contents(repo.object_store, repo[commit].tree))
+        invalid = sorted(entry.path.decode("utf-8", "replace") for entry in entries
+                         if not _valid(entry.path.decode("utf-8", "replace")))
+        if invalid:
+            raise NeedsIT("This version has a file name the connector does not accept. Your work is safe on this "
+                          "computer.", "a path that leaves the workspace or is not valid on Windows",
+                          {"Folder": repo.path, "Paths": ", ".join(invalid[:20])})
+        target.mkdir(parents=True, exist_ok=True)
+        for entry in entries:
+            if entry.mode != _GITLINK:
+                file = target / entry.path.decode("utf-8")
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(repo[entry.sha].data)
+        return {"head": commit.decode(), "unsaved_changes": _dirty(repo), "branch": _branch(repo)}
+
+
+_audits: dict[str, tuple[bytes, float, dict]] = {}  # workspace: its tree, when, and the `allowed` answer
+
+
+def audit_saved(workspace: str, head: str | None = None, copy: Path | None = None) -> dict:
+    """The dependency audit of what is saved, with the commit it answers for in `head`. An `allowed` answer is kept
+    for that tree for a while, so a send and the proposal after it wait once; any other answer is asked again, since
+    a registry that did not answer may come back. `copy` is that commit's files, already exported."""
+    with _repo(workspace) as repo:
+        commit = head.encode() if head else _ref(repo, b"HEAD")
+        if commit is None:
+            raise PermissionError("nothing is saved yet")
+        tree = repo[commit].tree
+    kept = _audits.get(workspace)
+    if kept and kept[0] == tree and time.time() - kept[1] < _AUDIT_KEPT_SECONDS:
+        return {**kept[2], "head": commit.decode()}
+    if copy is not None:
+        result = deps.audit(copy)
+    else:
+        with tempfile.TemporaryDirectory(prefix="eunomai-audit-", ignore_cleanup_errors=True) as folder:
+            export_saved(workspace, Path(folder), commit.decode())
+            result = deps.audit(Path(folder))
+    if result["verdict"] == "allowed":
+        _audits[workspace] = (tree, time.time(), result)
+    return {**result, "head": commit.decode()}
 
 
 def folder(workspace: str) -> Path:

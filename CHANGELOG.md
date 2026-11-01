@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The audit decides the send:** in the first real test the specialist got `blocked` from `dependency_audit`,
+  explained it away and sent the pull request; the rule was only in the skill. `version_send` and `version_propose`
+  now audit what is saved where a project declares code, and refuse unless it is `allowed`, in plain words; an audit
+  that cannot run refuses too. Nothing changes where a project declares no code. It audits a copy of the saved
+  version, the send names the commit it audited, and an `allowed` answer is kept for 15 minutes, so a send and the
+  proposal after it wait once. Packages are checked eight at a time: 51 took 38 seconds one by one.
 - **Git stays out of a workspace's sandbox shell:** the first real test left `.git/index.lock` after a `git status`,
   which stopped `version_save`, temporary objects after a `git stash`, and the assistant then removed files inside
   `.git`. The guard now denies, built in, git commands that can write in a workspace and anything that writes or

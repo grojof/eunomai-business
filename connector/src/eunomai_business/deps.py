@@ -15,6 +15,7 @@ import re
 import socket
 import time
 import tomllib
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -50,6 +51,7 @@ _VENDOR_URL = re.compile(r"https://(github\.com|gitlab\.com|codeberg\.org|regist
 _VENDOR_HASHES = ("sha256", "sha384", "sha512", "executables")
 _SKIP_FOLDERS = {".git", ".venv", "venv", "node_modules", "__pycache__", "archive"}
 _UNREADABLE = (ValueError, UnicodeDecodeError, TypeError, AttributeError, KeyError, RecursionError)
+_AT_ONCE = 8  # packages checked at the same time: the audit runs before every send
 
 
 def _get(url: str) -> dict | None:
@@ -513,8 +515,9 @@ def _unpinned_requirements(pins: list[tuple[str, str]], python_from: tuple[int, 
     Requirements of extras not asked for are not counted."""
     pinned = {name for name, _ in pins}
     missing, conditional = set(), set()
-    for name, version in pins:
-        data = _get(f"https://pypi.org/pypi/{name}/{version}/json") or {}
+    with ThreadPoolExecutor(_AT_ONCE) as pool:
+        answers = list(pool.map(lambda pin: _get(f"https://pypi.org/pypi/{pin[0]}/{pin[1]}/json") or {}, pins))
+    for (name, version), data in zip(pins, answers):
         for requirement in (data.get("info") or {}).get("requires_dist") or []:
             found = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", requirement)
             if not found or _normalized(found.group(1)) in pinned:
@@ -602,8 +605,9 @@ def audit(folder: Path) -> dict:
     missing, conditional = _unpinned_requirements(list(listed), min(compiled_for, default=_SUPPORTED_PYTHONS[0]))
     loose += [f"missing from the pinned list: {item}" for item in missing]
     vulnerabilities = _vulnerable(list(pins))
-    blocked = []
-    for (eco, name, version), where in sorted(pins.items()):
+
+    def judged(pin: tuple[tuple[str, str, str], list[str]]) -> dict | None:
+        (eco, name, version), where = pin
         package = (_pypi if eco == "pypi" else _npm)(name)
         release = (package or {}).get("releases", {}).get(version)
         if package is None or release is None:
@@ -620,8 +624,11 @@ def audit(folder: Path) -> dict:
                 reasons.append(f"version {version} is newer than two weeks and is not needed to fix a vulnerability")
             if digests.get((eco, name, version), set()) - release.get("digests", set()):
                 reasons.append(f"a file in the lockfile is not one the registry published for version {version}")
-        if reasons:
-            blocked.append({"ecosystem": eco, "package": name, "version": version, "files": where, "reasons": reasons})
+        return {"ecosystem": eco, "package": name, "version": version, "files": where,
+                "reasons": reasons} if reasons else None
+
+    with ThreadPoolExecutor(_AT_ONCE) as pool:
+        blocked = [found for found in pool.map(judged, sorted(pins.items())) if found]
     undeclared = not installs and not loose and _declares_packages(folder)
     result = {"verdict": "allowed" if files and not blocked and not loose and not undeclared else "blocked",
               "files": [f.relative_to(folder).as_posix() for f in files], "packages": len(pins),

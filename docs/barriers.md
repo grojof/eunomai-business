@@ -109,9 +109,28 @@ holds it. `uv lock --check` belongs in the project's continuous integration, and
 `--frozen`: a plain `uv run` or `uv sync` may write a new lockfile. A `uv.lock` in a subfolder says nothing about a
 project beside it, as with a requirements list.
 
-A project that installs no packages has nothing to check. Lists without hashes are noted. The specialist runs the
-audit before delivering, and the connector runs it again itself and appends the result to every pull request, so
-what IT reads there was not written by the model.
+A project that installs no packages has nothing to check. Lists without hashes are noted.
+
+The audit decides the send. Where a project declares code ([`[development]`](project-practices.md#where-code-may-be-written),
+or `free_development`), `version_send` and `version_propose` audit what is saved and refuse unless it is `allowed`:
+
+| Case | What happens |
+|---|---|
+| `allowed` | It goes, and the result is appended to the pull request, so what IT reads there was not written by the model |
+| `blocked` | Nothing is sent; the user reads why in plain words, and IT gets a report |
+| The audit cannot run (no network, a registry that does not answer) | Nothing is sent: deny by default, like the rest of the audit |
+| The main branch cannot be read, so the declaration neither | Audited as if it declared code |
+| The project declares no code | As before: nothing is refused, and the result is still appended to the pull request |
+
+| How | Why |
+|---|---|
+| It audits a copy of the saved version in a temporary folder, not the workspace | What goes is what is saved; the sandbox can rewrite the folder at any moment |
+| The send names the commit it audited, and stops if the version moved meanwhile | Nothing that was not audited goes |
+| An `allowed` answer is kept for that saved tree for 15 minutes; any other answer is asked again | A send and the proposal after it wait once, and a registry that did not answer can come back |
+| Packages are checked eight at a time | 51 packages took 38 seconds one by one, and this runs before every send |
+
+`version_to_test` is not gated: the test environment is not trusted to begin with
+([layers](project-practices.md#a-test-environment-without-waiting-for-it)).
 
 The source check is a signal of origin, not proof: a link that answers says nothing about what the package
 contains. It never follows a redirect, never contacts an address that is not on the public internet, and never

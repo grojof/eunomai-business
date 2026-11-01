@@ -76,6 +76,7 @@ sequenceDiagram
     Claude->>Connector: version_save
     Note over Connector: hooks off, .git/config checked
     Claude->>Connector: version_send
+    Note over Connector: where code is declared, refused unless the audit allows it
     Connector->>Git: Push the version (HTTPS, user's token)
     Claude->>Connector: version_propose
     Connector->>Git: Open the pull request

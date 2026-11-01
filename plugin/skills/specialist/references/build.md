@@ -24,7 +24,8 @@ your sandbox.
   `recommended` one from `dependency_check` in the `.in` file (newer than two weeks only when it fixes a
   vulnerability: add `--exclude-newer-package <name>=<YYYY-MM-DD of today>`) and compile again. A package it blocks that the
   tooling needs, such as an indirect one without recent releases, goes to IT, who can vet it once for the
-  organization: list it in the pull request. Repeat after any dependency change.
+  organization: the connector refuses to send until then, so say so early, not at delivery. Repeat after any
+  dependency change.
 - **Open questions:** declared assumptions, as `SKILL.md` says; never a setting the code does not have.
 
 ## Tests first
