@@ -878,9 +878,9 @@ def test_with_the_watcher_gone_another_connector_never_says_stopped_while_it_run
     try:
         if sys.platform == "win32":
             subprocess.run(["taskkill", "/F", "/PID", str(started["watcher"])], capture_output=True)
-        else:
+            assert gone(started["watcher"], wait=10)
+        else:  # it stays a zombie until the connector, which never waits for it here, reaps it
             os.kill(started["watcher"], 9)
-        assert gone(started["watcher"], wait=10)
         answer = preview.stop("watcher-gone")
         if answer["status"] == "stopped":
             assert gone(*numbers, wait=20), "it said stopped and the application still runs"
