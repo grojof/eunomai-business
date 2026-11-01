@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **The git rule reads a command as a shell does** (independent review): a regression had let `echo x > $WS/.git/config`,
+  `tee`, `touch`, `cp`, `~` paths, `Set-Content` and `New-Item` into `.git`; a place that cannot be worked out now
+  counts as a workspace's when it names `.git`. `--work-tree` alone no longer counts as elsewhere, a `cd` holds only
+  as far as it surely ran, and more wrappers are followed. A quoted word is data, so `echo "git add"`,
+  `grep -r "git status" docs` and heredocs are no longer refused, nor `git diff HEAD~1 HEAD`, `git diff main HEAD`,
+  `--output-indicator-new`, `--no-replace-objects`, a same-named copy in the sandbox's outputs, or a relative
+  `git -C`.
 - **Validation, first real test with the plugin built from main (2026-11-01):** H14, H17 and H19 updated with what
   was measured; H21 failed; H23 is new, for asking Cowork for a folder during a task.
 - **Real screens instead of a prototype, where a project allows code:** the specialist builds the first real screens

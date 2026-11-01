@@ -178,3 +178,81 @@ def test_the_rule_is_built_in_whatever_the_organization_configures(monkeypatch, 
         guard.main(["--policy", str(policy)])
     decision = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
     assert decision["permissionDecision"] == "deny" and "workspace_status" in decision["permissionDecisionReason"]
+
+
+# --- found by an independent review -----------------------------------------------------------------------------
+
+@pytest.mark.parametrize("command", [
+    "echo x > $WS/.git/config", 'cp x "$WS/.git/hooks/pre-commit"', "cp x ~/eunomai-business-workspaces/ws/.git/config",
+    "Set-Content .git/config x", "Add-Content .git/config x", "New-Item .git/hooks/x",
+    "Set-Content /sessions/brave-owl/mnt/ws/.git/config x", "tee $WS/.git/config", "touch $WORKSPACE/.git/config",
+    'echo x > "$WS/.git/config"', "echo x 2>> .git/config",
+])
+@pytest.mark.parametrize("cwd", [WS, "/sessions/brave-owl"])
+def test_a_place_that_cannot_be_computed_counts_as_inside_when_it_names_the_repository(command, cwd):
+    assert denied(command, cwd=cwd), command
+
+
+def test_the_same_with_the_computers_own_shell_standing_in_a_workspace():
+    assert denied("echo x > $WS/.git/config", cwd=WS, tool="Bash")
+    assert denied("echo x > $WS/.git/config", cwd="/home/me/other", tool="Bash") is None
+
+
+@pytest.mark.parametrize("command", [
+    "env -u FOO git commit -am x", "env -C /sessions/brave-owl/mnt/ws -u A git commit -am x", "sudo -u root git add .",
+    "sudo -E git add .",
+    "setsid git add .", "ionice git add .", "ionice -c 3 git add .", "flock /tmp/l git add .",
+    "flock -w 5 /tmp/l git add .", "flock /tmp/l -c 'git add .'", "coproc git add .", "case x in x) git add . ;; esac",
+    "(cd /tmp/copy); git add .", "pushd /tmp/copy; popd; git add .", "if false; then cd /tmp/copy; fi; git add .",
+    "true && cd /tmp/copy; git add .", "false || cd /tmp/copy; git add .", "for d in a; do cd /tmp/copy; done; git add .",
+    "cd /sessions/brave-owl/mnt/ws && (cd /tmp/copy); git add .",
+    "cd /sessions/brave-owl/mnt/ws && pushd /tmp/copy; popd; git add .",
+    "export GIT_DIR=/sessions/brave-owl/mnt/ws/.git; cd /tmp/copy; git add .",
+    "GIT_DIR=/sessions/brave-owl/mnt/ws/.git; git --version; cd /tmp/copy; git add .",
+    "cd /sessions/brave-owl/mnt/ws && git --work-tree=/tmp/x add .",
+    "cd /sessions/brave-owl/mnt/ws && GIT_WORK_TREE=/tmp/x git add .",
+    "cd /sessions/brave-owl/mnt/ws && git --work-tree=/tmp/x commit -m x", "git --work-tree=/tmp/x add .",
+    "git diff -- --cached", "git diff -- --cached a.txt", "git diff -- a.txt b..c", "git diff -- a..b",
+    "git grep --open-files-in=touch x", "git grep --op=touch x", "git grep --open=touch x",
+    "git diff HEAD a.txt", "git diff main app", "git diff a.txt b.txt", "git diff a b c",
+    'echo "$(git status)"', 'echo "`git stash`"', "bash -c 'cd /tmp; git status; cd -; git add .'",
+    "sh <<EOF\ngit status\nEOF", "bash <<'EOF'\ngit add .\nEOF",
+])
+def test_what_changes_a_workspaces_repository_does_not_get_through(command):
+    assert denied(command, cwd="/sessions/brave-owl"), command
+
+
+@pytest.mark.parametrize("command", [
+    'echo "git add"', "echo 'git status'", 'grep -r "git status" docs', "grep -rn 'git add' .", 'git log --grep="git add"',
+    "cat > README.md <<EOF\n# Setup\ngit clone x\nEOF", "cat > notes.md <<'EOF'\ngit stash\ngit add .\nEOF\n",
+    "cat <<-EOF\n\tgit push\n\tEOF", """python3 -c "print('git push')\"""", "# git status\nls", "ls # git add .",
+    "git diff HEAD~1 HEAD", "git diff main HEAD", "git diff HEAD~3 HEAD~1", "git diff main~2 HEAD -- app",
+    "git diff --stat main HEAD", "git diff 1a2b3c4 HEAD", "git diff HEAD^ HEAD",
+    "git log --output-indicator-new=+ -p", "git show --output-indicator-old=- HEAD",
+    "git --no-replace-objects log", "git --literal-pathspecs log -- a.txt",
+    "git -C /sessions/brave-owl/mnt/outputs/ws add .", "git -C /sessions/brave-owl/mnt/uploads/ws status",
+    "cd /sessions/brave-owl/mnt/outputs/ws && git stash",
+    "git -C copy add .", "git -C copy status", "git -C ../copy commit -m x",
+])
+def test_what_a_model_writes_every_day_is_not_refused(command):
+    assert denied(command, cwd="/sessions/brave-owl") is None, command
+
+
+def test_env_C_moves_the_command_like_a_cd():
+    assert denied("env -C /tmp/copy git commit -am x", cwd="/sessions/brave-owl") is None
+
+
+def test_a_relative_git_C_counts_inside_when_the_folder_is_known_to_be_a_workspace():
+    assert denied("git -C app status", cwd=WS)
+    assert denied("cd /sessions/brave-owl/mnt/ws && git -C app add .", cwd="")
+
+
+@pytest.mark.parametrize("command", ["git log --output=x", "git log --output x", "git diff --cached --output=x"])
+def test_the_exact_output_option_is_still_refused(command):
+    assert denied(command)
+
+
+def test_the_parser_never_stops_a_hook_whatever_it_reads():
+    for command in ['echo "unterminated', "echo 'unterminated", "cat <<EOF", "$(", "`", "(((", ")))", "\\", "<<", "x <(",
+                    "a >", "cd", "pushd", "popd", "git -C", "git --git-dir", "find", "sh -c", "eval", "env -u", "for", "fi"]:
+        guard.decide({"tool_name": SANDBOX, "cwd": WS, "tool_input": {"command": command}})
