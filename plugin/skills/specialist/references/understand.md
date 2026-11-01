@@ -41,4 +41,4 @@ user's own words, before proposing anything.
    `## Open questions` only if there are any. What is in this version and what is left for later is stated once,
    in `## What Changes`, and kept true until delivery.
 3. `version_save(workspace, <one-line message>)`.
-4. Tell the user what comes next in one line: something to try before anything is built.
+4. Tell the user what comes next in one line: something to try early.

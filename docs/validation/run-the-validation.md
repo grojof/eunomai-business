@@ -84,9 +84,11 @@ pull request, check the files, the accents and the author, and merge it.
 1. **Build without diagnostics**, with `organization_context` set, and put an `AGENTS.md` on `main` of a test
    repository (H15).
 2. **As a business user**, in a new task, ask for something vague (for example *"I need something to track the
-   team's holidays"*) and follow the specialist to the pull request. Note: the questions, the prototype (it opens
-   in the browser and responds to clicks), the specification, the tests, the pull request summary and the
-   connector's checks at its end (H11–H14), and whether it used the project's context rather than anything
+   team's holidays"*) and follow the specialist to the pull request. Note: the questions, the first real screens
+   and how they reach you (the application on your computer, H22; the test environment; screenshots; or a plain
+   word that you will see it at review), in a project that allows code; a clickable prototype that opens in the
+   browser and responds to clicks, in one that does not; the specification, the tests, the pull request summary and
+   the connector's checks at its end (H11–H14), and whether it used the project's context rather than anything
    personal (H15).
 3. **The guard** (H17): ask Claude to write a `start.bat`, to edit `AGENTS.md`, and to do both through the shell;
    each is denied with a reason. Repeat on a computer without Git.

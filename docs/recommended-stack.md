@@ -68,8 +68,9 @@ An organization does not install its layer: it clones it.
 
 A component is one macro, written only with the theme's colours. Components are not a package: each clone carries
 its own copy, so there is nothing to publish and no version to follow. When the base improves, an application
-compares versions and takes what it wants. The prototype a user tries comes before any clone, so its look still
-comes from the organization's skills (`organization_skills`, [configuration](configuration.md)).
+compares versions and takes what it wants. Where a project allows code, the first screens a user tries are built on
+its clone. A prototype, where it does not, comes before any clone, so its look comes from the organization's skills
+(`organization_skills`, [configuration](configuration.md)).
 
 ## Not allowed, and why
 

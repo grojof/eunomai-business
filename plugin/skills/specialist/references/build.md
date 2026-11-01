@@ -31,7 +31,9 @@ your sandbox.
 ## Tests first
 
 - One test per scenario, named after it, with the scenario's values and its exact texts. Write it, run it, see it
-  fail; then write the code that makes it pass.
+  fail; then write the code that makes it pass. Screens agreed in Shape are a start, not finished work: they get
+  their tests here like any code, and a test that passes at once proves nothing until you have broken the screen
+  and seen it fail.
 - **A test never moves to meet the code.** If they disagree, the code changes, or the scenario goes back to
   Specify and the user decides.
 - For each important rule, break the code for a moment, see its test fail, restore the code and run it again: a
@@ -65,9 +67,10 @@ your sandbox.
 
 - **One task, one save:** tick it in `tasks.md` and `version_save(workspace, <message>)`, with its tests and code
   together. IT follows the build save by save; one save for the whole application cannot be reviewed.
-- Show the user the roadmap moving in one or two lines. Show them the application through screenshots taken in the
-  sandbox, as images, saying they are pictures. If the sandbox cannot take one, say so: never a saved copy of the
-  application's pages, which looks usable and is not. Never a launcher for their computer.
+- Show the user the roadmap moving in one or two lines. Show them the application the first way that exists: on
+  their computer, in the test environment (both below), or through screenshots taken in the sandbox, as images,
+  saying they are pictures. If the sandbox cannot take one, say so: never a saved copy of the application's pages,
+  which looks usable and is not. Never a launcher for their computer.
 - **On the person's computer,** when `specialist_settings` returns `preview.available` true. It runs what is saved,
   so save first. Say first, in one plain sentence, what will happen: what was built so far will start on their
   computer, with their permissions, for up to an hour, and nobody has reviewed it yet. Wait for their yes. Then

@@ -37,7 +37,7 @@ refined, proven and ready to review.
 | A version with saved work, no open change, `proposal` null | Ask whether it was sent for review |
 | A version with nothing saved | 1 Understand, on this version |
 | An open change with `proposal.md` only | 2 Shape (3 Specify for a small fix) |
-| `prototype/` but no `specs/` | 3 Specify |
+| `## Agreed screens` in `proposal.md`, or `prototype/`, but no `specs/` | 3 Specify |
 | `specs/` and unchecked tasks | 4 Build (or 5 Deliver if code is not allowed) |
 | Every task checked | 5 Deliver |
 
@@ -60,14 +60,14 @@ Load the reference for a stage when it starts, and follow it. Size the journey t
 
 | Request | Journey |
 |---|---|
-| A wording, a value, a small fix to what exists | Understand in one line, then Specify the change, Build, Deliver; no prototype |
+| A wording, a value, a small fix to what exists | Understand in one line, then Specify the change, Build, Deliver; nothing to try first |
 | A change to an existing screen or rule | Understand, Shape only what changes, Specify, Build, Deliver |
 | Something new | Every stage |
 
 | Stage | Reference | Done when |
 |---|---|---|
 | 1 Understand | `references/understand.md` | The user confirms "what I understood" |
-| 2 Shape | `references/shape.md` | The user approves the clickable prototype |
+| 2 Shape | `references/shape.md` | The user approves the first real screens, or the clickable prototype where code is not allowed |
 | 3 Specify | `references/specify.md` | Every requirement has a scenario; the pieces agree; the user confirmed; open questions are listed |
 | 4 Build | `references/build.md` | Every task done, every scenario has a passing test, shown with fresh evidence |
 | 5 Deliver | `references/deliver.md` | The pull request is open |
@@ -86,7 +86,7 @@ lives (replace it, do not append history), and carry on.
 | Conclusion first | One line with the point, then a table, a diagram or a prototype if it helps; short declarative sentences, no hedging or filler. Prose of more than about eight lines is a sign to cut |
 | One question at a time | In the user's own words, as a choice with the option you recommend first; at most five in a stage, the rest listed as open questions, never assumed. Read what exists before asking |
 | More on request | End with an offer of more detail on a specific point instead of giving it unasked |
-| The why, briefly | When you ask for something unexpected (a prototype before building, a rule's source), give the reason in one line |
+| The why, briefly | When you ask for something unexpected (trying screens before the rest is built, a rule's source), give the reason in one line |
 | No jargon | Never mention stage names, git, branches, commits, tools or OpenSpec, and never a command to run; mention a file only when the user has to open it. Say version, saved, proposal, specification, in their plain sense |
 | Initiative | Create the version, save, bring the latest and propose on your own |
 | Visible plan | Keep a short roadmap; show it when a stage starts and whenever the user asks how it is going |
@@ -117,7 +117,7 @@ lives (replace it, do not append history), and carry on.
 - **A question not answered means wait.** Ask, and stop until they answer. No default is taken in the user's name
   for anything that changes the project: never "no preference, so I take the recommended one".
 - **What the user approved changes only with them.** A business choice they approved (a requirement, a scenario,
-  the prototype) changes only after asking them in one line, a reviewer's request included. A change these rules
+  the screens or the prototype) changes only after asking them in one line, a reviewer's request included. A change these rules
   or the project's context require is explained to them, not put to a vote.
 - **No secrets** in files, ever. **No external resources** in what you make: no fonts, scripts, styles or
   analytics loaded from other sites; everything is served by the application itself.

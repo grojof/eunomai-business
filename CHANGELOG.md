@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Real screens instead of a prototype, where a project allows code:** the specialist builds the first real screens
+  with example data on the project's own base, and the person tries those through `app_preview` or the test
+  environment before tests and the full specification are written. Where neither exists, screenshots if the sandbox
+  can take them, otherwise it says the person will see it at review. An unfinished screen is not polished. The HTML
+  prototype stays only where a project does not allow code. `## Agreed screens` in `proposal.md` tells a new task
+  that Shape is done.
 - **Decision 7 changes: a person can see the real application on their own computer.** Off by default, with two keys:
   `app_preview` in the build and `[preview]` in the project's declaration. New tools `app_preview` and
   `app_preview_stop`, on the connector, so nothing is written for the person to run. It runs a copy of the saved

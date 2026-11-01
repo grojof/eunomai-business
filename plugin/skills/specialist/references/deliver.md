@@ -15,8 +15,8 @@ running it again. Each line holds, or goes into the summary under *Not settled* 
   too;
 - the README, `design.md`, `proposal.md` and `docs/` say what the code does (scope, settings, how to run it),
   nothing more: every setting they name exists;
-- the application matches the approved prototype and specs, or the user agreed each difference (noted is not
-  agreed);
+- the application matches the agreed screens or the approved prototype, and the specs, or the user agreed each
+  difference (noted is not agreed);
 - the history has one save per task;
 - assumptions confirmed by the user; open questions listed;
 - no secrets, no external resources, no dead code, no debugging leftovers, nothing meant to run on the user's
