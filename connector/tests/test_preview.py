@@ -375,7 +375,7 @@ def test_a_turned_on_setting_must_be_exactly_true(signed_in, workspaces, browser
 
 
 def table(*lines: str) -> list[str]:
-    return ["Conexiones activas", "  Proto  Dirección local  Dirección remota  Estado  PID", *lines]
+    return ["Active connections", "  Proto  Local Address  Foreign Address  State  PID", *lines]
 
 
 @pytest.mark.parametrize("lines, tree, port, beyond", [
