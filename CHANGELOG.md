@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **`workspace_clone` takes `owner/repo`**, on the signed-in server: a task that was given one failed, then guessed
+  github.com. Anything else says the only server there is, and to try no other.
 - **A business user's computer** (add-on to the fourth review): the connector's start, a preview of the base application
   and the whole path against a fake server now run on uv and Windows' own folders, with no git and no Python, and a
   repository test keeps it so. When a download cannot get through the person reads one plain sentence and the report

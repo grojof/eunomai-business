@@ -26,10 +26,10 @@ from urllib.parse import urlsplit
 import truststore
 import urllib3
 from dulwich import porcelain
-from dulwich.client import get_transport_and_path
+from dulwich.client import HTTPUnauthorized, get_transport_and_path
 from dulwich.config import ConfigFile, StackedConfig
 from dulwich.diff_tree import tree_changes
-from dulwich.errors import GitProtocolError, HangupException, NotTreeError, ObjectFormatException
+from dulwich.errors import GitProtocolError, HangupException, NotGitRepository, NotTreeError, ObjectFormatException
 from dulwich.graph import can_fast_forward, find_merge_base
 from dulwich.index import validate_path, validate_path_element_default, validate_path_element_ntfs
 from dulwich.merge import recursive_merge
@@ -49,6 +49,8 @@ os.environ["GIT_CONFIG_GLOBAL"] = str(data_dir() / "no-global-gitconfig")  # nev
 
 PROVIDER = "git"
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_OWNER_AND_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*")
+_ONLY_ONE = "there is no other git server to try"
 _BRANCH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _ALWAYS_PROTECTED = {"main", "master"}
 # The folder is also writable from Claude's sandbox, .git included. Only these config entries are accepted, so
@@ -210,12 +212,29 @@ def _origin_of(url: str) -> tuple[str, str | None, int]:
     return parts.scheme, parts.hostname, parts.port or {"https": 443, "http": 80}.get(parts.scheme, 0)
 
 
+def _server(current: dict):
+    return urlsplit(current["cfg"]["userinfo_url"])
+
+
+def _repository_address(given: str, current: dict) -> str:
+    """The address of a repository named by its owner and name, on the signed-in server, which is the only one: a
+    name never makes the connector look anywhere else. A whole address stays as it was given, for the checks after."""
+    server = _server(current)
+    if urlsplit(given).scheme in ("http", "https"):
+        return given
+    if _OWNER_AND_NAME.fullmatch(given):
+        below = server.path.partition("/api/")[0]
+        return f"{server.scheme}://{server.netloc}{below}/{given.removesuffix('.git')}.git"
+    raise ValueError(f"{given!r} does not name a repository: give owner/repo, or its whole address on "
+                     f"{server.netloc}; {_ONLY_ONE}")
+
+
 def _check_host(url: str, current: dict) -> None:
     """The token may only travel to the git server the sign-in belongs to."""
     auth.check_url(url)
     if _origin_of(url) != _origin_of(current["cfg"]["userinfo_url"]):
-        server = urlsplit(current["cfg"]["userinfo_url"])
-        raise PermissionError(f"{urlsplit(url).netloc} is not the signed-in git server ({server.netloc})")
+        raise PermissionError(f"{urlsplit(url).netloc} is not the signed-in git server ({_server(current).netloc}), "
+                              f"{_ONLY_ONE}")
 
 
 def _remote(current: dict) -> dict:
@@ -380,6 +399,7 @@ def _check_branch_name(name: str) -> None:
 
 def clone(repo_url: str, workspace: str = "") -> dict:
     current = _git_session()
+    repo_url = _repository_address(repo_url, current)
     parts = urlsplit(repo_url)
     if parts.username is not None or parts.password is not None or "@" in parts.netloc:
         raise ValueError("repo_url must not contain credentials")
@@ -391,7 +411,12 @@ def clone(repo_url: str, workspace: str = "") -> dict:
     folder.parent.mkdir(parents=True, exist_ok=True)
     remote = _remote(current)
     client, path = get_transport_and_path(repo_url, **remote)
-    advertised = _network(lambda: client.get_refs(path.encode()))
+    try:
+        advertised = _network(lambda: client.get_refs(path.encode()))
+    except (NotGitRepository, HTTPUnauthorized) as exc:
+        name = parts.path.strip("/").removesuffix(".git")
+        raise FileNotFoundError(f"{parts.netloc} has no repository {name} this account can reach: ask the person for "
+                                f"its exact name; {_ONLY_ONE}") from exc
     refs = getattr(advertised, "refs", None) or {}
     default = (getattr(advertised, "symrefs", None) or {}).get(b"HEAD", b"").removeprefix(b"refs/heads/")
     heads = _text(r.removeprefix(b"refs/heads/") for r in refs if r.startswith(b"refs/heads/"))
