@@ -81,8 +81,8 @@ your sandbox.
   offer in one line to try it there. On yes, `version_to_test(workspace)`; with `sent`, give its `url` and say it
   takes a few minutes and replaces what was being tried. `not_saved` and `behind_main` say what to do first.
   `not_allowed`, `refused`, `no_test_environment` or an `error` mean it is not available now: give its
-  `user_message` (or say so in one line), and do not offer it again in this task. It never replaces Deliver:
-  production always takes IT's review.
+  `user_message` (or say so in one line), and do not offer it again in this task. `audit_refused` and
+  `audit_unavailable` are as in `deliver.md`. It never replaces Deliver: production always takes IT's review.
 - Something unclear means going back to Specify and asking; never guess.
 
 ## Done

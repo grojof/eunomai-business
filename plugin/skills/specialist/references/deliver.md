@@ -41,13 +41,14 @@ to Propose.
 the pull request was already open: the version just sent updates it, and its description is replaced. The connector
 appends its own checks (the dependency audit) below your summary; do not repeat them.
 
-Where the project declares code, both audit what is saved and refuse unless it is `allowed`; nothing was sent then.
-Never explain a refusal away, and never send the work another way:
+Both audit what is saved and refuse unless it is `allowed`, whatever the project declares; nothing was sent then.
+`version_to_test` does the same. Never explain a refusal away, and never send the work another way:
 
 | Answer | Next |
 |---|---|
 | `audit_refused` | Back to the dependency steps in `build.md`, save, and send again. What only IT can lift (`reasons` that no allowed version solves): show `user_message` and offer `email_link`, and wait for IT |
 | `audit_unavailable` | Show `user_message`; try again when the network is back |
+| `not_sent` | The latest save is not on the server: `version_send`, then propose again. If the send is refused, as above |
 
 The summary, in `docs_language` (its headings too), has these sections, each short:
 

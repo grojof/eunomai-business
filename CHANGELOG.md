@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The audit gate holds for every send** (independent review): it no longer depends on what a project declares, since
+  a declaration that was not valid turned it off. `version_to_test` goes through it too: that code runs in an
+  environment. A version with no packages needs no network. `version_propose` judges what the server holds: if the
+  latest save is not there it answers `not_sent`, so a proposal never says `allowed` for a commit it does not hold,
+  and the audit's line names the commit. The commit audited is the one sent, by its id: a reference the sandbox moved
+  during the send no longer changes what goes.
 - **The git rule reads a command as a shell does** (independent review): a regression had let `echo x > $WS/.git/config`,
   `tee`, `touch`, `cp`, `~` paths, `Set-Content` and `New-Item` into `.git`; a place that cannot be worked out now
   counts as a workspace's when it names `.git`. `--work-tree` alone no longer counts as elsewhere, a `cd` holds only

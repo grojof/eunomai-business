@@ -562,10 +562,23 @@ def _check_no_links(repo: Repo, path: str) -> None:
                       {"Folder": repo.path, "Path": path})
 
 
+def _send_commit(repo: Repo, origin: str, current: dict, commit: bytes, target: bytes, force: bool, out):
+    """Send one commit to one reference. By its id, not by a local reference: the sandbox can move those between the
+    check and the send, so what goes is what was checked."""
+    client, path = get_transport_and_path(origin, **_remote(current))
+
+    def update_refs(refs: dict) -> dict:
+        if not force and target in refs:
+            porcelain.check_diverged(repo, refs[target], commit)
+        return {target: commit}
+
+    return _network(lambda: client.send_pack(path.encode(), update_refs, repo.generate_pack_data, progress=out.write))
+
+
 @_one_at_a_time
 def push(workspace: str, expected: str | None = None) -> dict:
-    """Send the current version to the server (never the main branch, never forced). With `expected`, only if it is
-    still that commit: what was audited is what goes."""
+    """Send the current version to the server (never the main branch, never forced). `expected` is the commit that
+    was audited: it is what goes, and only if the version still is that commit."""
     current = _git_session()
     with _repo(workspace) as repo:
         name = _branch(repo)
@@ -576,9 +589,9 @@ def push(workspace: str, expected: str | None = None) -> dict:
         origin = _registered_origin(repo, workspace)
         _check_host(origin, current)
         out = io.BytesIO()
+        commit = expected.encode() if expected else repo.head()
         try:
-            result = _network(lambda: porcelain.push(repo, origin, f"refs/heads/{name}:refs/heads/{name}".encode(),
-                                                     outstream=out, errstream=out, **_remote(current)))
+            result = _send_commit(repo, origin, current, commit, f"refs/heads/{name}".encode(), False, out)
         except porcelain.DivergedBranches as exc:  # never forced: the server keeps what it has
             raise NeedsIT("This version was changed on the server from somewhere else, so it was not sent. Your work "
                           "is safe on this computer; IT can combine both.",
@@ -589,15 +602,16 @@ def push(workspace: str, expected: str | None = None) -> dict:
             raise NeedsIT("The server did not accept this version. Your work is safe on this computer.",
                           "the server rejected the version", _facts(repo, workspace, rejected=errors))
         web = origin.removesuffix(".git")
-        return {"workspace": workspace, "branch": name, "pushed": True, "head": _head(repo),
+        return {"workspace": workspace, "branch": name, "pushed": True, "head": commit.decode()[:12],
                 "web_url": f"{web}/src/branch/{name}"}
 
 
 @_one_at_a_time
-def to_test(workspace: str, test_branch: str) -> dict:
+def to_test(workspace: str, test_branch: str, expected: str | None = None) -> dict:
     """Put the current version, as last saved, on the project's test branch on the server, replacing what it had:
     the branch shows one version at a time, and the project's CI applies it to the test environment. Whether this
-    user may update that branch is the git server's to say (a protected branch limited to a team)."""
+    user may update that branch is the git server's to say (a protected branch limited to a team). `expected` is the
+    commit that was audited: it is what goes, and only if the version still is that commit."""
     current = _git_session()
     with _repo(workspace) as repo:
         name = _branch(repo)
@@ -620,7 +634,9 @@ def to_test(workspace: str, test_branch: str) -> dict:
             return {"workspace": workspace, "status": "refused",
                     "user_message": "The project's main branch could not be read on the server, so nothing was sent "
                                     "to the test environment. Your version goes through IT's review as usual."}
-        head = repo.head()
+        head = expected.encode() if expected else repo.head()
+        if repo.head() != head:
+            raise PermissionError("the version changed while it was being checked; try again")
         if not can_fast_forward(repo, tip, head):  # the test environment would lose others' work
             return {"workspace": workspace, "status": "behind_main",
                     "user_message": "The project has changes your version does not have yet. Bring them in first "
@@ -634,9 +650,7 @@ def to_test(workspace: str, test_branch: str) -> dict:
                           "test environment", _facts(repo, workspace, Paths=", ".join(sorted(found)[:20])))
         out = io.BytesIO()
         try:
-            result = _network(lambda: porcelain.push(
-                repo, origin, f"refs/heads/{name}:refs/heads/{test_branch}".encode(), outstream=out, errstream=out,
-                force=True, **_remote(current)))
+            result = _send_commit(repo, origin, current, head, f"refs/heads/{test_branch}".encode(), True, out)
         except GitProtocolError as exc:
             if "403" not in str(exc):
                 raise
@@ -646,7 +660,7 @@ def to_test(workspace: str, test_branch: str) -> dict:
             # Gitea gives its reason as progress text; the ref's own status only says the hook declined.
             return _test_refused(workspace, test_branch, {"refs": errors, "server": clean(out.getvalue(), 500)},
                                  " ".join(errors.values()) + " " + out.getvalue().decode("utf-8", "replace"))
-        return {"workspace": workspace, "status": "sent", "branch": test_branch, "head": _head(repo),
+        return {"workspace": workspace, "status": "sent", "branch": test_branch, "head": head.decode()[:12],
                 "user_message": "Your version is on its way to the test environment: the project's checks apply it "
                                 "in a few minutes. It replaces whatever was being tried there."}
 
@@ -1035,6 +1049,18 @@ def update(workspace: str) -> dict:
         return {**result, "status": "updated", "branch": name, "head": _head(repo),
                 "user_message": " ".join(notes + ["The latest changes of the project were added to your version; "
                                                   "your work is kept."])}
+
+
+def server_head(workspace: str) -> str | None:
+    """The commit the current version has on the server, which is what a proposal holds; None if it was never sent."""
+    current = _git_session()
+    with _repo(workspace) as repo:
+        name, origin_url = _branch(repo), _registered_origin(repo, workspace)
+    _check_host(origin_url, current)
+    client, path = get_transport_and_path(origin_url, **_remote(current))
+    advertised = _network(lambda: client.get_refs(path.encode()))
+    found = (getattr(advertised, "refs", None) or {}).get(f"refs/heads/{name}".encode())
+    return found.decode() if found else None
 
 
 def saved_head(workspace: str) -> str:

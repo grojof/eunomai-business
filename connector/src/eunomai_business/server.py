@@ -96,17 +96,9 @@ def version_save(workspace: str, message: str) -> dict:
     return _safe(gitops.save, workspace, message)
 
 
-def _code_declared(workspace: str) -> bool:
-    """Whether the project may hold code. A main branch that cannot be read says nothing, so it counts."""
-    files = gitops.project_files(workspace)
-    return not files["read"] or settings.development(files["declaration"])["code_allowed"]
-
-
 def _audit_gate(workspace: str) -> tuple[dict | None, dict | None]:
-    """(the audit of what is saved, the refusal). Where the project declares code, what is saved goes on only if the
-    audit says `allowed`; an audit that cannot run refuses too. Without code neither applies."""
-    if not _code_declared(workspace):
-        return None, None
+    """(the audit of what is saved, the refusal). What is saved goes on only if the audit says `allowed`, whatever the
+    project declares; an audit that cannot run refuses too. A version with no packages is allowed without the network."""
     try:
         audit = gitops.audit_saved(workspace)
     except support.Unreachable:
@@ -118,43 +110,45 @@ def _audit_gate(workspace: str) -> tuple[dict | None, dict | None]:
 
 def _send(workspace: str) -> dict:
     audit, refused = _audit_gate(workspace)
-    return refused or gitops.push(workspace, audit["head"] if audit else None)
+    return refused or gitops.push(workspace, audit["head"])
 
 
 @mcp.tool()
 def version_send(workspace: str) -> dict:
-    """Send the current version (branch) to the git server. Never the main branch, never forced. Where the project
-    declares code, the connector audits what is saved first and refuses unless it is `allowed`: `status`
-    "audit_refused" with `reasons`, or "audit_unavailable" when the audit could not run. Nothing was sent then."""
+    """Send the current version (branch) to the git server. Never the main branch, never forced. The connector audits
+    what is saved first and refuses unless it is `allowed`: `status` "audit_refused" with `reasons`, or
+    "audit_unavailable" when the audit could not run. Nothing was sent then."""
     return _safe(_send, workspace)
 
 
-def _checks(workspace: str, audit: dict | None = None) -> str:
-    """The connector's own checks, appended to every pull request: what IT reads there was not written by Claude."""
-    try:
-        result = audit or deps.audit(gitops.folder(workspace))
-    except support.Unreachable:
-        lines = ["- Dependency audit: could not be run (a registry or OSV did not answer)"]
-    else:
-        listed = ", ".join(result["files"]) or "no pinned list"
-        lines = [f"- Dependency audit: **{result['verdict']}**, {result['packages']} pinned packages ({listed})"]
-        lines += [f"  - {b['package']} {b['version']}: {'; '.join(b['reasons'])}" for b in result["blocked"][:20]]
-        lines += [f"  - {item}" for item in result["not_pinned"][:20]]
-        if result["without_hashes"]:
-            lines.append(f"  - without hashes: {', '.join(result['without_hashes'])}")
+def _checks(audit: dict) -> str:
+    """The connector's own checks, appended to every pull request: what IT reads there was not written by Claude, and
+    it answers for the commit the server holds, which it names."""
+    listed = ", ".join(audit["files"]) or "no pinned list"
+    lines = [f"- Dependency audit: **{audit['verdict']}**, {audit['packages']} pinned packages ({listed}), for commit "
+             f"`{audit['head'][:12]}`"]
+    if audit["without_hashes"]:
+        lines.append(f"  - without hashes: {', '.join(audit['without_hashes'])}")
     return "\n\n---\n**Checks by the connector** (not written by the assistant)\n\n" + "\n".join(lines) + "\n"
 
 
 def _propose(workspace: str, title: str, description: str) -> dict:
+    """A proposal holds what the server has, so that is what must have been audited. Saved work the server does not
+    have, allowed or not, waits for version_send, where the audit answers for it."""
+    if gitops.server_head(workspace) != gitops.saved_head(workspace):
+        return {"workspace": workspace, "status": "not_sent",
+                "user_message": "Your latest saved work has not been sent yet, so nothing was proposed. It is safe on "
+                                "this computer."}
     audit, refused = _audit_gate(workspace)
-    return refused or gitops.pull_request(workspace, title, description + _checks(workspace, audit))
+    return refused or gitops.pull_request(workspace, title, description + _checks(audit))
 
 
 @mcp.tool()
 def version_propose(workspace: str, title: str, description: str = "") -> dict:
     """Open a pull request that proposes the current version for the main branch, or update the description of the
-    one already open. Send it first (version_send). The connector appends its own checks to the description, and
-    refuses like version_send where the project declares code and the audit is not `allowed`."""
+    one already open. Send it first (version_send): `status` "not_sent" means the server does not have the latest
+    save, and nothing was proposed. The connector appends its own checks to the description, for the commit the server
+    holds, and refuses like version_send when the audit is not `allowed`."""
     return _safe(_propose, workspace, title, description)
 
 
@@ -202,7 +196,10 @@ def _to_test(workspace: str) -> dict:
         return {"workspace": workspace, "status": "no_test_environment", "reason": reason,
                 "user_message": "This project has no test environment to try versions in; your version goes "
                                 "through IT's review as usual."}
-    result = gitops.to_test(workspace, declared["branch"])
+    audit, refused = _audit_gate(workspace)
+    if refused:
+        return refused
+    result = gitops.to_test(workspace, declared["branch"], audit["head"])
     return {**result, "url": declared["url"]} if result["status"] == "sent" else result
 
 
@@ -212,7 +209,8 @@ def version_to_test(workspace: str) -> dict:
     project's test branch on the server is replaced with it, and the project's CI applies it. Only where the project
     declares a test environment, and only for those the git server lets update that branch (a team IT keeps); for
     everyone else the answer says so and the version goes through IT's review as usual. One version at a time: it
-    replaces whatever was being tried there. Production always takes IT's review."""
+    replaces whatever was being tried there. Refused like version_send unless the audit is `allowed`: that code runs
+    in an environment. Production always takes IT's review."""
     return _safe(_to_test, workspace)
 
 

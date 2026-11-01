@@ -111,8 +111,9 @@ branch = "pruebas"                        # the branch the test environment foll
 url = "https://app-test.example.internal" # where users see it (optional)
 ```
 
-In Cowork the specialist offers it after a save whose tests pass (`version_to_test`). What protects it is on the
-servers, so it holds whichever way someone tries, from Cowork or not:
+In Cowork the specialist offers it after a save whose tests pass (`version_to_test`), which refuses a version the
+[dependency audit](barriers.md#dependencies) does not allow. What protects it is on the servers, so it holds whichever
+way someone tries, from Cowork or not:
 
 | Layer | What IT sets up | What it prevents |
 |---|---|---|

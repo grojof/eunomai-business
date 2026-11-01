@@ -1,6 +1,6 @@
-"""The audit decides the send: where a project declares code, nothing goes to the server or to review unless the
-dependency audit of what is saved says `allowed`. In the first real test the specialist got `blocked`, explained it
-away and sent the pull request anyway."""
+"""The audit decides the send: nothing goes to the server, to review or to the test environment unless the dependency
+audit of what is saved says `allowed`. In the first real test the specialist got `blocked`, explained it away and sent
+the pull request anyway."""
 
 import json
 import uuid
@@ -100,30 +100,6 @@ def test_an_audit_that_cannot_run_stops_the_proposal_too(signed_in, workspaces, 
     assert len(signed_in.pulls) == pulls
 
 
-def test_without_code_nothing_changes(signed_in, workspaces, monkeypatch):
-    name, _ = project(signed_in, declaration=b"[development]\ncode = false\n")
-    calls = audit_answers(monkeypatch, BLOCKED)
-    assert tools.version_send(name)["pushed"] and calls == []
-    proposed = tools.version_propose(name, "Change", "Summary")  # the connector's own checks are still appended
-    assert proposed["created"] and "Dependency audit: **blocked**" in signed_in.pulls[-1]["body"]
-
-
-def test_a_project_that_declares_nothing_follows_the_build(signed_in, workspaces, monkeypatch):
-    name, _ = project(signed_in, declaration=None)
-    audit_answers(monkeypatch, BLOCKED)
-    assert tools.version_send(name)["pushed"]
-    other, _ = project(signed_in, declaration=None)
-    monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"free_development": True}))
-    assert tools.version_send(other)["status"] == "audit_refused"
-
-
-def test_a_main_branch_that_cannot_be_read_does_not_skip_the_audit(signed_in, workspaces, monkeypatch):
-    name, _ = project(signed_in)
-    monkeypatch.setattr(gitops, "project_files", lambda workspace: {"context": None, "declaration": None, "read": False})
-    audit_answers(monkeypatch, BLOCKED)
-    assert tools.version_send(name)["status"] == "audit_refused"
-
-
 def test_it_audits_what_is_saved_not_the_folder(signed_in, workspaces, monkeypatch):
     name, ws = project(signed_in)
     (ws / "unsaved.txt").write_bytes(b"not in any save point\n")
@@ -201,6 +177,164 @@ def test_the_copy_it_audits_is_removed_and_stays_outside_the_workspace(signed_in
     monkeypatch.setattr(deps, "audit", audit)
     tools.version_send(name)
     assert not seen[0].is_relative_to(ws) and not seen[0].exists()
+
+
+@pytest.mark.parametrize("text", [
+    b"[development\ncode = true\n", b"[development]\ncod = true\n", b'[development]\ncode = "yes"\n',
+    b"[development]\ncode = false\n", b'[test]\nbranch = "pruebas"\n', None])
+def test_the_audit_does_not_depend_on_what_the_project_declares(signed_in, workspaces, monkeypatch, text):
+    """A declaration that allows nothing is not a reason to send what nobody audited."""
+    name, _ = project(signed_in, text)
+    calls = audit_answers(monkeypatch, BLOCKED)
+    assert tools.version_send(name)["status"] == "audit_refused" and len(calls) == 1
+    assert not on_server(signed_in, name)
+    assert tools.version_propose(name, "Change", "Summary")["status"] in ("audit_refused", "not_sent")
+    assert signed_in.pulls == [] or all(p["repo"] != name for p in signed_in.pulls)
+
+
+def test_a_main_branch_that_cannot_be_read_changes_nothing(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in)
+    monkeypatch.setattr(gitops, "project_files", lambda workspace: {"context": None, "declaration": None, "read": False})
+    audit_answers(monkeypatch, BLOCKED)
+    assert tools.version_send(name)["status"] == "audit_refused"
+
+
+def test_a_version_with_no_packages_needs_no_network(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in, None)
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("the audit asked the network about a version with no packages")
+
+    for call in ("_get", "_vulnerabilities", "_exists"):
+        monkeypatch.setattr(deps, call, no_network)
+    monkeypatch.setattr(deps, "_vulnerable", lambda queries: no_network() if queries else {})
+    assert tools.version_send(name)["pushed"] and on_server(signed_in, name)
+    assert tools.version_propose(name, "Change", "Summary")["created"]
+    assert "Dependency audit: **allowed**" in signed_in.pulls[-1]["body"]
+
+
+# --- what the server holds ---------------------------------------------------------------------------------------
+
+def test_a_proposal_says_which_commit_was_audited(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in)
+    audit_answers(monkeypatch, ALLOWED)
+    tools.version_send(name)
+    tools.version_propose(name, "Change", "Summary")
+    head = gitops.saved_head(name)
+    assert head == signed_in.repos[name].refs[b"refs/heads/draft/work"].decode()
+    assert f"`{head[:12]}`" in signed_in.pulls[-1]["body"]
+
+
+def test_a_version_never_sent_cannot_be_proposed_and_says_so(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in)
+    audit_answers(monkeypatch, ALLOWED)
+    answer = tools.version_propose(name, "Change", "Summary")
+    assert answer["status"] == "not_sent" and "sent" in answer["user_message"] and not signed_in.pulls_of(name)
+
+
+def test_what_is_proposed_is_what_the_server_holds_not_a_clean_save_nobody_sent(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in)
+    (ws / "bad.txt").write_bytes(b"bad\n")
+    gitops.save(name, "Bad")
+    gitops.push(name)  # sent before the gate, or by a colleague with Git
+    (ws / "bad.txt").unlink()
+    gitops.save(name, "Clean, never sent")
+    calls = audit_answers(monkeypatch, ALLOWED)
+    answer = tools.version_propose(name, "Change", "Summary")
+    assert answer["status"] == "not_sent" and calls == [] and not signed_in.pulls_of(name)
+
+
+def test_a_blocked_save_after_a_send_cannot_reach_review_behind_the_commit_that_was_sent(signed_in, workspaces,
+                                                                                         monkeypatch):
+    """Send C1, save a blocked C2, propose: the proposal waits, and the send is where the audit answers."""
+    name, ws = project(signed_in)
+    audit_answers(monkeypatch, ALLOWED)
+    assert tools.version_send(name)["pushed"]
+    sent = signed_in.repos[name].refs[b"refs/heads/draft/work"]
+    (ws / "more.md").write_bytes(b"More.\n")
+    gitops.save(name, "A blocked package")
+    audit_answers(monkeypatch, BLOCKED)
+    assert tools.version_propose(name, "Change", "Summary")["status"] == "not_sent"
+    assert tools.version_send(name)["status"] == "audit_refused"
+    assert signed_in.repos[name].refs[b"refs/heads/draft/work"] == sent and not signed_in.pulls_of(name)
+    audit_answers(monkeypatch, ALLOWED)
+    gitops._audits.clear()
+    assert tools.version_send(name)["pushed"] and tools.version_propose(name, "Change", "Summary")["created"]
+
+
+def test_what_was_audited_is_what_goes_even_if_the_reference_moves_during_the_send(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in)
+    good = gitops.saved_head(name)
+    (ws / "bad.txt").write_bytes(b"bad\n")
+    gitops.save(name, "Bad")
+    bad = gitops.saved_head(name)
+    ref = ws / ".git" / "refs" / "heads" / "draft" / "work"
+    ref.write_bytes(good.encode() + b"\n")  # the sandbox can write this
+    audit_answers(monkeypatch, ALLOWED)
+    real = gitops._registered_origin
+
+    def the_sandbox_moves_it(repo, workspace):
+        ref.write_bytes(bad.encode() + b"\n")
+        return real(repo, workspace)
+
+    monkeypatch.setattr(gitops, "_registered_origin", the_sandbox_moves_it)
+    tools.version_send(name)
+    assert signed_in.repos[name].refs[b"refs/heads/draft/work"].decode() == good
+
+
+def test_a_send_still_never_forces(signed_in, workspaces, monkeypatch):
+    from eunomai_business.support import NeedsIT
+
+    name, ws = project(signed_in)
+    audit_answers(monkeypatch, ALLOWED)
+    gitops.push(name)
+    signed_in.server_commit(name, "draft/work", {"other.md": b"Changed elsewhere.\n"})
+    (ws / "more.md").write_bytes(b"More.\n")
+    gitops.save(name, "More")
+    server_head = signed_in.repos[name].refs[b"refs/heads/draft/work"]
+    with pytest.raises(NeedsIT, match="server has changes"):
+        gitops.push(name)
+    assert signed_in.repos[name].refs[b"refs/heads/draft/work"] == server_head
+
+
+# --- the test environment ----------------------------------------------------------------------------------------
+
+TEST = b'[test]\nbranch = "pruebas"\n'
+
+
+def test_a_blocked_audit_stops_the_test_environment_too(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in, TEST)
+    audit_answers(monkeypatch, BLOCKED)
+    assert tools.version_to_test(name)["status"] == "audit_refused"
+    assert b"refs/heads/pruebas" not in signed_in.repos[name].refs
+
+
+def test_an_audit_that_cannot_run_stops_the_test_environment_too(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in, TEST)
+    audit_answers(monkeypatch, support.Unreachable())
+    assert tools.version_to_test(name)["status"] == "audit_unavailable"
+    assert b"refs/heads/pruebas" not in signed_in.repos[name].refs
+
+
+def test_the_test_environment_gets_the_commit_that_was_audited(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in, TEST)
+    good = gitops.saved_head(name)
+    (ws / "bad.txt").write_bytes(b"bad\n")
+    gitops.save(name, "Bad")
+    bad = gitops.saved_head(name)
+    ref = ws / ".git" / "refs" / "heads" / "draft" / "work"
+    with gitops._repo(name) as repo:
+        gitops.porcelain.reset(repo, "hard", good.encode())  # a clean version, at the commit the audit will see
+    audit_answers(monkeypatch, ALLOWED)
+    real = gitops._forbidden_changes
+
+    def the_sandbox_moves_it(*args):  # the last check before the send
+        ref.write_bytes(bad.encode() + b"\n")
+        return real(*args)
+
+    monkeypatch.setattr(gitops, "_forbidden_changes", the_sandbox_moves_it)
+    assert tools.version_to_test(name)["status"] == "sent"
+    assert signed_in.repos[name].refs[b"refs/heads/pruebas"].decode() == good
 
 
 def test_every_package_is_checked_at_once(monkeypatch, tmp_path):
