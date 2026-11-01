@@ -22,7 +22,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from packaging.markers import InvalidMarker, Marker, UndefinedComparison, UndefinedEnvironmentName
-from packaging.requirements import Requirement
+from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
 from . import auth, settings, support
@@ -43,10 +43,14 @@ _LOCKFILES = ("package-lock.json", "uv.lock", "vendor.json")
 # `uv run script.py` honours a `script.py.lock` beside it, which installs what the audit never saw. Any other *.lock
 # says nothing about Python or npm: a data file's, Cargo's, Gemfile's.
 _SCRIPT_LOCKS = (".py.lock", ".pyw.lock", ".pyz.lock")
-_NOT_PROJECTS = {"vendor", "vendors", "fixtures", "templates"}
+# Where a manifest is a copy, a sample or a template and nothing installs from it, told by the path: a folder for that
+# directly under the root, a test's fixtures, or a library copied into what the application serves as files. The same
+# name deeper in a project (`services/vendor/`) is an ordinary folder.
+_NOT_PROJECTS = re.compile(r"(?:vendor|vendors|fixtures|templates)/|tests?/(?:.*/)?fixtures/"
+                           r"|(?:.*/)?(?:static|assets|public)/vendor/", re.IGNORECASE)
 # A line of a requirements list: an exact or loose requirement, an option, or an address.
 _LIST_LINE = re.compile(r"[A-Za-z0-9][\w.-]*(?:\[[^\]]*\])?\s*(?:===?|~=|!=|<=?|>=?|@|;)|--?[A-Za-z]|[a-z+]+://|\.{0,2}/")
-_NAME_LINE = re.compile(r"[A-Za-z0-9][\w.-]*(?:\[[^\]]*\])?\Z")
+_LIST_COMMENT = re.compile(r"(^|\s+)#.*$")
 _NPM_DEPENDENCIES = ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")
 _PYPI_INDEX = "https://pypi.org/simple"
 _PYPI_FILE = re.compile(r"https://files\.pythonhosted\.org/[\w./%+~-]+")  # no query, fragment or backslash to hide in
@@ -310,19 +314,29 @@ def _is_pinned_list(file: Path) -> bool:
         or (file.parent.name.lower() == "requirements" and name.endswith(".txt"))
 
 
+def _may_install(line: str) -> bool:
+    """Whether pip could take this line as something to install: a requirement, or a single word that is a path, an
+    address or a variable."""
+    try:
+        Requirement(line)
+    except InvalidRequirement:
+        return not re.search(r"\s", line) and bool(set(line) & set("/\\:$"))
+    return True
+
+
 def _reads_as_a_list(file: Path) -> bool:
-    """Whether a text file named like a requirements list is one: `requirements/what-sales-wants.txt` is prose, and a
-    file of sentences installs nothing, since pip refuses it. A line that looks like a requirement makes it a list, with
-    all that is wrong in it; so do bare names only, and nothing but comments."""
+    """Whether a text file named like a requirements list is one: `requirements/what-sales-wants.txt` is prose. pip
+    refuses a whole file on one line it cannot read, so a file is prose only if some line could not install, and has
+    none that looks like a list's. Nothing but comments still counts as a list."""
     if file.name.lower() in _LOCKFILES:
         return True
     try:
         text = file.read_text(encoding="utf-8-sig")
     except (OSError, UnicodeDecodeError):
         return True
-    lines = [line.split(" #")[0].strip() for line in re.sub(r"\\\r?\n", " ", text).splitlines()]
-    lines = [line for line in lines if line and not line.startswith("#")]
-    return not lines or any(_LIST_LINE.match(line) for line in lines) or all(_NAME_LINE.match(line) for line in lines)
+    lines = [_LIST_COMMENT.sub("", line).strip() for line in re.sub(r"\\\r?\n", " ", text).splitlines()]
+    lines = [line for line in lines if line]
+    return not lines or any(_LIST_LINE.match(line) for line in lines) or all(_may_install(line) for line in lines)
 
 
 def _pinned_files(folder: Path) -> list[Path]:
@@ -603,44 +617,40 @@ def _declares(file: Path) -> str | None:
     return None
 
 
-def _project_name(file: Path) -> str:
-    """The name a manifest gives its project. One that cannot be read counts as named, so it is not waved through."""
+def _members(here: Path) -> list[str]:
+    """The folders a project takes in as workspace members, if the lockfile that would answer for them is there."""
     try:
-        if file.name.lower() == "package.json":
-            return str(json.loads(file.read_text(encoding="utf-8-sig")).get("name") or "")
-        if file.name.lower() == "pyproject.toml":
-            project = tomllib.loads(file.read_text(encoding="utf-8-sig")).get("project") or {}
-            return str(project.get("name") or "")
+        if (here / "package-lock.json").is_file() and (here / "package.json").is_file():
+            found = json.loads((here / "package.json").read_text(encoding="utf-8-sig")).get("workspaces") or []
+            return [str(item) for item in (found.get("packages") or [] if isinstance(found, dict) else found)]
+        if (here / "uv.lock").is_file() and (here / "pyproject.toml").is_file():
+            data = tomllib.loads((here / "pyproject.toml").read_text(encoding="utf-8-sig"))
+            return [str(item) for item in ((data.get("tool") or {}).get("uv") or {}).get("workspace", {}).get("members", [])]
     except _UNREADABLE:
-        return "?"
-    return ""
+        pass
+    return []
 
 
-def _parent_declares(file: Path, folder: Path) -> bool:
-    """Whether a project above this one takes it in as a workspace member, so that its lockfile answers for it."""
+def _taken_in_by_a_parent(file: Path, folder: Path) -> bool:
+    """Whether a project above names this folder as a member, so that its lockfile answers for it."""
+    if file.parent == folder:
+        return False
     for here in file.parent.parents:
-        if here == folder.parent:
+        place = file.parent.relative_to(here).as_posix()
+        if any(fnmatch.fnmatchcase(place, member.rstrip("/")) for member in _members(here)):
+            return True
+        if here == folder:
             break
-        try:
-            if (here / "package.json").is_file() and json.loads(
-                    (here / "package.json").read_text(encoding="utf-8-sig")).get("workspaces"):
-                return True
-            if (here / "pyproject.toml").is_file() and ((tomllib.loads(
-                    (here / "pyproject.toml").read_text(encoding="utf-8-sig")).get("tool") or {}).get("uv") or {}).get("workspace"):
-                return True
-        except _UNREADABLE:
-            continue
     return False
 
 
 def _manifests(folder: Path):
-    """(file, the kind of list it asks for) of what is a project here: at the root, or named in a folder of its own that
-    no project above takes in. A library copied under `vendor`, a test's sample or a template to fill in is not one."""
+    """(file, the kind of list it asks for) of whatever declares packages here, named or not, unless a parent's lockfile
+    answers for it or it is a copy, a sample or a template (`_NOT_PROJECTS`)."""
     for file in _project_files(folder):
         kind = _declares(file)
-        parts = {part.lower() for part in file.parent.relative_to(folder).parts}
-        if kind and (not parts or (not parts & _NOT_PROJECTS and _project_name(file)
-                                   and not _parent_declares(file, folder))):
+        if kind and not _NOT_PROJECTS.match(f"{file.parent.relative_to(folder).as_posix()}/") \
+                and not _taken_in_by_a_parent(file, folder):
             yield file, kind
 
 
