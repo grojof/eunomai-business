@@ -118,6 +118,9 @@
   removes inside its `.git`, pointing to `workspace_status`; a copy elsewhere stays free. Measuring which commands
   really write showed that `git diff` is not read-only: it rewrites the index, even with `--no-optional-locks`, so
   only `--cached`, `--staged`, `--no-index` and ranges are allowed. `validate-git` no longer asks for `git status`.
+- **Recommended stack without Alpine.js:** `business-app-base` built every form without it, so a plain script of the
+  application's own takes its place; a screen with a lot of browser state decides it on its own. The validation guide
+  gains the test of the base application in Cowork.
 - **Dependency summaries say why a package moved:** one left only because it is newer than two weeks read as fixing
   a vulnerability, because the reason it is blocked contains the word.
 - **`dependency_audit` reads `uv.lock` and `vendor.json`:** every package a uv project locks is audited, development
