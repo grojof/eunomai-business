@@ -97,11 +97,12 @@ def version_save(workspace: str, message: str) -> dict:
     return _safe(gitops.save, workspace, message)
 
 
-def _audit_gate(workspace: str) -> tuple[dict | None, dict | None]:
-    """(the audit of what is saved, the refusal). What is saved goes on only if the audit says `allowed`, whatever the
-    project declares; an audit that cannot run refuses too. A version with no packages is allowed without the network."""
+def _audit_gate(workspace: str, head: str | None = None) -> tuple[dict | None, dict | None]:
+    """(the audit of what is saved, or of `head`, the refusal). It goes on only if the audit says `allowed`, whatever
+    the project declares; an audit that cannot run refuses too. A version with no packages is allowed without the
+    network."""
     try:
-        audit = gitops.audit_saved(workspace)
+        audit = gitops.audit_saved(workspace, head)
     except support.Unreachable:
         return None, {"workspace": workspace, "status": "audit_unavailable",
                       "user_message": "This version was not sent: the checks on what it uses could not run. Check the "
@@ -110,15 +111,26 @@ def _audit_gate(workspace: str) -> tuple[dict | None, dict | None]:
 
 
 def _send(workspace: str) -> dict:
+    """What leaves the computer is checked here, on the host: the sandbox can write `.git`, HEAD included."""
+    files = gitops.project_files(workspace)
+    if not files.get("tip"):
+        return {"workspace": workspace, "status": "main_unread",
+                "user_message": "This version was not sent: the project could not be read on the server. Check the "
+                                "network or VPN and try again; your work is safe on this computer."}
+    declared = settings.test(files["declaration"]) or {}
+    if gitops.on_shared_branch(workspace, declared.get("branch")):
+        return {"workspace": workspace, "status": "not_a_version",
+                "user_message": "This copy of the project is not on a version of yours, so nothing was sent. Your work "
+                                "is safe on this computer."}
     audit, refused = _audit_gate(workspace)
-    return refused or gitops.push(workspace, audit["head"])
+    return refused or gitops.push(workspace, audit["head"], files["tip"])
 
 
 @mcp.tool()
 def version_send(workspace: str) -> dict:
     """Send the current version (branch) to the git server. Never the main branch, never forced. The connector audits
     what is saved first and refuses unless it is `allowed`: `status` "audit_refused" with `reasons`, or
-    "audit_unavailable" when the audit could not run. Nothing was sent then."""
+    "audit_unavailable" when the audit could not run; "main_unread" and "not_a_version" also send nothing."""
     return _safe(_send, workspace)
 
 
@@ -136,11 +148,12 @@ def _checks(audit: dict) -> str:
 def _propose(workspace: str, title: str, description: str) -> dict:
     """A proposal holds what the server has, so that is what must have been audited. Saved work the server does not
     have, allowed or not, waits for version_send, where the audit answers for it."""
-    if gitops.server_head(workspace) != gitops.saved_head(workspace):
+    held = gitops.server_head(workspace)
+    if held != gitops.saved_head(workspace):
         return {"workspace": workspace, "status": "not_sent",
                 "user_message": "Your latest saved work has not been sent yet, so nothing was proposed. It is safe on "
                                 "this computer."}
-    audit, refused = _audit_gate(workspace)
+    audit, refused = _audit_gate(workspace, held)
     return refused or gitops.pull_request(workspace, title, description + _checks(audit))
 
 

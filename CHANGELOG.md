@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A forged commit does not leave the computer** (second review): a commit written straight into `.git` reached the
+  server with workflows, the project's declaration and `AGENTS.md`, since only a save checked them. `version_send` now
+  checks what a version changed against the main branch on the server, and refuses without it. HEAD on the main or test
+  branch sends nothing. A repository with grafts or marked shallow stops: grafts emptied that very check. A proposal
+  audits the commit it compared.
 - **A preview stops more surely** (independent review): every process group of every step is kept, not only the last;
   the job has no name, so nothing in it can keep it open, and the watcher holds a handle of its own; the watcher
   removes the state file, and a number in one is acted on only while a marker in the preview's folder matches. The

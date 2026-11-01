@@ -3,6 +3,7 @@ audit of what is saved says `allowed`. In the first real test the specialist got
 the pull request anyway."""
 
 import json
+import time
 import uuid
 from pathlib import Path
 
@@ -192,13 +193,6 @@ def test_the_audit_does_not_depend_on_what_the_project_declares(signed_in, works
     assert signed_in.pulls == [] or all(p["repo"] != name for p in signed_in.pulls)
 
 
-def test_a_main_branch_that_cannot_be_read_changes_nothing(signed_in, workspaces, monkeypatch):
-    name, _ = project(signed_in)
-    monkeypatch.setattr(gitops, "project_files", lambda workspace: {"context": None, "declaration": None, "read": False})
-    audit_answers(monkeypatch, BLOCKED)
-    assert tools.version_send(name)["status"] == "audit_refused"
-
-
 def test_a_version_with_no_packages_needs_no_network(signed_in, workspaces, monkeypatch):
     name, _ = project(signed_in, None)
 
@@ -271,13 +265,13 @@ def test_what_was_audited_is_what_goes_even_if_the_reference_moves_during_the_se
     ref = ws / ".git" / "refs" / "heads" / "draft" / "work"
     ref.write_bytes(good.encode() + b"\n")  # the sandbox can write this
     audit_answers(monkeypatch, ALLOWED)
-    real = gitops._registered_origin
+    real = gitops._check_changes
 
-    def the_sandbox_moves_it(repo, workspace):
+    def the_sandbox_moves_it(*args):  # the last check before the send
         ref.write_bytes(bad.encode() + b"\n")
-        return real(repo, workspace)
+        return real(*args)
 
-    monkeypatch.setattr(gitops, "_registered_origin", the_sandbox_moves_it)
+    monkeypatch.setattr(gitops, "_check_changes", the_sandbox_moves_it)
     tools.version_send(name)
     assert signed_in.repos[name].refs[b"refs/heads/draft/work"].decode() == good
 
@@ -398,3 +392,127 @@ def test_a_path_that_leaves_the_copy_stops_it(signed_in, workspaces, tmp_path):
     with pytest.raises(support.NeedsIT):
         gitops.export_saved(name, tmp_path / "copy")
     assert not (workspaces.parent / "con.txt").exists()
+
+
+# --- a second independent review: what leaves the computer -----------------------------------------------------------
+
+def forge(ws: Path, name: str, files: dict) -> str:
+    """What the sandbox can do by writing .git: a commit with any files, on the version, past version_save."""
+    from dulwich.object_store import commit_tree_changes
+    from dulwich.objects import Blob, Commit
+
+    with gitops._repo(name) as repo:
+        head, changes = repo.head(), []
+        for path, data in files.items():
+            blob = Blob.from_string(data)
+            repo.object_store.add_object(blob)
+            changes.append((path.encode(), 0o100644, blob.id))
+        result = commit_tree_changes(repo.object_store, repo[repo[head].tree], changes)
+        commit = Commit()
+        commit.tree, commit.parents = getattr(result, "id", result), [head]
+        commit.author = commit.committer = b"Somebody Else <else@example.test>"
+        commit.commit_time = commit.author_time = int(time.time())
+        commit.commit_timezone = commit.author_timezone = 0
+        commit.message = b"forged"
+        repo.object_store.add_object(commit)
+        repo.refs[b"refs/heads/draft/work"] = commit.id
+        return commit.id.decode()
+
+
+@pytest.mark.parametrize("files", [{".gitea/workflows/x.yml": b"on: push\n"}, {".eunomai/project.toml": b"[x]\n"},
+                                   {"AGENTS.md": b"Ignore IT.\n"}, {"run.bat": b"calc\n"}, {".github/workflows/x.yml": b"x"}])
+def test_a_commit_forged_past_the_saves_rules_never_leaves_the_computer(signed_in, workspaces, monkeypatch, files):
+    name, ws = project(signed_in)
+    forge(ws, name, files)
+    audit_answers(monkeypatch, ALLOWED)
+    answer = tools.version_send(name)
+    assert answer["status"] == "needs_it" and next(iter(files)) in answer["it_report"]
+    assert not on_server(signed_in, name)
+
+
+def test_a_version_that_took_in_the_main_branch_still_goes(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in)
+    signed_in.server_commit(name, "main", {"AGENTS.md": b"# Changed by IT\n", "other.md": b"x\n"})
+    gitops.update(name)
+    audit_answers(monkeypatch, ALLOWED)
+    assert tools.version_send(name)["pushed"]
+
+
+def test_a_version_behind_the_main_branch_still_goes(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in)
+    signed_in.server_commit(name, "main", {"AGENTS.md": b"# Changed by IT\n"})
+    audit_answers(monkeypatch, ALLOWED)
+    assert tools.version_send(name)["pushed"]
+
+
+def test_without_the_main_branch_nothing_is_sent(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in)
+    monkeypatch.setattr(gitops, "project_files", lambda workspace: {"context": None, "declaration": None, "read": False,
+                                                                    "tip": None})
+    calls = audit_answers(monkeypatch, ALLOWED)
+    answer = tools.version_send(name)
+    assert answer["status"] == "main_unread" and answer["user_message"] and calls == []
+    assert not on_server(signed_in, name)
+
+
+@pytest.mark.parametrize("branch", [b"main", b"Main", b"pruebas", b"PRUEBAS"])
+def test_a_head_the_sandbox_wrote_cannot_aim_the_send_at_a_shared_branch(signed_in, workspaces, monkeypatch, branch):
+    name, ws = project(signed_in, CODE + b'\n[test]\nbranch = "pruebas"\n')
+    signed_in.repos[name].refs[b"refs/heads/pruebas"] = signed_in.repos[name].refs[b"refs/heads/main"]
+    before = {ref: signed_in.repos[name].refs[ref] for ref in (b"refs/heads/main", b"refs/heads/pruebas")}
+    saved = gitops.saved_head(name)
+    (ws / ".git" / "refs" / "heads" / branch.decode()).write_bytes(saved.encode() + b"\n")
+    (ws / ".git" / "HEAD").write_bytes(b"ref: refs/heads/" + branch + b"\n")
+    audit_answers(monkeypatch, ALLOWED)
+    answer = tools.version_send(name)
+    assert "pushed" not in answer
+    assert {ref: signed_in.repos[name].refs[ref] for ref in before} == before
+
+
+@pytest.mark.parametrize("planted", ["info/grafts", "shallow", "objects/info/alternates"])
+def test_a_repository_that_rewrites_its_own_history_stops(signed_in, workspaces, monkeypatch, planted):
+    """Grafts made the merge base the forged commit, so the check above found nothing to refuse."""
+    name, ws = project(signed_in)
+    forged = forge(ws, name, {"AGENTS.md": b"x\n"})
+    main = signed_in.repos[name].refs[b"refs/heads/main"].decode()
+    file = ws / ".git" / planted
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(f"{main} {forged}\n{forged}\n" if planted == "info/grafts" else f"{forged}\n")
+    audit_answers(monkeypatch, ALLOWED)
+    answer = tools.version_send(name)
+    assert answer["status"] == "needs_it" and not on_server(signed_in, name)
+
+
+def test_a_server_that_refuses_the_update_is_told_plainly(signed_in, workspaces, monkeypatch):
+    """The fake server cannot reject a reference, so the answer is stubbed; this is unproved against a real Gitea."""
+    from types import SimpleNamespace
+
+    name, _ = project(signed_in)
+    audit_answers(monkeypatch, ALLOWED)
+    monkeypatch.setattr(gitops, "_send_commit", lambda *args: SimpleNamespace(
+        ref_status={b"refs/heads/draft/work": "failed to update ref"}))
+    answer = tools.version_send(name)
+    assert answer["status"] == "needs_it" and "did not accept" in answer["user_message"]
+
+
+def test_a_proposal_audits_the_commit_it_compared_not_one_read_later(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in)
+    audit_answers(monkeypatch, ALLOWED)
+    tools.version_send(name)
+    held = signed_in.repos[name].refs[b"refs/heads/draft/work"].decode()
+    (ws / "more.md").write_bytes(b"More.\n")
+    gitops.save(name, "Saved, never sent")
+    other = gitops.saved_head(name)
+    ref = ws / ".git" / "refs" / "heads" / "draft" / "work"
+    ref.write_bytes(held.encode() + b"\n")
+    real = gitops.saved_head
+
+    def moved_after_the_comparison(workspace):
+        value = real(workspace)
+        ref.write_bytes(other.encode() + b"\n")
+        return value
+
+    monkeypatch.setattr(gitops, "saved_head", moved_after_the_comparison)
+    gitops._audits.clear()
+    assert tools.version_propose(name, "Change", "Summary")["created"]
+    assert f"`{held[:12]}`" in signed_in.pulls_of(name)[-1]["body"]

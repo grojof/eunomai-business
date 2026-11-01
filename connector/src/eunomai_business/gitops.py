@@ -157,6 +157,9 @@ def _check_config(repo: Repo, config: ConfigFile) -> None:
         stop("the repository points to another folder (commondir)", repo.commondir())
     if (controldir / "objects" / "info" / "alternates").exists():
         stop("the repository borrows objects from another folder (alternates)", "objects/info/alternates")
+    for rewrites in ("info/grafts", "shallow"):  # a connector's clones are full: this would rewrite what is checked
+        if (controldir / rewrites).exists():
+            stop("the repository rewrites its own history", rewrites)
     registered = _registry().get(str(Path(repo.path).resolve()), {}).get("origin")
     try:
         configured = config.get((b"remote", b"origin"), b"url").decode()
@@ -580,10 +583,22 @@ def _send_commit(repo: Repo, origin: str, current: dict, commit: bytes, target: 
     return _network(lambda: client.send_pack(path.encode(), update_refs, repo.generate_pack_data, progress=out.write))
 
 
+def _check_changes(repo: Repo, workspace: str, commit: bytes, main: str) -> None:
+    """What a version changed since it left the main branch, against the rules of a save: the sandbox can write .git,
+    so a commit forged past version_save never leaves the computer nor runs on it."""
+    bases = find_merge_base(repo, [main.encode(), commit])
+    found = _forbidden_changes(repo, bases[0] if bases else None, commit)
+    if found:
+        raise NeedsIT("This version has a file only IT changes, so it went no further. Your work is safe on this "
+                      "computer.", "a protected or executable file in a saved version",
+                      _facts(repo, workspace, Paths=", ".join(sorted(found)[:20])))
+
+
 @_one_at_a_time
-def push(workspace: str, expected: str | None = None) -> dict:
+def push(workspace: str, expected: str | None = None, main: str | None = None) -> dict:
     """Send the current version to the server (never the main branch, never forced). `expected` is the commit that
-    was audited: it is what goes, and only if the version still is that commit."""
+    was audited: it is what goes, and only if the version still is that commit. `main`, the main branch's commit on
+    the server, is what it is checked against."""
     current = _git_session()
     with _repo(workspace) as repo:
         name = _branch(repo)
@@ -595,6 +610,8 @@ def push(workspace: str, expected: str | None = None) -> dict:
         _check_host(origin, current)
         out = io.BytesIO()
         commit = expected.encode() if expected else repo.head()
+        if main:
+            _check_changes(repo, workspace, commit, main)
         try:
             result = _send_commit(repo, origin, current, commit, f"refs/heads/{name}".encode(), False, out)
         except porcelain.DivergedBranches as exc:  # never forced: the server keeps what it has
@@ -1056,6 +1073,14 @@ def update(workspace: str) -> dict:
                                                   "your work is kept."])}
 
 
+def on_shared_branch(workspace: str, test_branch: str | None) -> bool:
+    """Whether the current branch is one that is not a version: HEAD is in .git, which the sandbox can write."""
+    with _repo(workspace) as repo:
+        name = _branch(repo)
+        shared = {branch.casefold() for branch in _protected(repo) | ({test_branch} if test_branch else set())}
+        return name is None or name.casefold() in shared
+
+
 def server_head(workspace: str) -> str | None:
     """The commit the current version has on the server, which is what a proposal holds; None if it was never sent."""
     current = _git_session()
@@ -1088,12 +1113,7 @@ def export_saved(workspace: str, target: Path, head: str | None = None, main: st
         if commit is None:
             raise PermissionError("nothing is saved yet")
         if main:
-            bases = find_merge_base(repo, [main.encode(), commit])
-            found = _forbidden_changes(repo, bases[0] if bases else None, commit)
-            if found:
-                raise NeedsIT("This version has a file only IT changes, so it cannot be shown on your computer. Your "
-                              "work is safe.", "a protected or executable file in a version to run",
-                              _facts(repo, workspace, Paths=", ".join(sorted(found)[:20])))
+            _check_changes(repo, workspace, commit, main)
         entries = list(iter_tree_contents(repo.object_store, repo[commit].tree))
         invalid = sorted(entry.path.decode("utf-8", "replace") for entry in entries
                          if not _valid(entry.path.decode("utf-8", "replace")))

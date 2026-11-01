@@ -126,12 +126,15 @@ reason to send what nobody audited, and the code in a test environment runs too.
 | `blocked` | Nothing is sent; the user reads why in plain words, and IT gets a report |
 | The audit cannot run (no network, a registry that does not answer) | Nothing is sent: deny by default, like the rest of the audit |
 | A version with no packages | `allowed`, without asking the network |
+| A commit that breaks the rules of a save | Not sent, and it does not run: `.git` is writable from the sandbox, so what a version changed since it left the main branch is checked on the host, against the main branch as the server has it. If that cannot be read, nothing is sent |
+| HEAD on the main branch or the declared test branch | Not sent, whatever HEAD says. Another unprotected branch on the server is only as safe as the server's own rules |
 | `version_propose` when the server's version is not the latest save | Nothing is proposed: `not_sent`. A proposal holds what the server has, so it must be sent first, and the send is where the audit answers. Work saved after a send, allowed or not, cannot reach review behind the commit that went |
 
 | How | Why |
 |---|---|
 | It audits a copy of the saved version in a temporary folder, not the workspace | What goes is what is saved; the sandbox can rewrite the folder at any moment |
 | The commit audited is the one sent, by its id, never by a local reference, and it stops if the version moved meanwhile | The sandbox can move a reference in `.git` during the send: nothing that was not audited goes |
+| What a proposal says it audited is the commit it found on the server | Not one read a moment later |
 | An `allowed` answer is kept for that saved tree for 15 minutes; any other answer is asked again | A send and the proposal after it wait once, and a registry that did not answer can come back |
 | Packages are checked eight at a time | 51 packages took 38 seconds one by one, and this runs before every send |
 
@@ -172,7 +175,7 @@ computer itself. These barriers keep that from becoming a way to run commands on
 | The configuration is checked once per operation and then pinned: what is written to `.git/config` afterwards is not read | dulwich re-reads the configuration on every call; a filter written between the check and the use would run |
 | Content is never filtered: no filter driver, no line-ending conversion, no LFS, whatever `.gitattributes` says | A filter is a command; files go in and out exactly as they are |
 | The repository's address and main branch come from the connector's own registry, recorded at clone time; an address changed in `.git/config` stops the operation | Otherwise the sandbox could send the user's work to another repository |
-| A repository that points to another folder (`commondir`, `alternates`) is refused | Reads and writes must stay in the workspace |
+| A repository that points to another folder (`commondir`, `alternates`), or rewrites its own history (`info/grafts`, `shallow`), is refused. The connector's clones are full | Reads and writes must stay in the workspace, and a rewritten history would turn the check of what a version changed into checking nothing |
 | A Cowork task in the cloud is refused: Claude is told at the start, prompts are blocked, and every write, shell command and connector call is denied (or blocked if the guard cannot start). Known from the variables Claude Code sets in cloud sessions; in Cowork, H16 | The connector, the workspace folder and internal servers are on the user's computer and its network; a cloud sandbox would work on other files than the ones the connector saves |
 | One operation at a time per workspace, across connector processes: creating a version, saving, sending (to review or to the test environment), bringing the latest changes and reading the project's context | Two updates or saves at once could undo each other |
 | The computer's Git configuration (system and user) is ignored | Same behaviour with or without Git installed; a global filter cannot apply ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)) |
