@@ -298,16 +298,18 @@ def _clear(state_path: Path) -> None:
     state_path.unlink(missing_ok=True)
 
 
-def _clear_left_over(workspace: str) -> None:
+def _clear_left_over(workspace: str) -> bool:
     """A preview of this workspace another connector holds, one per workspace across tasks: its watcher is asked to end
-    it. Without a watcher, what the state file says is all there is."""
+    it. Without a watcher, what the state file says is all there is, and on Windows that is nothing: only its connector
+    holds the job then. False when it may still be running."""
     path = _state_file(workspace)
     if _key(workspace) in _previews or not path.exists():
-        return
+        return True
     try:
-        watcher = int(json.loads(path.read_text(encoding="utf-8")).get("watcher") or 0)
+        state = json.loads(path.read_text(encoding="utf-8"))
+        watcher, owner = int(state.get("watcher") or 0), int(state.get("owner") or 0)
     except (OSError, ValueError, TypeError, AttributeError):
-        watcher = 0
+        watcher, owner = 0, 0
     if watcher and _alive(watcher):
         stop_file = path.with_suffix(".stop")
         stop_file.touch()
@@ -315,8 +317,11 @@ def _clear_left_over(workspace: str) -> None:
         while path.exists() and time.time() < deadline:
             time.sleep(0.1)
         stop_file.unlink(missing_ok=True)
+    if path.exists() and sys.platform == "win32" and owner and _alive(owner):
+        return False
     if path.exists():
         _clear(path)
+    return True
 
 
 def _sweep() -> None:
@@ -367,6 +372,7 @@ class _Preview:
         """The real interpreter, not a virtual environment's launcher, which would stand between it and what it holds."""
         state, job, options = _state_file(self.workspace), int(self.tree.handle or 0), {}
         state.parent.mkdir(parents=True, exist_ok=True)
+        state.with_suffix(".stop").unlink(missing_ok=True)  # left by a connector that died waiting
         if job:
             os.set_handle_inheritable(job, True)
             options["startupinfo"] = subprocess.STARTUPINFO(lpAttributeList={"handle_list": [job]})
@@ -563,7 +569,7 @@ def _check_programs(current: _Preview, declared: dict) -> None:
     scripts = _console_scripts(current.environment_folder)
     for entry in [*declared["setup"], declared["run"]]:
         program = entry[0].lower().removesuffix(".exe")
-        if program not in settings.PYTHONS and (program not in scripts or program in settings.NOT_SCRIPTS):
+        if program not in settings.PYTHONS and (program not in scripts or settings.is_installer(program)):
             raise current.failed(f"checking {entry[0]}", f"{entry[0]} is not a console script of a package in the lock")
 
 
@@ -574,12 +580,13 @@ def _declared_python(current: _Preview) -> tuple[str, ...]:
     file = current.app / ".python-version"
     if not file.is_file():
         return ()
-    text = file.read_text(encoding="utf-8", errors="replace").strip()
-    if not _PYTHON_VERSION.fullmatch(text):
+    lines = [line.strip() for line in file.read_text(encoding="utf-8-sig", errors="replace").splitlines()]
+    lines = [line for line in lines if line and not line.startswith("#")]
+    if len(lines) != 1 or not _PYTHON_VERSION.fullmatch(lines[0]):
         raise NeedsIT("This project names a Python version the connector does not accept. Your work is safe; IT can "
                       "correct it.", "the project's .python-version is not a version such as 3.13",
                       {"Workspace": current.workspace, "Version": current.head[:12], "File": ".python-version"})
-    return ("--python", text)
+    return ("--python", lines[0])
 
 
 def _bring_up(current: _Preview, declared: dict) -> None:
@@ -663,6 +670,12 @@ def _answer(current: _Preview) -> dict:
     return current.outcome
 
 
+def _NOT_STOPPED(workspace: str) -> dict:
+    return {"workspace": workspace, "status": "not_stopped",
+            "user_message": "Another task started the application and it could not be stopped from here. It stops when "
+                            "that task ends, and within the hour in any case."}
+
+
 def start(workspace: str) -> dict:
     """See the application on this computer. Call it again while the answer is `starting`."""
     if settings.load()["app_preview"] is not True:
@@ -690,7 +703,8 @@ def start(workspace: str) -> dict:
             current.close()
             current = None
         if current is None:
-            _clear_left_over(workspace)
+            if not _clear_left_over(workspace):
+                return _NOT_STOPPED(workspace)
             _sweep()
             current = _previews[key] = _Preview(workspace, head, files.get("tip"))
             threading.Thread(target=_work, args=(current, declared), daemon=True).start()
@@ -703,7 +717,9 @@ def stop(workspace: str) -> dict:
     with _lock:
         current = _previews.get(_key(workspace))
         running = current is not None or _state_file(workspace).exists()
-        _clear_left_over(workspace)
+        cleared = _clear_left_over(workspace)
+    if not cleared:
+        return _NOT_STOPPED(workspace)
     if not running:
         return {"workspace": workspace, "status": "not_running",
                 "user_message": "The application is not running on your computer."}

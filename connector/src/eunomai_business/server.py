@@ -243,7 +243,8 @@ def app_preview(workspace: str) -> dict:
 
 @mcp.tool()
 def app_preview_stop(workspace: str) -> dict:
-    """Stop the application running on the person's computer: every process it started, and its temporary copy."""
+    """Stop the application running on the person's computer: every process it started, and its temporary copy.
+    `status` "not_stopped" means another task holds it and it may still be running: say so with `user_message`."""
     return _safe(preview.stop, workspace)
 
 

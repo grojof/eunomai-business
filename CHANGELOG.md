@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A preview's declaration, fewer holes and fewer false refusals** (second review): `python.exe` no longer skips the
+  shape check, and `pip3.13` is refused as an installer. `127.0.0.1:{port}` and `gunicorn -b` are accepted, and the
+  environment check is limited to the host variables of the servers it knows: a database's address or a version is
+  not its business. `.python-version` may have a byte order mark, blank lines and comments. A stop file left behind no
+  longer ends the next preview, and a stop that cannot reach another task's preview says so.
 - **The audit stops refusing what is not a list** (second review): since it decides every send, these blocked real
   projects. Prose in a file named like a list, any `*.lock` but a script's, a `package.json`, `pyproject.toml` or
   `requirements.in` that is not the project (under `vendor`, `fixtures`, `templates`, or with no project name), a

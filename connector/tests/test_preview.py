@@ -236,8 +236,11 @@ GOOD = 'run = ["x", "--host", "127.0.0.1", "--port", "{port}"]'
     ('run = ["x", "-H", "0:0:0:0:0:0:0:0", "{port}", "127.0.0.1"]', "127.0.0.1"),
     ('run = ["x", "--host", "127.0.0.1", "-h", "0", "--port", "{port}"]', "127.0.0.1"),
     ('run = ["x", "--ho", "0.0.0.0", "--host", "127.0.0.1", "--port", "{port}"]', "127.0.0.1"),
-    ('run = ["gunicorn", "-b", "127.0.0.1:{port}"]', "127.0.0.1"),
-    ('run = ["x", "runserver", "127.0.0.1:{port}"]', "127.0.0.1"),
+    ('run = ["x", "--hostname", "mypc", "runserver", "mypc:{port}", "--host", "127.0.0.1"]', "127.0.0.1"),
+    ('run = ["python.exe", "-c", "x", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["Python.EXE", "-m", "pip", "install", "x", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python3.exe", "-c", "x", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    (GOOD + '\nsetup = [["python.exe", "-m", "pip", "install", "evil"]]', "python"),
     ('run = ["x", "--host", "127.0.0.1"]', "{port}"),
     ('run = ["x", "--host", "127.0.0.1", "--port", "8000"]', "{port}"),
     ('run = ["x", "--host", "127.0.0.1", "--port", "{port}", "--name", "{user}"]', "{port}"),
@@ -263,7 +266,10 @@ GOOD = 'run = ["x", "--host", "127.0.0.1", "--port", "{port}"]'
     (GOOD + '\n[preview.environment]\nFLASK_RUN_HOST = "0.0.0.0"', "127.0.0.1"),
     (GOOD + '\n[preview.environment]\nFLASK_RUN_HOST = "mypc"', "127.0.0.1"),
     (GOOD + '\n[preview.environment]\nUVICORN_HOST = "0"', "127.0.0.1"),
-    (GOOD + '\n[preview.environment]\nAPP_BIND = "*:80"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nHOST = "0"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nBIND = "mypc"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nGUNICORN_CMD_ARGS = "--bind=0"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nGUNICORN_CMD_ARGS = "--bind mypc:8000"', "127.0.0.1"),
 ])
 def test_a_declaration_that_could_escape_is_not_valid(text, reason):
     found = settings.preview({"text": f"[preview]\n{text}\n"})
@@ -290,6 +296,8 @@ def test_the_shape_in_the_documentation_is_valid():
     '["x", "--host=127.0.0.1", "--port={port}"]', '["python", "-m", "app.server", "--host", "127.0.0.1", "--port", "{port}"]',
     '["python", "app/main.py", "--host", "127.0.0.1", "--port", "{port}"]',
     '["flask", "--app", "app", "run", "--host", "127.0.0.1", "--port", "{port}"]',
+    '["gunicorn", "-b", "127.0.0.1:{port}", "a:b"]', '["python", "manage.py", "runserver", "127.0.0.1:{port}"]',
+    '["uvicorn", "a:b", "--host", "127.0.0.1", "--port", "{port}", "--root-path=/v1.2.3.4", "--workers", "0"]',
 ])
 def test_other_ways_of_saying_this_computer_only_are_valid(run):
     assert "invalid" not in settings.preview({"text": f"[preview]\nrun = {run}\n"})
@@ -298,7 +306,10 @@ def test_other_ways_of_saying_this_computer_only_are_valid(run):
 def test_ordinary_environment_values_are_valid():
     found = settings.preview({"text": f'[preview]\n{GOOD}\n[preview.environment]\nAPP_ENVIRONMENT = "development"\n'
                                       'FLASK_RUN_HOST = "127.0.0.1"\nGUNICORN_CMD_ARGS = "--workers 2"\n'
-                                      'WEB_CONCURRENCY = "2"\nGREETING = "version 1.2 of the demo"\n'})
+                                      'WEB_CONCURRENCY = "2"\nGREETING = "version 1.2 of the demo"\n'
+                                      'DATABASE_URL = "postgresql://u@10.0.0.5/db"\nREDIS_URL = "redis://localhost:6379"\n'
+                                      'SMTP_HOST = "smtp.example.test"\nAPP_VERSION = "1.2.3.4"\n'
+                                      'API_ADDRESS = "https://api.example.test"\nAPP_TITLE = "Sales - b view"\n'})
     assert "invalid" not in found
 
 
@@ -404,6 +415,38 @@ LINUX_TABLE = ("  sl  local_address rem_address   st tx_queue rx_queue tr tm->wh
 def test_the_listening_table_of_linux_is_read_not_guessed(address, state, beyond):
     """A host name that resolves to 127.0.1.1 used to be skipped."""
     assert preview._linux_beyond([LINUX_TABLE.format(address=address, state=state)], 0x1F90) is beyond
+
+
+def test_a_decoy_host_option_stays_for_the_listening_table():
+    """A word the connector cannot know the meaning of is left to what the system says is listening."""
+    assert "invalid" not in settings.preview({"text": f'[preview]\nrun = ["jupyter", "lab", "--ip", "0", "--host", '
+                                                      '"127.0.0.1", "--port", "{port}"]\n'})
+
+
+@pytest.mark.parametrize("program", ["pip", "pip3", "pip3.13", "PIP3.13.EXE", "uv", "uvx.exe"])
+def test_what_changes_the_installation_is_never_a_console_script(tmp_path, program):
+    dist = tmp_path / "environment" / "Lib" / "site-packages" / "pip-25.dist-info"
+    dist.mkdir(parents=True)
+    (dist / "entry_points.txt").write_text("[console_scripts]\npip = a\npip3 = a\npip3.13 = a\nuv = a\nuvx = a\n")
+    current = preview._Preview("no-installers", "0" * 40)
+    try:
+        current.environment_folder = tmp_path / "environment"
+        with pytest.raises(support.NeedsIT, match="console script"):
+            preview._check_programs(current, {"setup": [], "run": [program]})
+    finally:
+        current.close()
+
+
+def test_uvicorn_is_not_mistaken_for_uv(tmp_path):
+    dist = tmp_path / "environment" / "Lib" / "site-packages" / "uvicorn-1.dist-info"
+    dist.mkdir(parents=True)
+    (dist / "entry_points.txt").write_text("[console_scripts]\nuvicorn = a\n")
+    current = preview._Preview("uvicorn-is-fine", "0" * 40)
+    try:
+        current.environment_folder = tmp_path / "environment"
+        preview._check_programs(current, {"setup": [], "run": ["uvicorn"]})
+    finally:
+        current.close()
 
 
 def test_a_task_in_the_cloud_is_refused_by_the_guard(monkeypatch):
@@ -830,6 +873,68 @@ def test_another_connector_on_the_same_workspace_replaces_it(tmp_path):
 
 @pytest.mark.preview
 @needs_uv
+def test_with_the_watcher_gone_another_connector_never_says_stopped_while_it_runs(tmp_path):
+    process, started, numbers = connector_with_a_preview(tmp_path, "watcher-gone")
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/F", "/PID", str(started["watcher"])], capture_output=True)
+        else:
+            os.kill(started["watcher"], 9)
+        assert gone(started["watcher"], wait=10)
+        answer = preview.stop("watcher-gone")
+        if answer["status"] == "stopped":
+            assert gone(*numbers, wait=20), "it said stopped and the application still runs"
+        else:
+            assert answer["status"] == "not_stopped" and answer["user_message"]
+            assert any(preview._alive(number) for number in numbers)
+    finally:
+        process.kill()
+        process.wait(timeout=30)
+    assert gone(*numbers, wait=20)
+    shutil.rmtree(started["folder"], ignore_errors=True)
+    preview._state_file("watcher-gone").unlink(missing_ok=True)
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_stop_file_left_behind_does_not_end_the_next_preview(signed_in, workspaces, turned_on, pids):
+    name, _ = project(signed_in, declaration(pids))
+    stop_file = preview._state_file(name).with_suffix(".stop")
+    stop_file.parent.mkdir(parents=True, exist_ok=True)
+    stop_file.touch()
+    answer = show(name)
+    assert answer["status"] == "ready"
+    time.sleep(1)
+    assert httpx.get(answer["url"]).text.strip() == "saved"
+
+
+@pytest.mark.preview
+@needs_uv
+def test_grafts_that_hide_a_forged_commit_do_not_run(signed_in, workspaces, turned_on, browser, pids):
+    from dulwich.object_store import commit_tree_changes
+    from dulwich.objects import Blob
+    from dulwich.repo import Repo
+
+    name, ws = project(signed_in, declaration(pids))
+    with Repo(str(ws)) as repo:
+        blob = Blob.from_string(b"planted\n")
+        repo.object_store.add_object(blob)
+        tree = commit_tree_changes(repo.object_store, repo[repo[repo.head()].tree], [(b"run.bat", 0o100644, blob.id)])
+        commit = repo[repo.head()]
+        parent = repo.head()
+        commit.tree, commit.parents = getattr(tree, "id", tree), [parent]
+        repo.object_store.add_object(commit)
+        repo.refs[b"refs/heads/draft/work"] = commit.id
+        forged = commit.id.decode()
+    main = signed_in.repos[name].refs[b"refs/heads/main"].decode()
+    (ws / ".git" / "info").mkdir(exist_ok=True)
+    (ws / ".git" / "info" / "grafts").write_text(f"{main} {parent.decode()} {forged}\n{forged} {parent.decode()}\n")
+    answer = show(name)
+    assert answer["status"] == "needs_it" and browser == [] and not pids.exists()
+
+
+@pytest.mark.preview
+@needs_uv
 def test_a_child_a_setup_step_left_stops_with_the_preview(signed_in, workspaces, turned_on, tmp_path, pids):
     """Each step had a process group of its own, and only the last was remembered."""
     left = tmp_path / "left.txt"
@@ -1083,12 +1188,14 @@ def test_the_python_the_project_names_is_the_one_it_runs_on(signed_in, workspace
     assert httpx.get(answer["url"] + "python").text == wanted
 
 
-@pytest.mark.parametrize("content", ["3.13\n", "3.12", "3.13.2\n", " 3.13 \n"])
-def test_a_plain_version_goes_to_uv(tmp_path, content):
+@pytest.mark.parametrize("content, version", [("3.13\n", "3.13"), ("3.12", "3.12"), ("3.13.2\n", "3.13.2"),
+                                              (" 3.13 \n", "3.13"), ("\ufeff3.13\n", "3.13"),
+                                              ("# pinned for the demo\n\n3.12\n\n", "3.12"), ("3.12\n# note\n", "3.12")])
+def test_a_plain_version_goes_to_uv(tmp_path, content, version):
     current = preview._Preview("a-plain-version", "0" * 40)
     try:
-        (current.app / ".python-version").write_text(content)
-        assert preview._declared_python(current) == ("--python", content.strip())
+        (current.app / ".python-version").write_text(content, encoding="utf-8")
+        assert preview._declared_python(current) == ("--python", version)
     finally:
         current.close()
 
@@ -1102,7 +1209,8 @@ def test_no_file_leaves_the_choice_to_uv():
 
 
 @pytest.mark.parametrize("content", ["../evil/python.exe", "C:/x/python.exe", "/usr/bin/python3", "tool.exe", "pypy3.12",
-                                     "cpython-3.13", "3", "3.x", "2.7", "3.13\n3.12\n", "3.13.2.1", "3.13t", "", ">=3.12"])
+                                     "cpython-3.13", "3", "3.x", "2.7", "3.13\n3.12\n", "3.13.2.1", "3.13t", "", ">=3.12",
+                                     "# only a comment\n"])
 def test_anything_else_in_python_version_is_refused_for_it(content):
     current = preview._Preview("another-version", "0" * 40)
     try:

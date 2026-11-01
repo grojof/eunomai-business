@@ -104,15 +104,15 @@ _SCRIPTS = (".py", ".pyw", ".pyz")  # `uv run` reads a script's own metadata and
 _MODULE = re.compile(r"[A-Za-z_][\w.]*\Z")
 PYTHONS = {"python", "python3"}
 _NOT_MODULES = {"pip", "ensurepip", "venv"}
-NOT_SCRIPTS = {"pip", "pip3", "uv", "uvx"}  # they change what is installed, whichever package brings them
+_INSTALLERS = re.compile(r"(?:pip[\d.]*|uvx?)\Z")  # they change what is installed, whichever package brings them
 _SHELL_TEXT = re.compile(r"[;&|`<>\n\r]|\$\(")
 _PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 _THIS_COMPUTER = "127.0.0.1"
 _HOST_OPTIONS = ("--host", "--bind", "--listen", "--address", "--interface")
 _SHORT_HOST = re.compile(r"-[bhH]")
 _LISTENS_ELSEWHERE = {"--uds", "--fd"}
-_ELSEWHERE = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}|\[?::|\blocalhost\b|\*:|(?:^|=)0:", re.IGNORECASE)
-_HOST_VARIABLE = re.compile(r"_(?:HOST|BIND|LISTEN|ADDR|ADDRESS|INTERFACE)\Z")
+_HOST_WORD = re.compile(r"(?:\d{1,3}(?:\.\d{1,3}){3}|\[?::.*|localhost)(?::.*)?|(?:0|\*):.*|.+:\{port\}", re.IGNORECASE)
+_SERVER_HOSTS = {"FLASK_RUN_HOST", "UVICORN_HOST", "HOST", "BIND"}
 _VARIABLE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 # What the connector sets or keeps out itself, and what steers a tool: a project does not replace it.
 _RESERVED = re.compile(r"(?:UV_|PYTHON|PIP_|LD_|DYLD_|SSL_|GIT_|NODE_|CONDA_|VIRTUAL_ENV\Z|PATH\Z|PATHEXT\Z|SYSTEM|WINDIR\Z"
@@ -137,40 +137,64 @@ def _entry_problem(entry) -> str | None:
     once the locked packages are installed, and the connector checks that then."""
     if not isinstance(entry, list) or not entry or not all(isinstance(word, str) and word for word in entry):
         return "a list of words, with the program first"
-    if not _PROGRAM.match(entry[0]) or entry[0].lower().endswith(_SCRIPTS):
+    program = entry[0].lower().removesuffix(".exe")
+    if not _PROGRAM.match(entry[0]) or program.endswith(_SCRIPTS):
         return f"its program must be python or a package's console script, not {entry[0]!r}"
     if any(_SHELL_TEXT.search(word) for word in entry):
         return "it must not need a shell"
-    return _python_problem(entry[1:]) if entry[0].lower() in PYTHONS else None
+    return _python_problem(entry[1:]) if program in PYTHONS else None
+
+
+def is_installer(program: str) -> bool:
+    return bool(_INSTALLERS.fullmatch(program.lower().removesuffix(".exe")))
+
+
+def _is_this_computer(address: str) -> bool:
+    return address.split(":")[0] == _THIS_COMPUTER
 
 
 def _names_elsewhere(word: str) -> bool:
-    return bool(_ELSEWHERE.search(word.replace(_THIS_COMPUTER, "")))
+    """A word that is itself an address: not a version inside a path, and not a bare 0, which `--workers 0` also is."""
+    return any(text and not _is_this_computer(text) and _HOST_WORD.fullmatch(text)
+               for text in (word, word.partition("=")[2]))
+
+
+def _host_words(words: list[str]) -> tuple[bool, bool]:
+    """(whether the words name an address other than this computer's, whether they name this one) as far as they show.
+    A host option that says otherwise, or says it in a form that cannot be read, counts as naming another."""
+    named = False
+    for index, word in enumerate(words):
+        option, _, value = word.partition("=")
+        if option in _LISTENS_ELSEWHERE:
+            return True, named
+        if word == f"{_THIS_COMPUTER}:{{port}}":
+            named = True
+        elif option == "-b" or (len(option) > 2 and any(full.startswith(option) for full in _HOST_OPTIONS)):
+            value = value or (words[index + 1] if index + 1 < len(words) else "")
+            if (option != "-b" and option not in _HOST_OPTIONS) or not _is_this_computer(value):
+                return True, named
+            named = True
+        elif _SHORT_HOST.match(word) or _names_elsewhere(word):
+            return True, named
+    return False, named
 
 
 def _host_problem(run: list[str]) -> str | None:
-    """Why the application might listen anywhere but on this computer, as far as its command line shows. A host option
-    must say so, in full: 127.0.0.1 elsewhere in the command says nothing about what it listens on."""
-    wanted = f"run must say --host {_THIS_COMPUTER}, in full, and name no other host"
-    named = False
-    for index, word in enumerate(run):
-        option, _, value = word.partition("=")
-        if option in _LISTENS_ELSEWHERE or _SHORT_HOST.match(word) or _names_elsewhere(word):
-            return wanted
-        if len(option) > 2 and any(full.startswith(option) for full in _HOST_OPTIONS):
-            value = value or (run[index + 1] if index + 1 < len(run) else "")
-            if option not in _HOST_OPTIONS or value not in (_THIS_COMPUTER, f"{_THIS_COMPUTER}:{{port}}"):
-                return wanted
-            named = True
-    return None if named else wanted
+    """Why the application might listen anywhere but on this computer, as far as its command line shows. 127.0.0.1 must
+    be said as a host, an option's value or `127.0.0.1:{port}`: elsewhere in the command it says nothing about what it
+    listens on. An option the connector cannot know the meaning of, such as `--ip 0`, stays for the listening table."""
+    elsewhere, named = _host_words(run)
+    return None if named and not elsewhere else f"run must say --host {_THIS_COMPUTER} and name no other host"
 
 
 def _environment_problem(environment: dict) -> str | None:
-    """A host an application or its server reads from the environment, in the same words."""
-    for name, value in environment.items():
-        host = _HOST_VARIABLE.search(name) and value.split(":")[0] != _THIS_COMPUTER
-        if host or any(_names_elsewhere(word) or _SHORT_HOST.fullmatch(word) for word in value.split()):
-            return f"{name} must name {_THIS_COMPUTER} and no other host"
+    """The host a server reads from the environment, for the servers the connector knows. Any other variable is the
+    application's: a database's address or a version is none of this."""
+    for name in _SERVER_HOSTS & set(environment):
+        if not _is_this_computer(environment[name]):
+            return f"{name} must name {_THIS_COMPUTER}"
+    if _host_words(environment.get("GUNICORN_CMD_ARGS", "").split())[0]:
+        return f"GUNICORN_CMD_ARGS must name {_THIS_COMPUTER} and no other host"
     return None
 
 
