@@ -112,6 +112,8 @@ lives (replace it, do not append history), and carry on.
 - **Business rules are not invented.** A rule cites its source, or it is an open question. A choice the build
   cannot avoid while a question is open (a calculation, who sees whose data) is built as a declared assumption, the
   most restrictive one for data and access, and listed under *Not settled*; never a setting the code does not have.
+- **A question not answered means wait.** Ask, and stop until they answer. No default is taken in the user's name
+  for anything that changes the project: never "no preference, so I take the recommended one".
 - **What the user approved changes only with them.** A business choice they approved (a requirement, a scenario,
   the prototype) changes only after asking them in one line, a reviewer's request included. A change these rules
   or the project's context require is explained to them, not put to a vote.

@@ -9,7 +9,7 @@ user's own words, before proposing anything.
    holds (`openspec/specs/`, the README). Do not ask what they already answer.
 2. **Restate the idea in one sentence**, then ask what is still missing, one question at a time, each as a choice
    in the user's words with your recommendation first: who will use it, how it is done today, what result they
-   expect. If a question puzzles them, offer the recommended answer and move on.
+   expect. If a question puzzles them, explain it in other words and recommend an answer; they choose.
 3. **Sort what you hear** into three kinds and keep them apart:
    - facts the user knows;
    - business rules, which need a source (a document, a role, a regulation);

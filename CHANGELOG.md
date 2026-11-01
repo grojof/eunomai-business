@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **A question not answered means wait:** in the first real test the specialist asked, got no answer, and went on
+  with `uv add requests`, saying "no preference, I take the recommended one". No default is taken in the user's name
+  for anything that changes the project, and Understand no longer offers the recommended answer and moves on.
 - **The audit decides the send:** in the first real test the specialist got `blocked` from `dependency_audit`,
   explained it away and sent the pull request; the rule was only in the skill. `version_send` and `version_propose`
   now audit what is saved where a project declares code, and refuse unless it is `allowed`, in plain words; an audit

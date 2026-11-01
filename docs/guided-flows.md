@@ -19,8 +19,9 @@ then builds, so that the reviewer receives work that is specified, tested and do
 
 ## How the specialist talks
 
-One question at a time, as a choice with a recommendation; short answers (a sentence, a table, a diagram or a
-prototype); assumptions in the open; something to try before anything is built; plain words; and initiative: it
+One question at a time, as a choice with a recommendation, and a question not answered means waiting: no default
+is taken in the user's name for anything that changes the project; short answers (a sentence, a table, a diagram or
+a prototype); assumptions in the open; something to try before anything is built; plain words; and initiative: it
 handles versions and proposals on its own. The journey is sized to the request: a wording change skips the
 prototype, something new goes through every stage. Nothing is claimed without fresh evidence, and nothing runs on
 the user's computer ([decision 7](decisions.md#7--nothing-runs-on-the-users-computer)). The
