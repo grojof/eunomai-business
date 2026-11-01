@@ -252,9 +252,14 @@ def _exclusive(name: str, wait: float = 15.0):
         lock.unlink(missing_ok=True)
 
 
+def key(workspace: str) -> str:
+    """What identifies a workspace: its folder, which on Windows two spellings of a name share."""
+    return str(_folder(workspace).resolve())
+
+
 def _one_at_a_time(operation):
     def wrapped(workspace: str, *args):
-        with _exclusive(f"workspace:{workspace}"):
+        with _exclusive(f"workspace:{key(workspace)}"):
             return operation(workspace, *args)
     wrapped.__name__, wrapped.__doc__ = operation.__name__, operation.__doc__
     return wrapped
@@ -1073,14 +1078,22 @@ def saved_head(workspace: str) -> str:
 
 
 @_one_at_a_time
-def export_saved(workspace: str, target: Path, head: str | None = None) -> dict:
+def export_saved(workspace: str, target: Path, head: str | None = None, main: str | None = None) -> dict:
     """Write the saved version's files to `target`, outside the workspace: what was saved, never what is in the
     folder. The objects are in .git, which the sandbox can write, so every path is checked again; a saved link
-    becomes a plain file holding its target, and a submodule stays out."""
+    becomes a plain file holding its target, and a submodule stays out. With `main`, the main branch's commit, what
+    the version changed since it left the main branch meets the rules of a save, as a commit forged in .git would not."""
     with _repo(workspace) as repo:
         commit = head.encode() if head else _ref(repo, b"HEAD")
         if commit is None:
             raise PermissionError("nothing is saved yet")
+        if main:
+            bases = find_merge_base(repo, [main.encode(), commit])
+            found = _forbidden_changes(repo, bases[0] if bases else None, commit)
+            if found:
+                raise NeedsIT("This version has a file only IT changes, so it cannot be shown on your computer. Your "
+                              "work is safe.", "a protected or executable file in a version to run",
+                              _facts(repo, workspace, Paths=", ".join(sorted(found)[:20])))
         entries = list(iter_tree_contents(repo.object_store, repo[commit].tree))
         invalid = sorted(entry.path.decode("utf-8", "replace") for entry in entries
                          if not _valid(entry.path.decode("utf-8", "replace")))
@@ -1109,7 +1122,7 @@ def audit_saved(workspace: str, head: str | None = None, copy: Path | None = Non
         if commit is None:
             raise PermissionError("nothing is saved yet")
         tree = repo[commit].tree
-    kept = _audits.get(workspace)
+    kept = _audits.get(key(workspace))
     if kept and kept[0] == tree and time.time() - kept[1] < _AUDIT_KEPT_SECONDS:
         return {**kept[2], "head": commit.decode()}
     if copy is not None:
@@ -1119,7 +1132,7 @@ def audit_saved(workspace: str, head: str | None = None, copy: Path | None = Non
             export_saved(workspace, Path(folder), commit.decode())
             result = deps.audit(Path(folder))
     if result["verdict"] == "allowed":
-        _audits[workspace] = (tree, time.time(), result)
+        _audits[key(workspace)] = (tree, time.time(), result)
     return {**result, "head": commit.decode()}
 
 
@@ -1141,7 +1154,7 @@ def project_files(workspace: str) -> dict:
     (`context`: AGENTS.md, else CLAUDE.md, at the repository's root) and its declaration (`declaration`:
     .eunomai/project.toml). Never a copy edited in the folder or a reference rewritten in .git. Each is None when
     the project has none; `read` says whether the main branch could be read at all."""
-    found = {"context": None, "declaration": None, "read": False}
+    found = {"context": None, "declaration": None, "read": False, "tip": None}
     current = _git_session()
     with _repo(workspace) as repo:
         main = _main_branch(repo)
@@ -1155,7 +1168,7 @@ def project_files(workspace: str) -> dict:
         if not tip:
             return found
         tree = repo[repo[tip].tree]
-        found["read"] = True
+        found["read"], found["tip"] = True, tip.decode()
 
         def text_of(name: str) -> str | None:
             # missing, a file where a folder should be, a submodule, or an object the server did not send

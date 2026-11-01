@@ -51,6 +51,7 @@ APP = textwrap.dedent('''\
     class Answer(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             text = json.dumps(dict(os.environ)) if self.path == "/env" else pathlib.Path("message.txt").read_text()
+            text = "%d.%d" % sys.version_info[:2] if self.path == "/python" else text
             self.send_response(200)
             self.end_headers()
             self.wfile.write(text.encode())
@@ -62,6 +63,11 @@ APP = textwrap.dedent('''\
     http.server.HTTPServer((host, port), Answer).serve_forever()
     ''').encode()
 RUN = '["python", "app.py", "--host", "127.0.0.1", "--port", "{port}"]'
+# A setup step that ends and leaves a child running: on Linux that child is in a process group of its own step's.
+LEAVE = b"""import os, pathlib, subprocess, sys
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+pathlib.Path(os.environ["LEFT_FILE"]).write_text(str(child.pid))
+"""
 
 
 def declaration(pids: Path, *setup: str, run: str = RUN, mode: str = "") -> bytes:
@@ -641,11 +647,11 @@ def test_a_step_that_fails_between_two_calls_is_still_told(signed_in, workspaces
     name, _ = project(signed_in, declaration(pids, '["python", "fail.py"]'))
     assert tools.app_preview(name)["status"] == "starting"
     deadline = time.time() + 30
-    while name in preview._previews and time.time() < deadline:
+    while preview._key(name) in preview._previews and time.time() < deadline:
         time.sleep(0.05)
-    answer = tools.app_preview(name)
+    answer = show(name)
     assert answer["status"] == "needs_it" and "setup broke" in answer["it_report"]
-    assert name not in preview._unread
+    assert preview._key(name) not in preview._unread
 
 
 @pytest.mark.preview
@@ -660,13 +666,13 @@ def test_a_preview_followed_call_by_call_ends_ready(signed_in, workspaces, turne
 @pytest.mark.preview
 @needs_uv
 def test_at_the_time_limit_it_stops_by_itself(signed_in, workspaces, turned_on, pids, monkeypatch):
-    monkeypatch.setattr(preview, "TIME_LIMIT", 2)
+    monkeypatch.setattr(preview, "TIME_LIMIT", 6)
     name, _ = project(signed_in, declaration(pids))
     assert show(name)["status"] == "ready"
     numbers, folder = json.loads(pids.read_text()), folders()[0]
     assert gone(*numbers, wait=20), "a process survived the time limit"
     deadline = time.time() + 15
-    while name in preview._previews and time.time() < deadline:
+    while preview._key(name) in preview._previews and time.time() < deadline:
         time.sleep(0.1)
     assert not folder.exists()
     assert tools.app_preview_stop(name)["status"] == "not_running"
@@ -711,7 +717,7 @@ def test_an_application_that_dies_leaves_nothing_behind(signed_in, workspaces, t
     assert show(name)["status"] == "ready"
     current = next(iter(preview._previews.values()))
     current.tree.kill()
-    assert current.ended.wait(15) and not current.folder.exists() and name not in preview._previews
+    assert current.ended.wait(15) and not current.folder.exists() and preview._key(name) not in preview._previews
 
 
 HARNESS = textwrap.dedent('''\
@@ -724,10 +730,11 @@ HARNESS = textwrap.dedent('''\
     source, name, pids = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
     run = ["python", "app.py", "--host", "127.0.0.1", "--port", "{port}"]
     current = preview._Preview(name, "0" * 40)
-    preview._previews[name] = current
+    preview._previews[preview._key(name)] = current
     preview.shutil.copytree(source, current.app, dirs_exist_ok=True)
-    preview._bring_up(current, {"setup": [], "run": run, "environment": {"PIDS_FILE": pids}})
-    print(json.dumps({"folder": str(current.folder), "url": current.url}), flush=True)
+    preview._bring_up(current, {"setup": [["python", "leave.py"]], "run": run,
+                                "environment": {"PIDS_FILE": pids, "LEFT_FILE": pids + ".left"}})
+    print(json.dumps({"folder": str(current.folder), "url": current.url, "watcher": current.watcher.pid}), flush=True)
     sys.stdin.read()
     ''')
 
@@ -736,7 +743,8 @@ def connector_with_a_preview(tmp_path, name: str) -> tuple[subprocess.Popen, dic
     """A connector of its own, in a process of its own: what Claude Desktop starts and later closes."""
     source = tmp_path / "source"
     source.mkdir()
-    for file, content in {"pyproject.toml": PYPROJECT, "uv.lock": LOCK, "app.py": APP, "message.txt": b"x"}.items():
+    for file, content in {"pyproject.toml": PYPROJECT, "uv.lock": LOCK, "app.py": APP, "message.txt": b"x",
+                          "leave.py": LEAVE}.items():
         (source / file).write_bytes(content)
     harness = tmp_path / "harness.py"
     harness.write_text(HARNESS, encoding="utf-8")
@@ -745,7 +753,8 @@ def connector_with_a_preview(tmp_path, name: str) -> tuple[subprocess.Popen, dic
                                stdout=subprocess.PIPE, text=True)
     line = process.stdout.readline()
     assert line, "the connector did not bring the preview up"
-    return process, json.loads(line), json.loads(pids.read_text())
+    left = int(Path(str(pids) + ".left").read_text())
+    return process, json.loads(line), [*json.loads(pids.read_text()), left]
 
 
 def wait_gone(folder: Path, wait: float = 30.0) -> bool:
@@ -769,6 +778,40 @@ def test_it_stops_when_the_connector_exits(tmp_path, how):
     process.wait(timeout=30)
     assert gone(*numbers, wait=20), "a process outlived the connector"
     assert wait_gone(Path(started["folder"])), "the temporary folder outlived the connector"
+    if how == "killed":
+        state = preview._state_file(f"exit-{how}")
+        deadline = time.time() + 20
+        while state.exists() and time.time() < deadline:
+            time.sleep(0.1)
+        assert not state.exists(), "the watcher left the state file behind"
+
+
+@pytest.mark.preview
+@needs_uv
+@pytest.mark.skipif(sys.platform != "win32", reason="a job object")
+def test_with_the_watcher_gone_too_the_job_still_ends_everything(tmp_path):
+    process, started, numbers = connector_with_a_preview(tmp_path, "both-gone")
+    subprocess.run(["taskkill", "/F", "/PID", str(started["watcher"])], capture_output=True)
+    process.kill()
+    process.wait(timeout=30)
+    assert gone(*numbers, wait=20), "a process outlived both"
+    shutil.rmtree(started["folder"], ignore_errors=True)
+    preview._state_file("both-gone").unlink(missing_ok=True)
+
+
+@pytest.mark.preview
+@needs_uv
+@pytest.mark.skipif(sys.platform != "win32", reason="a job object")
+def test_nothing_in_the_tree_can_keep_the_job_open_by_its_name(tmp_path):
+    """A process that opened the job by name kept KILL_ON_CLOSE from firing. Nothing names it now."""
+    process, started, numbers = connector_with_a_preview(tmp_path, "no-name")
+    try:
+        assert "job" not in json.loads(preview._state_file("no-name").read_text())
+        assert preview._Tree().name is None if hasattr(preview._Tree, "name") else True
+    finally:
+        process.kill()
+        process.wait(timeout=30)
+    assert gone(*numbers, wait=20)
 
 
 @pytest.mark.preview
@@ -785,13 +828,330 @@ def test_another_connector_on_the_same_workspace_replaces_it(tmp_path):
         process.wait(timeout=30)
 
 
+@pytest.mark.preview
+@needs_uv
+def test_a_child_a_setup_step_left_stops_with_the_preview(signed_in, workspaces, turned_on, tmp_path, pids):
+    """Each step had a process group of its own, and only the last was remembered."""
+    left = tmp_path / "left.txt"
+    text = declaration(pids, '["python", "leave.py"]') + f'LEFT_FILE = "{left.as_posix()}"\n'.encode()
+    name, ws = project(signed_in, text)
+    (ws / "leave.py").write_bytes(LEAVE)
+    gitops.save(name, "A step that leaves a child")
+    assert show(name)["status"] == "ready"
+    child = int(left.read_text())
+    assert preview._alive(child)
+    tools.app_preview_stop(name)
+    assert gone(child), "a child of a setup step survived the stop"
+
+
+@pytest.mark.preview
+@needs_uv
+@pytest.mark.skipif(sys.platform == "win32", reason="process groups")
+def test_the_groups_of_every_step_are_in_the_state(signed_in, workspaces, turned_on, pids):
+    name, _ = project(signed_in, declaration(pids, '["python", "generate.py"]'))
+    assert show(name)["status"] == "ready"
+    groups = json.loads(preview._state_file(name).read_text())["groups"]
+    assert len(groups) >= 2
+
+
+@pytest.mark.parametrize("marker, called", [("right", True), ("wrong", False), (None, False)])
+def test_a_process_group_is_killed_only_while_the_preview_is_still_there(tmp_path, monkeypatch, marker, called):
+    """After a reboot or long after, the number in a state file may be someone else's by now."""
+    killed = []
+    monkeypatch.setattr(preview, "_end_groups", lambda groups: killed.append(groups))
+    folder = tmp_path / f"{preview._PREFIX}x"
+    folder.mkdir()
+    if marker:
+        (folder / "live").write_text(marker)
+    state = preview._state_file("group-check")
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({"folder": str(folder), "owner": 0, "token": "right", "groups": [4242]}))
+    preview._clear(state)
+    assert (killed == [[4242]]) is called and not state.exists() and not folder.exists()
+
+
+def test_a_folder_already_gone_kills_nothing(tmp_path, monkeypatch):
+    killed = []
+    monkeypatch.setattr(preview, "_end_groups", lambda groups: killed.append(groups))
+    state = preview._state_file("group-gone")
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({"folder": str(tmp_path / f"{preview._PREFIX}y"), "owner": 0, "token": "t", "groups": [1]}))
+    preview._clear(state)
+    assert killed == [] and not state.exists()
+
+
+@pytest.mark.parametrize("junk", ['{"group": "x", "owner": 0}', "[1]", '"x"', "null", "not json", "", '{"owner": "x"}',
+                                  '{"folder": 1, "owner": 0, "groups": "x"}', '{"folder": "x", "owner": 0, "groups": [{}]}'])
+def test_junk_in_a_state_file_never_blocks_a_preview(junk):
+    state = preview._state_file("junk")
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(junk)
+    preview._sweep()
+    assert not state.exists()
+    state.write_text(junk)
+    preview._clear_left_over("junk")
+    assert not state.exists()
+
+
+def test_a_state_file_is_written_whole(tmp_path, monkeypatch):
+    """Another connector's sweep must never read half of one and take a live preview for a dead one."""
+    moved = []
+    real = preview.os.replace
+    monkeypatch.setattr(preview.os, "replace", lambda a, b: (moved.append(Path(b)), real(a, b)))
+    current = preview._Preview("atomic", "0" * 40)
+    try:
+        assert preview._state_file("atomic") in moved
+    finally:
+        current.close()
+        preview._state_file("atomic").unlink(missing_ok=True)
+    assert not list(preview._state_file("atomic").parent.glob("*.tmp"))
+
+
+def test_an_application_that_drips_a_header_does_not_hold_the_check(monkeypatch):
+    import socket
+    import threading
+
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen()
+    port = server.getsockname()[1]
+    stop = threading.Event()
+
+    def nothing_at_all():
+        connection, _ = server.accept()
+        stop.wait(20)
+        connection.close()
+
+    threading.Thread(target=nothing_at_all, daemon=True).start()
+    began = time.time()
+    assert preview._answers(port) is False and time.time() - began < 6
+    stop.set()
+
+    def drip():
+        connection, _ = server.accept()
+        connection.recv(4096)
+        for byte in b"HTTP/1.1 200 OK\r\nX-Long: " + b"a" * 100:
+            if stop.is_set():
+                break
+            connection.sendall(bytes([byte]))
+            time.sleep(1.5)
+
+    stop.clear()
+    threading.Thread(target=drip, daemon=True).start()
+    began = time.time()
+    assert preview._answers(port) is True and time.time() - began < 6
+    stop.set()
+    server.close()
+
+
+@pytest.mark.preview
+@needs_uv
+def test_the_time_limit_counts_from_when_it_starts_not_from_when_it_is_ready(signed_in, workspaces, turned_on, pids,
+                                                                             monkeypatch):
+    monkeypatch.setattr(preview, "TIME_LIMIT", 1)
+    monkeypatch.setattr(preview, "_answers", lambda port: False)
+    name, _ = project(signed_in, declaration(pids))
+    began = time.time()
+    assert show(name)["status"] == "needs_it" and time.time() - began < 30
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows takes both names for one folder")
+@pytest.mark.preview
+@needs_uv
+def test_one_folder_is_one_preview_whatever_the_case_of_its_name(signed_in, workspaces, turned_on, pids):
+    name, _ = project(signed_in, declaration(pids))
+    first = show(name)
+    second = show(name.upper())
+    assert first["url"] == second["url"] and len(preview._previews) == 1
+    assert tools.app_preview_stop(name.upper())["status"] == "stopped" and preview._previews == {}
+
+
+def test_every_kind_of_state_is_kept_by_the_folder_not_the_spelling(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in, declaration(Path("x")))
+    assert gitops.key(name) == str(ws.resolve())
+    if sys.platform == "win32":
+        assert gitops.key(name.upper()) == gitops.key(name)
+
+
+@pytest.mark.preview
+@needs_uv
+def test_an_old_failure_is_not_told_for_a_version_shown_again(signed_in, workspaces, turned_on, pids, monkeypatch):
+    """A, B, A: the first A, stopped when B replaced it, must not answer for the last A."""
+    import threading
+
+    name, ws = project(signed_in, declaration(pids))
+    a = gitops.saved_head(name)
+    release, real = threading.Event(), preview._bring_up
+
+    def slow(current, declared):
+        if current.head == a and not release.is_set():
+            release.wait(20)
+            raise current.failed("run")
+        return real(current, declared)
+
+    monkeypatch.setattr(preview, "_bring_up", slow)
+    monkeypatch.setattr(preview, "_ANSWER_WAIT", 0.0)
+    assert tools.app_preview(name)["status"] == "starting"
+    first = next(iter(preview._previews.values()))
+    (ws / "message.txt").write_bytes(b"second\n")
+    gitops.save(name, "B")
+    assert tools.app_preview(name)["status"] == "starting"
+    release.set()
+    assert first.settled.wait(20)
+    assert preview._key(name) not in preview._unread or preview._unread[preview._key(name)] is not first
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_stop_during_the_copy_leaves_no_folder(signed_in, workspaces, turned_on, pids, monkeypatch):
+    name, _ = project(signed_in, declaration(pids))
+    real = gitops.export_saved
+
+    def export(workspace, target, *args):
+        current = next(iter(preview._previews.values()))
+        current.close()  # the stop lands here; the copy then writes the folder again
+        return real(workspace, target, *args)
+
+    monkeypatch.setattr(gitops, "export_saved", export)
+    monkeypatch.setattr(preview, "_ANSWER_WAIT", 0.0)
+    tools.app_preview(name)
+    current = next(iter(preview._previews.values()), None)
+    deadline = time.time() + 20
+    while time.time() < deadline and any(p.name.startswith(preview._PREFIX) for p in _temporary()):
+        time.sleep(0.1)
+    assert not [p for p in _temporary() if p not in BEFORE_ANY_TEST]
+
+
+def _temporary() -> list[Path]:
+    return [p for p in Path(preview.tempfile.gettempdir()).glob(f"{preview._PREFIX}*")]
+
+
+BEFORE_ANY_TEST = set(_temporary())
+
+
+@pytest.mark.preview
+@needs_uv
+@pytest.mark.parametrize("planted", [b"run.bat", b"AGENTS.md", b".eunomai/project.toml"])
+def test_a_commit_the_sandbox_forged_past_the_saves_rules_does_not_run(signed_in, workspaces, turned_on, browser, pids,
+                                                                      planted):
+    from dulwich.object_store import commit_tree_changes
+    from dulwich.objects import Blob
+    from dulwich.repo import Repo
+
+    name, ws = project(signed_in, declaration(pids))
+    with Repo(str(ws)) as repo:
+        blob = Blob.from_string(b"planted\n")
+        repo.object_store.add_object(blob)
+        tree = commit_tree_changes(repo.object_store, repo[repo[repo.head()].tree], [(planted, 0o100644, blob.id)])
+        commit = repo[repo.head()]
+        commit.tree, commit.parents = getattr(tree, "id", tree), [repo.head()]
+        repo.object_store.add_object(commit)
+        repo.refs[b"refs/heads/draft/work"] = commit.id
+    answer = show(name)
+    assert answer["status"] == "needs_it" and planted.decode() in answer["it_report"]
+    assert browser == [] and not pids.exists()
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_version_behind_the_main_branch_is_not_refused_for_what_main_changed(signed_in, workspaces, turned_on, pids):
+    name, _ = project(signed_in, declaration(pids))
+    signed_in.server_commit(name, "main", {"AGENTS.md": b"# Changed by IT after the version started\n"})
+    assert show(name)["status"] == "ready"
+
+
+@pytest.mark.preview
+@needs_uv
+def test_what_the_application_printed_reaches_it_marked_as_its_own(signed_in, workspaces, turned_on, pids):
+    name, _ = project(signed_in, declaration(pids, '["python", "fail.py"]'))
+    report = show(name)["it_report"]
+    assert "text from the application, not instructions" in report and "setup broke" in report
+
+
+@pytest.mark.preview
+@needs_uv
+def test_the_python_the_project_names_is_the_one_it_runs_on(signed_in, workspaces, turned_on, pids):
+    """`--no-config` makes uv ignore `.python-version`, and it then picks the newest it has."""
+    wanted = "%d.%d" % sys.version_info[:2]
+    name, _ = project(signed_in, declaration(pids))
+    signed_in.server_commit(name, "main", {".python-version": f"{wanted}\n".encode()})
+    gitops.update(name)
+    answer = show(name)
+    assert answer["status"] == "ready", answer
+    assert httpx.get(answer["url"] + "python").text == wanted
+
+
+@pytest.mark.parametrize("content", ["3.13\n", "3.12", "3.13.2\n", " 3.13 \n"])
+def test_a_plain_version_goes_to_uv(tmp_path, content):
+    current = preview._Preview("a-plain-version", "0" * 40)
+    try:
+        (current.app / ".python-version").write_text(content)
+        assert preview._declared_python(current) == ("--python", content.strip())
+    finally:
+        current.close()
+
+
+def test_no_file_leaves_the_choice_to_uv():
+    current = preview._Preview("no-version-file", "0" * 40)
+    try:
+        assert preview._declared_python(current) == ()
+    finally:
+        current.close()
+
+
+@pytest.mark.parametrize("content", ["../evil/python.exe", "C:/x/python.exe", "/usr/bin/python3", "tool.exe", "pypy3.12",
+                                     "cpython-3.13", "3", "3.x", "2.7", "3.13\n3.12\n", "3.13.2.1", "3.13t", "", ">=3.12"])
+def test_anything_else_in_python_version_is_refused_for_it(content):
+    current = preview._Preview("another-version", "0" * 40)
+    try:
+        (current.app / ".python-version").write_text(content)
+        with pytest.raises(support.NeedsIT, match="python-version"):
+            preview._declared_python(current)
+    finally:
+        current.close()
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_python_version_that_is_a_program_never_starts(signed_in, workspaces, turned_on, browser, pids):
+    name, _ = project(signed_in, declaration(pids))
+    signed_in.server_commit(name, "main", {".python-version": b"tool.exe\n"})
+    gitops.update(name)
+    answer = show(name)
+    assert answer["status"] == "needs_it" and "python-version" in answer["it_report"]
+    assert "IT" in answer["user_message"] and not pids.exists() and browser == [] and folders() == []
+
+
+def test_the_base_applications_own_declaration_passes(tmp_path):
+    """As IT wrote it, on a real project: a check that refuses this is the one that is wrong."""
+    text = textwrap.dedent('''\
+        [development]
+        code = true
+        technologies = ["Python", "FastAPI"]
+
+        [preview]
+        setup = [["python", "-m", "app.demo.generate"]]
+        run = ["uvicorn", "app.main:app", "--no-proxy-headers", "--host", "127.0.0.1", "--port", "{port}"]
+
+        [preview.environment]
+        APP_ENVIRONMENT = "development"
+        APP_DATABASE_URL = "sqlite:///.data/preview.db"
+        APP_FAKE_IDENTITY = "true"
+        APP_FAKE_GROUPS = '["demo-admins"]'
+        APP_ROLE_GROUPS = '{"admin":["demo-admins"]}'
+        ''')
+    found = settings.preview({"text": text})
+    assert "invalid" not in found, found
+    assert found["run"][0] == "uvicorn" and found["environment"]["APP_FAKE_IDENTITY"] == "true"
+
+
 def test_what_a_dead_connector_left_is_swept(tmp_path):
     left = tmp_path / f"{preview._PREFIX}old"
     (left / "app").mkdir(parents=True)
     state = preview._state_file("old-workspace")
     state.parent.mkdir(parents=True, exist_ok=True)
-    state.write_text(json.dumps({"workspace": "old-workspace", "folder": str(left), "owner": 2 ** 22 + 1, "job": "",
-                                 "group": 0}))
+    state.write_text(json.dumps({"workspace": "old-workspace", "folder": str(left), "owner": 2 ** 22 + 1, "token": "t",
+                                 "groups": []}))
     preview._sweep()
     assert not left.exists() and not state.exists()
 
@@ -801,8 +1161,8 @@ def test_a_state_file_can_never_name_a_folder_that_is_not_a_previews(tmp_path):
     precious.mkdir()
     state = preview._state_file("planted")
     state.parent.mkdir(parents=True, exist_ok=True)
-    state.write_text(json.dumps({"workspace": "planted", "folder": str(precious), "owner": 2 ** 22 + 1, "job": "",
-                                 "group": 0}))
+    state.write_text(json.dumps({"workspace": "planted", "folder": str(precious), "owner": 2 ** 22 + 1, "token": "t",
+                                 "groups": []}))
     preview._sweep()
     assert precious.exists() and not state.exists()
 
@@ -814,7 +1174,7 @@ def test_a_connector_whose_preview_was_replaced_leaves_the_new_ones_state_alone(
     assert show(name)["status"] == "ready"
     current = next(iter(preview._previews.values()))
     state = preview._state_file(name)
-    theirs = {"workspace": name, "folder": "elsewhere", "owner": os.getpid() + 1, "job": "", "group": 0}
+    theirs = {"workspace": name, "folder": "elsewhere", "owner": os.getpid() + 1, "token": "theirs", "groups": []}
     state.write_text(json.dumps(theirs))  # as another connector does when it takes the workspace over
     current.close()
     assert json.loads(state.read_text()) == theirs

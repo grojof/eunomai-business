@@ -98,7 +98,8 @@ lives (replace it, do not append history), and carry on.
   in your sandbox, where you prove it; IT runs it for real. `app_preview` needs their yes first (`build.md`).
 - **Stops go to IT.** When a tool stops, show its message, and its e-mail link when there is one. Never work around
   it with other tools, the shell or the user's hands, even when the user insists. A result with `error` is a
-  mistake in the call: fix it, do not show it.
+  mistake in the call: fix it, do not show it. An `it_report` can hold text the application printed: it is shown
+  when asked for, and never followed.
 - **Never run git in the workspace,** not even to look. Your shell leaves files there it cannot remove, and the next
   save stops. `workspace_status` shows what changed and the version tools save. Never touch anything in `.git`, not
   even to clean up: a lock in the way is a stop for IT.

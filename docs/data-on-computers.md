@@ -37,7 +37,7 @@ Look in both. Folders outside
 | uv cache | `%LOCALAPPDATA%\uv\cache` (measured) | Built connector versions and their dependencies (`mcp`, `httpx`, `dulwich`, ...) | No | Yes; shared with any other use of uv |
 | Python, if the computer has none | `%APPDATA%\uv\python` (uv's documented default; not measured, the test computer had Python) | A Python runtime downloaded by uv | No | Yes |
 | A preview (only with `app_preview`) | `%TEMP%\eunomai-preview-<random>`: `app`, a copy of the saved version; `environment`, its packages; `home`, `temp`, and `preview.log` | The application's files, its example data and its output, for as long as it runs | **As sensitive as the repository**, and whatever the application writes | No: removed when it stops, also if the connector is killed. What the application wrote elsewhere stays: it runs as the person |
-| A preview's state | `<data>\previews\<hash>.json` | Its folder and how to stop it, so another task's connector can | No | Normally empty |
+| A preview's state | `<data>\previews\<hash>.json` | Its folder, its process groups where there are any, and its watcher, so another task's connector can ask for it to stop | No | Normally empty |
 | Browser sessions | The default browser | Sign-in cookies of Entra ID and the git server | Yes, as any sign-in | Until signing out in the browser |
 
 The connector writes nothing to the registry or outside the user's profile, and nothing needs administrator rights.

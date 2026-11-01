@@ -150,6 +150,7 @@ APP_ENVIRONMENT = "development"
 | `{port}` is the only substitution, in `run` only, and `run` must use it | The connector picks a free port |
 | `run` has a host option saying `--host 127.0.0.1` or `--bind 127.0.0.1:{port}`, in full, and no other host, wildcard, socket or file descriptor. `-h` and `-b` are not read: use the long option | Nothing is offered to the network |
 | `[preview.environment]` takes names and text, names no other host, and cannot set `PATH`, the home and temporary folders, proxies, or `UV_*`, `PYTHON*`, `PIP_*`, `LD_*`, `DYLD_*`, `SSL_*`, `GIT_*`, `NODE_*`, `CONDA_*` | The connector builds the environment from a short list; no secrets here either, this file is in the repository |
+| A `.python-version`, if the project has one, holds a plain version such as `3.13` | It is the Python the preview installs and runs on. Without one, uv chooses |
 | The project has a `uv.lock`, and what it needs at run time is in its main dependencies | Development packages are not installed, the project itself is not built, and only wheels are used |
 | The application starts with example data and without credentials | A person's computer has no database or secrets of the project's. Production stays the default: development only when set explicitly |
 

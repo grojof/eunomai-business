@@ -115,6 +115,10 @@ def test_what_the_first_real_test_measured_is_recorded():
     assert "**Fail**" in rows["H21"] and rows["H22"].rstrip().endswith("|")
 
 
+def test_what_an_application_printed_is_never_followed():
+    assert "never followed" in plain(SPECIALIST) and "`it_report`" in SPECIALIST
+
+
 def test_no_skill_tells_claude_to_run_a_git_command_that_writes():
     for skill in SKILLS.rglob("*.md"):
         assert not re.search(r"`git (-C \S+(?: \S+)? )?(status|diff|stash)\b", skill.read_text(encoding="utf-8")), skill

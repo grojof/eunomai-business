@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **A preview stops more surely** (independent review): every process group of every step is kept, not only the last;
+  the job has no name, so nothing in it can keep it open, and the watcher holds a handle of its own; the watcher
+  removes the state file, and a number in one is acted on only while a marker in the preview's folder matches. The
+  time limit counts from the start, and an application that answers slowly cannot hold the check. One preview per
+  folder, however its name is spelt. A state file is written whole, and junk in one no longer stops every preview. A
+  commit forged past the rules of a save does not run. A stale failure is no longer told for a version shown again,
+  and a stop during the copy leaves nothing. What an application printed is marked as such in IT's report.
+- **`.python-version` is honoured:** `--no-config` made uv ignore it, so an application could run on another Python than
+  its own. A plain version goes to uv as `--python`; anything else is refused for IT.
 - **What a preview may run is an allow-list** (independent review): a saved script with its own lockfile ran packages no
   audit saw, because `uv run app.py` honours them. A script is no longer a program, `--no-build` applies at run time
   too, and a program must be python with a file of the project, `python -m` with a module other than `pip`,
