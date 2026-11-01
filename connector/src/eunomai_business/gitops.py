@@ -33,7 +33,7 @@ from dulwich.index import validate_path, validate_path_element_default, validate
 from dulwich.merge import recursive_merge
 from dulwich.object_store import iter_tree_contents
 from dulwich.objects import Blob, Commit, SubmoduleEncountered
-from dulwich.repo import Repo
+from dulwich.repo import ParentsProvider, Repo
 
 from . import auth, data_dir, deps, guard
 from .support import NeedsIT, Unreachable, clean
@@ -98,18 +98,31 @@ class _NoFilters:
         pass
 
 
+class _CommitsOnly(ParentsProvider):
+    """A commit's parents as the commit itself says them. Reading it by name hashes it, so nothing beside it (grafts,
+    shallow, a commit graph) can give history another shape. docs/barriers.md lists what `.git` can and cannot change."""
+
+    def get_parents(self, commit_id, commit=None):
+        return self.store[commit_id].parents
+
+
 class _Workspace(Repo):
     """A repository the connector can trust while Claude's sandbox writes into the same folder, `.git` included.
 
-    Hooks never run (dulwich runs post-commit even with no_verify). Content is never filtered. Once validated, the
-    configuration is pinned: dulwich re-reads .git/config on every call, so a filter written between the check and
-    the use would otherwise run on this computer."""
+    Hooks never run (dulwich runs post-commit even with no_verify). Content is never filtered. History comes from the
+    commits alone: a commit graph is a cache anyone can write, and a Git on the computer may leave a real one there.
+    Once validated, the configuration is pinned: dulwich re-reads .git/config on every call, so a filter written
+    between the check and the use would otherwise run on this computer."""
 
     _pinned: ConfigFile | None = None  # Repo.__init__ already reads the configuration
 
     def __init__(self, path: str):
         super().__init__(path)
         self.hooks.clear()
+        self.object_store.get_commit_graph = lambda: None  # not a setting: `core.commitGraph` is in .git/config
+
+    def parents_provider(self) -> ParentsProvider:
+        return _CommitsOnly(self.object_store)
 
     def pin(self, config: ConfigFile) -> None:
         self._pinned = config
@@ -287,6 +300,20 @@ def _remember(folder: Path, **values) -> None:
         os.replace(tmp, data_dir() / "workspaces.json")
 
 
+def _note_version(repo: Repo, name: str) -> None:
+    with _exclusive("registry"):
+        folder = Path(repo.path)
+        versions = _registry().get(str(folder.resolve()), {}).get("versions", [])
+        _remember(folder, versions=sorted({*versions, name}))
+
+
+def _forget_version(repo: Repo, name: str) -> None:
+    with _exclusive("registry"):
+        folder = Path(repo.path)
+        versions = _registry().get(str(folder.resolve()), {}).get("versions", [])
+        _remember(folder, versions=[version for version in versions if version != name])
+
+
 def _branch(repo: Repo) -> str | None:
     try:
         return porcelain.active_branch(repo).decode()
@@ -445,6 +472,7 @@ def branch(workspace: str, name: str) -> dict:
                                   "keep working on it, or bring the latest changes once it is accepted")
         repo.refs[ref] = repo.head()
         repo.refs.set_symbolic_ref(b"HEAD", ref)  # same commit, so the working tree stays as it is
+        _note_version(repo, name)
         return {"workspace": workspace, "branch": name, "from": previous, "head": _head(repo)}
 
 
@@ -587,31 +615,54 @@ def _check_changes(repo: Repo, workspace: str, commit: bytes, main: str) -> None
     """What a version changed since it left the main branch, against the rules of a save: the sandbox can write .git,
     so a commit forged past version_save never leaves the computer nor runs on it."""
     bases = find_merge_base(repo, [main.encode(), commit])
-    found = _forbidden_changes(repo, bases[0] if bases else None, commit)
+    if not bases:
+        raise NeedsIT("This version no longer shares its history with the project, which was rewritten on the server, "
+                      "so it went no further. Your work is safe on this computer; IT can bring it across.",
+                      "no common history with the main branch", _facts(repo, workspace))
+    found = _forbidden_changes(repo, bases[0], commit)
     if found:
         raise NeedsIT("This version has a file only IT changes, so it went no further. Your work is safe on this "
                       "computer.", "a protected or executable file in a saved version",
                       _facts(repo, workspace, Paths=", ".join(sorted(found)[:20])))
 
 
+def _check_version(repo: Repo, workspace: str, name: str, origin: str, current: dict) -> None:
+    """Only what this connector made as a version is sent: HEAD is in .git, and a branch of the server's is not the
+    sandbox's to choose. A workspace from before it kept them, or a version it lost track of, is taken as one if the
+    server has no such branch yet, or has a proposal from it; anything else goes to IT."""
+    if name in _registry().get(str(Path(repo.path).resolve()), {}).get("versions", []):
+        return
+    client, path = get_transport_and_path(origin, **_remote(current))
+    advertised = _network(lambda: client.get_refs(path.encode()))
+    if f"refs/heads/{name}".encode() in (getattr(advertised, "refs", None) or {}) \
+            and not _proposal_for(origin, current, name):
+        raise NeedsIT("This copy of the project is on something that is not one of your versions, so nothing was sent. "
+                      "Your work is safe on this computer; IT can look at it.", "a branch the connector did not create",
+                      _facts(repo, workspace))
+    _note_version(repo, name)
+
+
 @_one_at_a_time
-def push(workspace: str, expected: str | None = None, main: str | None = None) -> dict:
-    """Send the current version to the server (never the main branch, never forced). `expected` is the commit that
-    was audited: it is what goes, and only if the version still is that commit. `main`, the main branch's commit on
-    the server, is what it is checked against."""
+def push(workspace: str, main: str, expected: str | None = None, version: str | None = None,
+         test_branch: str | None = None) -> dict:
+    """Send the current version to the server (never the main branch, never forced). `main` is the main branch's commit
+    on the server, which what goes is checked against. `expected` and `version` are the commit that was audited and the
+    branch it was audited on: that commit goes to that branch, and only if the version still is both. The branch name
+    is read once, here: HEAD is in .git, and what follows does not look at it again."""
     current = _git_session()
     with _repo(workspace) as repo:
         name = _branch(repo)
-        if name is None or name in _protected(repo):
+        shared = {branch.casefold() for branch in _protected(repo) | ({test_branch} if test_branch else set())}
+        if name is None or name.casefold() in shared:
             raise PermissionError("only versions are sent; the main branch changes through a pull request")
-        if expected and repo.head().decode() != expected:
+        if (version and name != version) or (expected and repo.head().decode() != expected):
             raise PermissionError("the version changed while it was being checked; send it again")
         origin = _registered_origin(repo, workspace)
         _check_host(origin, current)
         out = io.BytesIO()
         commit = expected.encode() if expected else repo.head()
-        if main:
-            _check_changes(repo, workspace, commit, main)
+        _check_changes(repo, workspace, commit, main)
+        _check_version(repo, workspace, name, origin, current)
         try:
             result = _send_commit(repo, origin, current, commit, f"refs/heads/{name}".encode(), False, out)
         except porcelain.DivergedBranches as exc:  # never forced: the server keeps what it has
@@ -1029,6 +1080,7 @@ def update(workspace: str) -> dict:
             result["backup"] = _backup(repo, name, main)
             _move(repo, main, remote_main, workspace)
             del repo.refs[f"refs/heads/{name}".encode()]
+            _forget_version(repo, name)
             return {**result, "status": "updated", "branch": main, "head": _head(repo), "retired_version": name,
                     "user_message": " ".join(notes + ["Your proposal was accepted. You now have the latest version "
                                                       "of the project; start a new version for your next change."])}
@@ -1073,12 +1125,12 @@ def update(workspace: str) -> dict:
                                                   "your work is kept."])}
 
 
-def on_shared_branch(workspace: str, test_branch: str | None) -> bool:
-    """Whether the current branch is one that is not a version: HEAD is in .git, which the sandbox can write."""
+def current_version(workspace: str, test_branch: str | None) -> str | None:
+    """The current branch, or None if it is not one a version can be: HEAD is in .git, which the sandbox can write."""
     with _repo(workspace) as repo:
         name = _branch(repo)
         shared = {branch.casefold() for branch in _protected(repo) | ({test_branch} if test_branch else set())}
-        return name is None or name.casefold() in shared
+        return None if name is None or name.casefold() in shared else name
 
 
 def server_head(workspace: str) -> str | None:

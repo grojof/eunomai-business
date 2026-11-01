@@ -102,15 +102,18 @@ environments and never through a link. The rules name no library or framework: w
 - declared packages (`pyproject.toml`, including its development groups, extras and dynamic dependencies,
   `package.json`, including peer and optional ones, `setup.cfg` with `install_requires`...) without a pinned list **in
   their own folder**, or in a `requirements/` folder beside them: a list elsewhere in the tree, or of another ecosystem,
-  answers for nothing here. A folder counts at the root, or with a project name and no project above taking it in;
-  `vendor`, `fixtures` and `templates` do not, since a copied library or a test's sample is not this project;
+  answers for nothing here. Every folder counts, named or not, poetry included, unless a project above names it as a member and has
+  its lockfile. A copy, a sample or a template does not, told by its path: `vendor/`, `fixtures/` or `templates/` directly
+  under the root, a test's fixtures (`tests/.../fixtures/`), or a library copied into what the application serves
+  (`static/vendor/`, `assets/vendor/`, `public/vendor/`). The same name deeper in a project is an ordinary folder;
 - a `pyproject.toml` whose `dependencies` the requirements lists beside it leave out, unless a `uv.lock` answers for it.
   Development groups and extras may rightly be in other lists;
 - an npm workspace: its members are links, and the audit reads no link;
 - a `uv.lock` holding anything the audit does not read, and a pinned list that is a link: tools follow it.
 
-A text file named like a list is one only if it reads like one: `requirements/what-sales-wants.txt` is prose and blocks
-nothing, while a real list with one bad line is blocked, and the person reads which file it was. Not read, by design,
+A text file named like a list is one unless some line could not install: pip refuses a whole file on such a line, so
+`requirements/what-sales-wants.txt` is prose and blocks nothing, while `evil (>=1.0)`, `wheels/evil.whl` or `${EVIL}`
+make it a list, and a real list with one bad line is blocked. The person reads which file it was. Not read, by design,
 and left to IT's review: lists under other names (`deps.txt`, `constraints.txt`), `bundledDependencies`, pdm's
 development dependencies, folders named `venv`, and which of a folder and a console script of one name uv runs.
 
@@ -135,8 +138,10 @@ reason to send what nobody audited, and the code in a test environment runs too.
 | `blocked` | Nothing is sent; the user reads why in plain words, and IT gets a report |
 | The audit cannot run (no network, a registry that does not answer) | Nothing is sent: deny by default, like the rest of the audit |
 | A version with no packages | `allowed`, without asking the network |
-| A commit that breaks the rules of a save | Not sent, and it does not run: `.git` is writable from the sandbox, so what a version changed since it left the main branch is checked on the host, against the main branch as the server has it. If that cannot be read, nothing is sent |
-| HEAD on the main branch or the declared test branch | Not sent, whatever HEAD says. Another unprotected branch on the server is only as safe as the server's own rules |
+| A commit that breaks the rules of a save | Not sent, and it does not run: `.git` is writable from the sandbox, so what a version changed since it left the main branch is checked on the host, against the main branch as the server has it |
+| The server has no such main branch | Nothing is sent, and IT is told: it was renamed, or the repository is empty. A server that does not answer is the network, as always |
+| No history in common with the main branch | Nothing is sent, and IT is told: it was rewritten on the server |
+| A branch the connector did not make | Nothing is sent to it: the connector keeps, outside the workspace, the names `version_create` made, and the branch is read once and checked as it is sent. HEAD on the main or test branch is refused outright. For a workspace from before this list, a version counts if the server has no such branch yet or has a proposal from it; anything else goes to IT |
 | `version_propose` when the server's version is not the latest save | Nothing is proposed: `not_sent`. A proposal holds what the server has, so it must be sent first, and the send is where the audit answers. Work saved after a send, allowed or not, cannot reach review behind the commit that went |
 
 | How | Why |
@@ -184,13 +189,29 @@ computer itself. These barriers keep that from becoming a way to run commands on
 | The configuration is checked once per operation and then pinned: what is written to `.git/config` afterwards is not read | dulwich re-reads the configuration on every call; a filter written between the check and the use would run |
 | Content is never filtered: no filter driver, no line-ending conversion, no LFS, whatever `.gitattributes` says | A filter is a command; files go in and out exactly as they are |
 | The repository's address and main branch come from the connector's own registry, recorded at clone time; an address changed in `.git/config` stops the operation | Otherwise the sandbox could send the user's work to another repository |
-| A repository that points to another folder (`commondir`, `alternates`), or rewrites its own history (`info/grafts`, `shallow`), is refused. The connector's clones are full | Reads and writes must stay in the workspace, and a rewritten history would turn the check of what a version changed into checking nothing |
+| A repository that points to another folder or rewrites its own history is refused, and history is read from the commits alone ([what `.git` can change](#what-git-can-change)) | Reads and writes must stay in the workspace, and a rewritten history would turn the check of what a version changed into checking nothing |
 | A Cowork task in the cloud is refused: Claude is told at the start, prompts are blocked, and every write, shell command and connector call is denied (or blocked if the guard cannot start). Known from the variables Claude Code sets in cloud sessions; in Cowork, H16 | The connector, the workspace folder and internal servers are on the user's computer and its network; a cloud sandbox would work on other files than the ones the connector saves |
 | One operation at a time per workspace, across connector processes: creating a version, saving, sending (to review or to the test environment), bringing the latest changes and reading the project's context | Two updates or saves at once could undo each other |
 | The computer's Git configuration (system and user) is ignored | Same behaviour with or without Git installed; a global filter cannot apply ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)) |
 | Each clone gets `core.autocrlf=false` | A Git on the computer, if any, sees the files exactly as the connector does |
 | Clones never fetch submodules (dulwich's default, not exposed as an option) | A submodule could bring code from another server |
 | A save point never carries the project's context (`AGENTS.md`, `CLAUDE.md`), its declaration (`.eunomai/`), Claude's configuration (`.claude/`, `.mcp.json`) or continuous integration (`.gitea/`, `.github/`...): they are put back as the last save point has them, regardless of case and never through a link. Adding or changing a file Windows runs on a double click (`.bat`, `.ps1`, `.lnk`...) stops the save; removing one is allowed. Every path must be valid on Windows and stay in the workspace, in the index too. The tree actually committed is checked again | The context steers Claude and only IT changes it; integration runs on IT's servers; the workspace folder is on the user's computer, where a double click would run what the sandbox wrote; the sandbox can write the index and race the save |
+
+### What `.git` can change
+
+The sandbox can write `.git`, so nothing there is taken on trust. What dulwich could believe from it:
+
+| In `.git` | Could change | The connector |
+|---|---|---|
+| `info/grafts`, `shallow` | A commit's parents | Refused: the repository stops. The connector's clones are full. Ignored besides |
+| `objects/info/commit-graph`, `commit-graphs/` | A commit's parents | Ignored: history is read from the commits. A Git on the computer may leave a real one |
+| `refs/replace/` | An object for another | Ignored: dulwich does not follow them |
+| `objects/info/alternates`, `commondir` | Where objects come from | Refused |
+| Objects, packs and their indexes, `multi-pack-index` | What a name holds | Verified: reading an object by name hashes it against the name, and a mismatch stops |
+| `config` | Filters, hooks, the address, `core.commitGraph`, `extensions` | Allow-list, then pinned for the operation |
+| `HEAD`, `refs/`, `packed-refs` | Which commit, which branch | Not believed for a decision: what is sent goes by commit id, audited first, to a branch checked as it is sent. The main branch's commit comes from the server |
+| `hooks/` | Commands | Never run |
+| `index` | What a save takes | Paths validated, and the tree committed is checked again |
 
 ## The preview on the person's computer
 

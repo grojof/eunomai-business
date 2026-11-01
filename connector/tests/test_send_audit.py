@@ -230,7 +230,7 @@ def test_what_is_proposed_is_what_the_server_holds_not_a_clean_save_nobody_sent(
     name, ws = project(signed_in)
     (ws / "bad.txt").write_bytes(b"bad\n")
     gitops.save(name, "Bad")
-    gitops.push(name)  # sent before the gate, or by a colleague with Git
+    gitops.push(name, gitops.project_files(name)["tip"])  # sent before the gate, or by a colleague with Git
     (ws / "bad.txt").unlink()
     gitops.save(name, "Clean, never sent")
     calls = audit_answers(monkeypatch, ALLOWED)
@@ -281,13 +281,13 @@ def test_a_send_still_never_forces(signed_in, workspaces, monkeypatch):
 
     name, ws = project(signed_in)
     audit_answers(monkeypatch, ALLOWED)
-    gitops.push(name)
+    gitops.push(name, gitops.project_files(name)["tip"])
     signed_in.server_commit(name, "draft/work", {"other.md": b"Changed elsewhere.\n"})
     (ws / "more.md").write_bytes(b"More.\n")
     gitops.save(name, "More")
     server_head = signed_in.repos[name].refs[b"refs/heads/draft/work"]
     with pytest.raises(NeedsIT, match="server has changes"):
-        gitops.push(name)
+        gitops.push(name, gitops.project_files(name)["tip"])
     assert signed_in.repos[name].refs[b"refs/heads/draft/work"] == server_head
 
 
@@ -451,7 +451,7 @@ def test_without_the_main_branch_nothing_is_sent(signed_in, workspaces, monkeypa
                                                                     "tip": None})
     calls = audit_answers(monkeypatch, ALLOWED)
     answer = tools.version_send(name)
-    assert answer["status"] == "main_unread" and answer["user_message"] and calls == []
+    assert answer["status"] == "main_missing" and answer["user_message"] and calls == []
     assert not on_server(signed_in, name)
 
 
@@ -516,3 +516,245 @@ def test_a_proposal_audits_the_commit_it_compared_not_one_read_later(signed_in, 
     gitops._audits.clear()
     assert tools.version_propose(name, "Change", "Summary")["created"]
     assert f"`{held[:12]}`" in signed_in.pulls_of(name)[-1]["body"]
+
+
+# --- a third review: what `.git` can make history look like --------------------------------------------------------
+
+def write_commit_graph(ws: Path, entries: list) -> None:
+    from dulwich.commit_graph import CommitGraph, CommitGraphEntry
+    from dulwich.object_format import DEFAULT_OBJECT_FORMAT
+
+    graph = CommitGraph(object_format=DEFAULT_OBJECT_FORMAT)
+    for commit, tree, parents, generation, when in entries:
+        graph.entries.append(CommitGraphEntry(commit, tree, parents, generation, when))
+    graph.entries.sort(key=lambda entry: entry.commit_id)
+    for index, entry in enumerate(graph.entries):
+        graph._oid_to_index[bytes.fromhex(entry.commit_id.decode())] = index
+    path = ws / ".git" / "objects" / "info" / "commit-graph"
+    path.parent.mkdir(exist_ok=True)
+    with open(path, "wb") as file:
+        graph.write_to_file(file)
+
+
+def a_graph_that_hides(name: str, ws: Path, signed_in, forged: str) -> None:
+    """main's tip made a child of the forged commit: the merge base would be the forged commit itself."""
+    main = signed_in.repos[name].refs[b"refs/heads/main"]
+    with gitops._repo(name) as repo:
+        parent, when = repo[main].parents[0], repo[main].commit_time
+        write_commit_graph(ws, [(main, repo[main].tree, [parent, forged.encode()], 5, when),
+                                (forged.encode(), repo[forged.encode()].tree, [parent], 4, when)])
+
+
+def test_a_commit_graph_does_not_hide_a_forged_commit(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in)
+    forged = forge(ws, name, {".gitea/workflows/x.yml": b"on: push\n", "run.bat": b"calc\n", "AGENTS.md": b"x\n"})
+    a_graph_that_hides(name, ws, signed_in, forged)
+    audit_answers(monkeypatch, ALLOWED)
+    assert tools.version_send(name)["status"] == "needs_it" and not on_server(signed_in, name)
+
+
+def test_history_is_read_from_the_commits_whatever_dulwich_would_believe(signed_in, workspaces):
+    """This fails if an upgrade of dulwich starts reading parents some other way: the first assert shows the file would
+    fool it, and the others that the connector's repository does not listen."""
+    from dulwich.graph import find_merge_base
+    from dulwich.repo import Repo
+
+    name, ws = project(signed_in)
+    forged = forge(ws, name, {"AGENTS.md": b"x\n"})
+    a_graph_that_hides(name, ws, signed_in, forged)
+    main = signed_in.repos[name].refs[b"refs/heads/main"]
+    with Repo(str(ws)) as plain:
+        assert find_merge_base(plain, [main, forged.encode()]) == [forged.encode()]
+    with gitops._repo(name) as repo:
+        assert find_merge_base(repo, [main, forged.encode()]) != [forged.encode()]
+        assert repo.object_store.get_commit_graph() is None
+        assert repo.get_parents(main) == repo[main].parents
+
+
+@pytest.mark.parametrize("planted", ["objects/info/commit-graphs/graph-0.graph", "objects/info/commit-graphs/commit-graph-chain",
+                                     "objects/pack/multi-pack-index"])
+def test_what_else_can_describe_history_changes_nothing(signed_in, workspaces, monkeypatch, planted):
+    name, ws = project(signed_in)
+    forge(ws, name, {"AGENTS.md": b"x\n"})
+    file = ws / ".git" / planted
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_bytes(b"not what it says it is\n")
+    audit_answers(monkeypatch, ALLOWED)
+    tools.version_send(name)
+    assert not on_server(signed_in, name)
+
+
+def test_a_replacement_reference_is_not_followed(signed_in, workspaces, monkeypatch):
+    from dulwich.objects import Commit
+
+    name, ws = project(signed_in)
+    forged = forge(ws, name, {"AGENTS.md": b"x\n"})
+    main = signed_in.repos[name].refs[b"refs/heads/main"]
+    with gitops._repo(name) as repo:
+        fake = repo[main].copy()
+        fake.parents = [forged.encode()]
+        repo.object_store.add_object(fake)
+        repo.refs[b"refs/replace/" + main] = fake.id
+    audit_answers(monkeypatch, ALLOWED)
+    assert tools.version_send(name)["status"] == "needs_it" and not on_server(signed_in, name)
+
+
+def test_an_object_that_is_not_what_its_name_says_stops(signed_in, workspaces):
+    """A pack and index that call forged content by a real commit's name: every read by name hashes the content."""
+    import hashlib
+    import struct
+    import zlib
+
+    from dulwich.errors import ChecksumMismatch
+    from dulwich.objects import Commit
+    from dulwich.pack import write_pack_index
+
+    name, ws = project(signed_in)
+    main = signed_in.repos[name].refs[b"refs/heads/main"]
+    with gitops._repo(name) as repo:
+        fake = repo[main].copy()
+    fake.parents = []
+    raw = fake.as_raw_string()
+    size, head = len(raw), bytearray()
+    byte = (1 << 4) | (size & 15)
+    size >>= 4
+    while size:
+        head.append(byte | 0x80)
+        byte = size & 0x7f
+        size >>= 7
+    head.append(byte)
+    body = bytes(head) + zlib.compress(raw)
+    content = b"PACK" + struct.pack(">II", 2, 1) + body
+    content += hashlib.sha1(content).digest()
+    packs = ws / ".git" / "objects" / "pack"
+    for real in list(packs.glob("pack-*")):
+        real.rename(ws / ".git" / real.name)  # out of the folder: any *.pack in it is read
+    (packs / "pack-forged.pack").write_bytes(content)
+    with open(packs / "pack-forged.idx", "wb") as file:
+        write_pack_index(file, [(bytes.fromhex(main.decode()), 12, zlib.crc32(body))], content[-20:])
+    with gitops._repo(name) as repo:
+        with pytest.raises(ChecksumMismatch):
+            repo[main]
+
+
+# --- which branch: HEAD is the sandbox's -----------------------------------------------------------------------------
+
+def test_head_moved_during_the_audit_does_not_choose_the_target(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in, CODE + b'\n[test]\nbranch = "pruebas"\n')
+    main = signed_in.repos[name].refs[b"refs/heads/main"]
+    signed_in.repos[name].refs[b"refs/heads/pruebas"] = main
+    (ws / ".git" / "refs" / "heads" / "pruebas").write_bytes(gitops.saved_head(name).encode() + b"\n")
+    real = gitops.audit_saved
+
+    def moved(*args):
+        (ws / ".git" / "HEAD").write_bytes(b"ref: refs/heads/pruebas\n")
+        return real(*args)
+
+    monkeypatch.setattr(gitops, "audit_saved", moved)
+    audit_answers(monkeypatch, ALLOWED)
+    assert "pushed" not in tools.version_send(name)
+    assert signed_in.repos[name].refs[b"refs/heads/pruebas"] == main
+
+
+def test_head_moved_after_the_check_does_not_choose_the_target(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in)
+    main = signed_in.repos[name].refs[b"refs/heads/main"]
+    signed_in.repos[name].refs[b"refs/heads/release"] = main
+    (ws / ".git" / "refs" / "heads" / "release").write_bytes(gitops.saved_head(name).encode() + b"\n")
+    real = gitops._check_changes
+
+    def moved(*args):
+        (ws / ".git" / "HEAD").write_bytes(b"ref: refs/heads/release\n")
+        return real(*args)
+
+    monkeypatch.setattr(gitops, "_check_changes", moved)
+    audit_answers(monkeypatch, ALLOWED)
+    assert tools.version_send(name)["pushed"]
+    assert signed_in.repos[name].refs[b"refs/heads/release"] == main and on_server(signed_in, name)
+
+
+def test_a_branch_of_the_server_the_connector_never_made_is_not_sent(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in)
+    main = signed_in.repos[name].refs[b"refs/heads/main"]
+    signed_in.repos[name].refs[b"refs/heads/release"] = main
+    (ws / ".git" / "refs" / "heads" / "release").write_bytes(gitops.saved_head(name).encode() + b"\n")
+    (ws / ".git" / "HEAD").write_bytes(b"ref: refs/heads/release\n")
+    audit_answers(monkeypatch, ALLOWED)
+    answer = tools.version_send(name)
+    assert answer["status"] == "needs_it" and "email_link" in answer or "it_report" in answer
+    assert signed_in.repos[name].refs[b"refs/heads/release"] == main
+
+
+def unrecorded(name: str) -> None:
+    """A workspace from before the connector kept its versions."""
+    registry = gitops._registry()
+    for entry in registry.values():
+        entry.pop("versions", None)
+    (gitops.data_dir() / "workspaces.json").write_text(json.dumps(registry), encoding="utf-8")
+
+
+def test_an_older_workspace_keeps_working_with_a_version_not_on_the_server_yet(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in)
+    unrecorded(name)
+    audit_answers(monkeypatch, ALLOWED)
+    assert tools.version_send(name)["pushed"]
+    assert "draft/work" in gitops._registry()[gitops.key(name)]["versions"]
+
+
+def test_an_older_workspace_keeps_working_with_a_version_already_proposed(signed_in, workspaces, monkeypatch):
+    name, ws = project(signed_in)
+    audit_answers(monkeypatch, ALLOWED)
+    tools.version_send(name)
+    tools.version_propose(name, "Change", "Summary")
+    unrecorded(name)
+    (ws / "more.md").write_bytes(b"More.\n")
+    gitops.save(name, "More")
+    assert tools.version_send(name)["pushed"]
+
+
+def test_a_retired_version_is_no_longer_a_version(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in)
+    audit_answers(monkeypatch, ALLOWED)
+    tools.version_send(name)
+    tools.version_propose(name, "Change", "Summary")
+    signed_in.accept(name, "draft/work")
+    gitops.update(name)
+    assert "draft/work" not in gitops._registry()[gitops.key(name)].get("versions", [])
+
+
+def test_push_needs_the_main_branch(signed_in, workspaces):
+    with pytest.raises(TypeError):
+        gitops.push("anything")
+
+
+# --- what the server no longer has ---------------------------------------------------------------------------------
+
+def test_a_main_branch_renamed_on_the_server_says_so_not_check_the_network(signed_in, workspaces, monkeypatch):
+    name, _ = project(signed_in)
+    repo = signed_in.repos[name]
+    repo.refs[b"refs/heads/trunk"] = repo.refs[b"refs/heads/main"]
+    del repo.refs[b"refs/heads/main"]
+    audit_answers(monkeypatch, ALLOWED)
+    answer = tools.version_send(name)
+    assert answer["status"] == "main_missing" and "network" not in answer["user_message"].lower()
+    assert "it_report" in answer and not on_server(signed_in, name)
+
+
+def test_a_history_rewritten_on_the_server_is_told_as_such(signed_in, workspaces, monkeypatch):
+    from dulwich.objects import Commit
+
+    name, _ = project(signed_in)
+    repo = signed_in.repos[name]
+    tip = repo[repo.refs[b"refs/heads/main"]]
+    fresh = Commit()
+    fresh.tree, fresh.parents = tip.tree, []
+    fresh.author = fresh.committer = b"IT <it@example.test>"
+    fresh.commit_time = fresh.author_time = int(time.time())
+    fresh.commit_timezone = fresh.author_timezone = 0
+    fresh.message = b"squashed history"
+    repo.object_store.add_object(fresh)
+    repo.refs[b"refs/heads/main"] = fresh.id
+    audit_answers(monkeypatch, ALLOWED)
+    answer = tools.version_send(name)
+    assert answer["status"] == "needs_it" and "no common history" in answer["it_report"]
+    assert "history" in answer["user_message"] and not on_server(signed_in, name)

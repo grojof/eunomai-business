@@ -113,24 +113,26 @@ def _audit_gate(workspace: str, head: str | None = None) -> tuple[dict | None, d
 def _send(workspace: str) -> dict:
     """What leaves the computer is checked here, on the host: the sandbox can write `.git`, HEAD included."""
     files = gitops.project_files(workspace)
-    if not files.get("tip"):
-        return {"workspace": workspace, "status": "main_unread",
-                "user_message": "This version was not sent: the project could not be read on the server. Check the "
-                                "network or VPN and try again; your work is safe on this computer."}
-    declared = settings.test(files["declaration"]) or {}
-    if gitops.on_shared_branch(workspace, declared.get("branch")):
+    if not files.get("tip"):  # an unreachable server raises before this: here it answered, without its main branch
+        stop = support.NeedsIT("This version was not sent: the project's main version is not on the server, or has "
+                               "another name now. Your work is safe on this computer; IT can look at it.",
+                               "the main branch is not on the server", {"Workspace": workspace})
+        return {**support.report(stop), "status": "main_missing", "workspace": workspace}
+    test_branch = (settings.test(files["declaration"]) or {}).get("branch")
+    version = gitops.current_version(workspace, test_branch)
+    if version is None:
         return {"workspace": workspace, "status": "not_a_version",
                 "user_message": "This copy of the project is not on a version of yours, so nothing was sent. Your work "
                                 "is safe on this computer."}
     audit, refused = _audit_gate(workspace)
-    return refused or gitops.push(workspace, audit["head"], files["tip"])
+    return refused or gitops.push(workspace, files["tip"], audit["head"], version, test_branch)
 
 
 @mcp.tool()
 def version_send(workspace: str) -> dict:
     """Send the current version (branch) to the git server. Never the main branch, never forced. The connector audits
     what is saved first and refuses unless it is `allowed`: `status` "audit_refused" with `reasons`, or
-    "audit_unavailable" when the audit could not run; "main_unread" and "not_a_version" also send nothing."""
+    "audit_unavailable" when the audit could not run; "main_missing" and "not_a_version" also send nothing."""
     return _safe(_send, workspace)
 
 

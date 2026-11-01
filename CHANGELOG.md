@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Real lists are lists, and a manifest cannot opt out** (third review): `evil (>=1.0)`, `wheels/evil.whl`, `file:./x.whl`
+  or `${EVIL}` read as prose and went unaudited. A file is prose only if some line could not install, since pip refuses
+  it then. Every folder that declares packages counts, named or not, poetry included; a parent answers only with its
+  lockfile and for the folders it names; copies, samples and templates are told by their path. In the git rule, a
+  folder with a wildcard could be anywhere.
+- **History comes from the commits, and the connector chooses the target** (third review): a commit graph of 1 KB made a
+  forged commit look like an ancestor of the main branch, the third such trick, so history is now read only from
+  commit objects, which are hashed against their names. [Barriers](docs/barriers.md#what-git-can-change) lists what `.git`
+  can change. The branch is read once and checked as it is sent, and only versions the connector made are sent. A main
+  branch the server no longer has, and a history rewritten on the server, are told as such.
 - **The git rule: daily commands pass, and a few mistakes no longer do** (second review): `git clone` to a copy, a `cd`
   after `&&` on a following line, `branch --show-current`, `branch -a`, `remote -v`, `tag -l`, `config --get` and
   `--exec-path` pass, as real git shows they do not write, as do heredocs with `<<\\EOF` and quoted delimiters. A
