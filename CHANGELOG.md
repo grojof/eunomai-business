@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **The audit stops refusing what is not a list** (second review): since it decides every send, these blocked real
+  projects. Prose in a file named like a list, any `*.lock` but a script's, a `package.json`, `pyproject.toml` or
+  `requirements.in` that is not the project (under `vendor`, `fixtures`, `templates`, or with no project name), a
+  `setup.cfg` with tool settings only, a `requirements/docs.txt` beside a `uv.lock`, a runtime list next to development
+  groups, and a byte order mark. What a person reads now names the file. An npm workspace stays refused.
 - **A forged commit does not leave the computer** (second review): a commit written straight into `.git` reached the
   server with workflows, the project's declaration and `AGENTS.md`, since only a save checked them. `version_send` now
   checks what a version changed against the main branch on the server, and refuses without it. HEAD on the main or test

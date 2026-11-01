@@ -81,8 +81,8 @@ environments and never through a link. The rules name no library or framework: w
   `--find-links`, and any `-r`/`-c` that does not name another pinned list in the same folder;
 - an npm entry not downloaded from the public registry under its own name, with no version, or a link;
 - a `package-lock.json` that no longer answers the `package.json` beside it, or that lists a package it does not hold;
-- a lockfile the audit does not read, such as `script.py.lock`, which `uv run script.py` honours: it would install
-  what the audit never saw;
+- a script's own lockfile (`*.py.lock`, `*.pyw.lock`, `*.pyz.lock`), which `uv run script.py` honours: it would install
+  what the audit never saw. Any other `*.lock` says nothing about Python or npm;
 - a `uv.lock` entry that does not come from the public index, other than the project itself, so a workspace member
   is refused too. Every entry has files, each with a hash that the registry published for that name and version:
   anyone can upload to the index, so an address says nothing about which package a file is;
@@ -100,10 +100,19 @@ environments and never through a link. The rules name no library or framework: w
   or only on Pythons older than the one a list was compiled for (`--python-version` in uv's header, or the
   `requires-python` of a `pyproject.toml` beside the list), is listed apart, not blocked;
 - declared packages (`pyproject.toml`, including its development groups, extras and dynamic dependencies,
-  `package.json`, including peer and optional ones...) without a pinned list **in their own folder**, or in a
-  `requirements/` folder beside them: a list elsewhere in the tree, or of another ecosystem, answers for nothing here;
-- a `pyproject.toml` that asks for a package the requirements lists beside it leave out;
+  `package.json`, including peer and optional ones, `setup.cfg` with `install_requires`...) without a pinned list **in
+  their own folder**, or in a `requirements/` folder beside them: a list elsewhere in the tree, or of another ecosystem,
+  answers for nothing here. A folder counts at the root, or with a project name and no project above taking it in;
+  `vendor`, `fixtures` and `templates` do not, since a copied library or a test's sample is not this project;
+- a `pyproject.toml` whose `dependencies` the requirements lists beside it leave out, unless a `uv.lock` answers for it.
+  Development groups and extras may rightly be in other lists;
+- an npm workspace: its members are links, and the audit reads no link;
 - a `uv.lock` holding anything the audit does not read, and a pinned list that is a link: tools follow it.
+
+A text file named like a list is one only if it reads like one: `requirements/what-sales-wants.txt` is prose and blocks
+nothing, while a real list with one bad line is blocked, and the person reads which file it was. Not read, by design,
+and left to IT's review: lists under other names (`deps.txt`, `constraints.txt`), `bundledDependencies`, pdm's
+development dependencies, folders named `venv`, and which of a folder and a console script of one name uv runs.
 
 Every package in a `uv.lock` is audited, whatever marker leads to it: a marker in a lockfile cannot be told from one
 somebody edited, so a package only a browser installs needs IT's exception like any other. A package left out of a

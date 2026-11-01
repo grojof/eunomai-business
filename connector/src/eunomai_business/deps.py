@@ -7,6 +7,7 @@ then the fix outweighs the risk of a fresh release. IT's exceptions can lift the
 a vulnerability.
 """
 
+import configparser
 import fnmatch
 import ipaddress
 import json
@@ -39,9 +40,13 @@ _SOURCE_SHORT = re.compile(r"^(github|gitlab|bitbucket):[\w.-]+/[\w.-]+$|^git@[\
 # Project links a package labels as its code, wherever it is hosted (foss.heptapod.net, a foundation's own forge...)
 _SOURCE_LABELS = {"source", "source code", "sourcecode", "repository", "code", "github", "gitlab", "git", "scm"}
 _LOCKFILES = ("package-lock.json", "uv.lock", "vendor.json")
-# Those it reads, or takes as saying a project installs something. Any other, such as `script.py.lock`, which
-# `uv run script.py` honours, says what is installed in a way it cannot answer for.
-_KNOWN_LOCKS = {"uv.lock", "poetry.lock", "yarn.lock"}
+# `uv run script.py` honours a `script.py.lock` beside it, which installs what the audit never saw. Any other *.lock
+# says nothing about Python or npm: a data file's, Cargo's, Gemfile's.
+_SCRIPT_LOCKS = (".py.lock", ".pyw.lock", ".pyz.lock")
+_NOT_PROJECTS = {"vendor", "vendors", "fixtures", "templates"}
+# A line of a requirements list: an exact or loose requirement, an option, or an address.
+_LIST_LINE = re.compile(r"[A-Za-z0-9][\w.-]*(?:\[[^\]]*\])?\s*(?:===?|~=|!=|<=?|>=?|@|;)|--?[A-Za-z]|[a-z+]+://|\.{0,2}/")
+_NAME_LINE = re.compile(r"[A-Za-z0-9][\w.-]*(?:\[[^\]]*\])?\Z")
 _NPM_DEPENDENCIES = ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")
 _PYPI_INDEX = "https://pypi.org/simple"
 _PYPI_FILE = re.compile(r"https://files\.pythonhosted\.org/[\w./%+~-]+")  # no query, fragment or backslash to hide in
@@ -305,8 +310,23 @@ def _is_pinned_list(file: Path) -> bool:
         or (file.parent.name.lower() == "requirements" and name.endswith(".txt"))
 
 
+def _reads_as_a_list(file: Path) -> bool:
+    """Whether a text file named like a requirements list is one: `requirements/what-sales-wants.txt` is prose, and a
+    file of sentences installs nothing, since pip refuses it. A line that looks like a requirement makes it a list, with
+    all that is wrong in it; so do bare names only, and nothing but comments."""
+    if file.name.lower() in _LOCKFILES:
+        return True
+    try:
+        text = file.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        return True
+    lines = [line.split(" #")[0].strip() for line in re.sub(r"\\\r?\n", " ", text).splitlines()]
+    lines = [line for line in lines if line and not line.startswith("#")]
+    return not lines or any(_LIST_LINE.match(line) for line in lines) or all(_NAME_LINE.match(line) for line in lines)
+
+
 def _pinned_files(folder: Path) -> list[Path]:
-    return sorted(filter(_is_pinned_list, _project_files(folder)))
+    return sorted(file for file in _project_files(folder) if _is_pinned_list(file) and _reads_as_a_list(file))
 
 
 # A marker that names one platform which is not a computer's (a web browser's "emscripten", for example): the pin
@@ -351,7 +371,7 @@ def _npm_root_problems(root: dict, packages: dict, folder: Path) -> list[str]:
     """Where a lockfile no longer answers `package.json` beside it, or lists what it does not hold: `npm install`
     would write a new one and install what the audit never saw."""
     manifest = folder / "package.json"
-    declared = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else root
+    declared = json.loads(manifest.read_text(encoding="utf-8-sig")) if manifest.is_file() else root
     problems = [f"package.json: {field} differ from the lockfile" for field in _NPM_DEPENDENCIES
                 if (declared.get(field) or {}) != (root.get(field) or {})]
     return problems + [f"package.json: {name} is not in the lockfile" for field in _NPM_DEPENDENCIES[:2]
@@ -557,13 +577,17 @@ def _unpinned_requirements(pins: list[tuple[str, str]], python_from: tuple[int, 
 def _declares(file: Path) -> str | None:
     """Which kind of pinned list a file asks for, if it says a project installs something."""
     name = file.name.lower()
-    if name in ("setup.py", "setup.cfg", "pipfile", "requirements.in", "poetry.lock"):
+    if name in ("setup.py", "pipfile", "requirements.in", "poetry.lock"):
         return "python"
     if name in ("yarn.lock", "pnpm-lock.yaml"):
         return "npm"
     try:
+        if name == "setup.cfg":  # usually just settings for tools
+            parser = configparser.ConfigParser(interpolation=None, strict=False)
+            parser.read_string(file.read_text(encoding="utf-8-sig"))
+            return "python" if parser.has_option("options", "install_requires") else None
         if name == "pyproject.toml":
-            data = tomllib.loads(file.read_text(encoding="utf-8"))
+            data = tomllib.loads(file.read_text(encoding="utf-8-sig"))
             project, tool = data.get("project") or {}, data.get("tool") or {}
             if project.get("dependencies") or tool.get("poetry") or (tool.get("uv") or {}).get("dev-dependencies") \
                     or "dependencies" in (project.get("dynamic") or []) \
@@ -571,17 +595,58 @@ def _declares(file: Path) -> str | None:
                     or any((data.get("dependency-groups") or {}).values()):
                 return "python"
         if name == "package.json":
-            data = json.loads(file.read_text(encoding="utf-8"))
+            data = json.loads(file.read_text(encoding="utf-8-sig"))
             if any(data.get(field) for field in _NPM_DEPENDENCIES):
                 return "npm"
-    except _UNREADABLE:  # unreadable: treat as declaring, so it is not waved through
+    except (*_UNREADABLE, configparser.Error):  # unreadable: treat as declaring, so it is not waved through
         return "npm" if name == "package.json" else "python"
     return None
 
 
+def _project_name(file: Path) -> str:
+    """The name a manifest gives its project. One that cannot be read counts as named, so it is not waved through."""
+    try:
+        if file.name.lower() == "package.json":
+            return str(json.loads(file.read_text(encoding="utf-8-sig")).get("name") or "")
+        if file.name.lower() == "pyproject.toml":
+            project = tomllib.loads(file.read_text(encoding="utf-8-sig")).get("project") or {}
+            return str(project.get("name") or "")
+    except _UNREADABLE:
+        return "?"
+    return ""
+
+
+def _parent_declares(file: Path, folder: Path) -> bool:
+    """Whether a project above this one takes it in as a workspace member, so that its lockfile answers for it."""
+    for here in file.parent.parents:
+        if here == folder.parent:
+            break
+        try:
+            if (here / "package.json").is_file() and json.loads(
+                    (here / "package.json").read_text(encoding="utf-8-sig")).get("workspaces"):
+                return True
+            if (here / "pyproject.toml").is_file() and ((tomllib.loads(
+                    (here / "pyproject.toml").read_text(encoding="utf-8-sig")).get("tool") or {}).get("uv") or {}).get("workspace"):
+                return True
+        except _UNREADABLE:
+            continue
+    return False
+
+
+def _manifests(folder: Path):
+    """(file, the kind of list it asks for) of what is a project here: at the root, or named in a folder of its own that
+    no project above takes in. A library copied under `vendor`, a test's sample or a template to fill in is not one."""
+    for file in _project_files(folder):
+        kind = _declares(file)
+        parts = {part.lower() for part in file.parent.relative_to(folder).parts}
+        if kind and (not parts or (not parts & _NOT_PROJECTS and _project_name(file)
+                                   and not _parent_declares(file, folder))):
+            yield file, kind
+
+
 def _declares_packages(folder: Path) -> bool:
     """Whether a project without a pinned list still declares packages to install."""
-    return any(_declares(file) for file in _project_files(folder))
+    return any(True for _ in _manifests(folder))
 
 
 def _unpinned_folders(folder: Path, lists: list[Path]) -> list[str]:
@@ -592,18 +657,25 @@ def _unpinned_folders(folder: Path, lists: list[Path]) -> list[str]:
                    and (item.name.lower() == "package-lock.json") == (kind == "npm")
                    and item.name.lower() != "vendor.json" for item in lists)
 
-    return sorted(file.relative_to(folder).as_posix() for file in _project_files(folder)
-                  if (kind := _declares(file)) and not holds(file.parent, kind))
+    return sorted(file.relative_to(folder).as_posix() for file, kind in _manifests(folder)
+                  if not holds(file.parent, kind))
+
+
+def _runtime_requirements(project: Path) -> tuple[str, list[Requirement]]:
+    """What a project needs to run. Its development groups and extras may rightly be in other lists, or none."""
+    data = tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8-sig")).get("project") or {}
+    return _normalized(data.get("name") or ""), [Requirement(item) for item in data.get("dependencies") or []]
 
 
 def _left_out_of_lists(folder: Path, names_by_folder: dict[Path, set[str]]) -> list[str]:
-    """What a `pyproject.toml` asks for that the requirements lists beside it leave out. A `uv.lock` checks this itself."""
+    """What a `pyproject.toml` needs that the requirements lists beside it leave out. A `uv.lock` checks this itself."""
     found = []
-    for here, names in names_by_folder.items():
-        project = here.parent if here.name.lower() == "requirements" else here
+    for project, names in names_by_folder.items():
+        if (project / "uv.lock").is_file() or not (project / "pyproject.toml").is_file():
+            continue
         where = (project / "pyproject.toml").relative_to(folder).as_posix()
         try:
-            own, asked, _ = _own_project(project)
+            own, asked = _runtime_requirements(project)
         except _UNREADABLE:
             found.append(f"{where}: not readable")
             continue
@@ -626,8 +698,7 @@ def audit(folder: Path) -> dict:
     loose += [f"{f.relative_to(folder).as_posix()}: a link, not a pinned list"
               for f in sorted(filter(_is_pinned_list, _project_files(folder, links=True)))]
     loose += [f"{f.relative_to(folder).as_posix()}: a lockfile the audit does not read"
-              for f in sorted(_project_files(folder))
-              if f.name.lower().endswith(".lock") and f.name.lower() not in _KNOWN_LOCKS]
+              for f in sorted(_project_files(folder)) if f.name.lower().endswith(_SCRIPT_LOCKS)]
     listed: dict[tuple[str, str], None] = {}  # a requirements list may leave something out; a lockfile cannot
     names_by_folder: dict[Path, set[str]] = {}
     digests: dict[tuple[str, str, str], set[str]] = {}
@@ -637,7 +708,7 @@ def audit(folder: Path) -> dict:
         eco = "npm" if kind in ("package-lock.json", "vendor.json") else "pypi"
         where = file.relative_to(folder).as_posix()
         try:
-            text = file.read_text(encoding="utf-8")
+            text = file.read_text(encoding="utf-8-sig")
             if kind == "package-lock.json":
                 found, not_pinned, hashed, skipped = _npm_lock(text, file.parent)
             elif kind == "vendor.json":
@@ -654,7 +725,8 @@ def audit(folder: Path) -> dict:
             header = [(int(a), int(b)) for a, b in _COMPILED_FOR.findall(text)]  # every supported one
             compiled_for.append(min(header) if header else _declared_python(file.parent) or _SUPPORTED_PYTHONS[0])
             listed.update(dict.fromkeys(found))
-            names_by_folder.setdefault(file.parent, set()).update(name for name, _ in found)
+            project = file.parent.parent if file.parent.name.lower() == "requirements" else file.parent
+            names_by_folder.setdefault(project, set()).update(name for name, _ in found)
         loose += [f"{where}: {line}" for line in not_pinned]
         elsewhere += [f"{where}: {line}" for line in skipped]
         if not hashed:
@@ -693,9 +765,7 @@ def audit(folder: Path) -> dict:
 
     with ThreadPoolExecutor(_AT_ONCE) as pool:
         blocked = [found for found in pool.map(judged, sorted(pins.items())) if found]
-    loose += _left_out_of_lists(folder, {here: names for here, names in names_by_folder.items()
-                                         if not (here / "uv.lock").is_file() and (
-        (here / "pyproject.toml").is_file() or (here.parent / "pyproject.toml").is_file())})
+    loose += _left_out_of_lists(folder, names_by_folder)
     undeclared = _unpinned_folders(folder, files)
     if not undeclared and not installs and not loose and _declares_packages(folder):
         undeclared = ["no pinned list installs anything"]
@@ -709,6 +779,7 @@ def audit(folder: Path) -> dict:
     if undeclared:  # vendored files are not a list of what the project installs
         result["reasons"] = ["packages are declared but not pinned, each folder needs requirements*.txt, "
                              f"package-lock.json or uv.lock: {', '.join(undeclared[:10])}"]
+        result["unpinned_files"] = undeclared
     elif not files and not loose:
         result.update(verdict="allowed", note="the project installs no packages: nothing to check")
     return result
@@ -731,8 +802,13 @@ def _plain_reasons(result: dict) -> list[str]:
         for reason in item["reasons"]:
             plain = next((words for key, words in _PLAIN_REASONS if key in reason), "did not pass a check")
             found[f"{item['package']} {plain}"] = None
-    if result["not_pinned"] or result.get("reasons"):
-        found["the list of what the application uses is incomplete, out of date or names somewhere not allowed"] = None
+    for line in result["not_pinned"]:  # named for IT: often the file only looks odd
+        file = line.split(": ", 1)[0]
+        found[f"{file} could not be confirmed" if ": " in line and ("." in file or "/" in file)
+              else "something it needs is not listed with an exact version"] = None
+    for file in result.get("unpinned_files", []):
+        found[f"{file} asks for components with no exact list beside it" if "." in file
+              else "something it needs is not listed with an exact version"] = None
     return list(found) or ["what the application uses could not be confirmed"]
 
 
