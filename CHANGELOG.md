@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Everything shown is in the user's language:** the first real test showed lines such as "Main branch, no open
+  change → Stage 1 Understand" and "Now generation", and told a business user to run `uv run uvicorn` in a terminal.
+  The rule now covers status lines between tool calls, stage names and commands.
 - **A question not answered means wait:** in the first real test the specialist asked, got no answer, and went on
   with `uv add requests`, saying "no preference, I take the recommended one". No default is taken in the user's name
   for anything that changes the project, and Understand no longer offers the recommended answer and moves on.

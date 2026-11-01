@@ -29,6 +29,11 @@ def test_a_question_not_answered_means_wait():
     assert "and move on" not in reference("understand")  # the way "no preference, I take the recommended one" came in
 
 
+def test_everything_shown_to_the_user_is_in_their_language_and_plain_words():
+    assert "status lines between tool calls included" in SPECIALIST
+    assert "stage names" in SPECIALIST and "never a command to run" in SPECIALIST
+
+
 def test_no_skill_tells_claude_to_run_a_git_command_that_writes():
     for skill in SKILLS.rglob("*.md"):
         assert not re.search(r"`git (-C \S+(?: \S+)? )?(status|diff|stash)\b", skill.read_text(encoding="utf-8")), skill
