@@ -126,6 +126,33 @@ servers, so it holds whichever way someone tries, from Cowork or not:
 Deploying from the git server's CI with repository secrets is not recommended: anyone who can push a branch can
 read them, and Gitea has no secrets per environment ([sources](sources.md#outside-claude)).
 
+## Seeing the application on a person's computer
+
+Where IT turned on [`app_preview`](configuration.md#seeing-the-application-on-a-persons-computer), a project can let
+people see the real application on their own computer, for up to an hour. It runs code nobody has reviewed yet, with
+their rights: [what that means](barriers.md#the-preview-on-the-persons-computer). Declare it in
+`.eunomai/project.toml` on `main`:
+
+```toml
+[preview]
+setup = [["python", "-m", "app.demo.generate"]]   # optional: commands that run before, in order
+run = ["uvicorn", "app.main:app", "--no-proxy-headers", "--host", "127.0.0.1", "--port", "{port}"]
+
+[preview.environment]
+APP_ENVIRONMENT = "development"
+```
+
+| Rule | Why |
+|---|---|
+| Each command is a list of words, run as `uv run --frozen <words>`. No shell: not as the program, nor `&&`, `\|`, `;`, `>` or `$(` in a word | What IT reviewed is what runs |
+| `{port}` is the only substitution, in `run` only, and `run` must use it | The connector picks a free port |
+| `run` says `127.0.0.1`, and no other host, socket or file descriptor | Nothing is offered to the network |
+| `[preview.environment]` takes names and text, and cannot set `PATH`, the home and temporary folders, or `UV_*`, `PYTHON*`, `LD_*`, `DYLD_*` | The connector builds the environment from a short list; no secrets here either, this file is in the repository |
+| The project has a `uv.lock`, and what it needs at run time is in its main dependencies | Development packages are not installed, the project itself is not built, and only wheels are used |
+| The application starts with example data and without credentials | A person's computer has no database or secrets of the project's. Production stays the default: development only when set explicitly |
+
+A declaration that breaks a rule shows nothing and goes to IT. Protect it like `AGENTS.md`.
+
 ## Checks on the server
 
 What runs in a user's session is advisory for IT; what runs on the server is not:

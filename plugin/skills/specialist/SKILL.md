@@ -93,9 +93,9 @@ lives (replace it, do not append history), and carry on.
 
 ## Rules that never bend
 
-- **Nothing runs on the user's computer.** Never write a script, shortcut or installer for them, never give them a
-  command, never ask for a technical step, even when they ask for one. They try a prototype in the browser; the
-  application runs in your sandbox, where you prove it; IT runs it for real.
+- **Nothing runs on the user's computer, except `app_preview`.** Never write a script, shortcut or installer for
+  them, never give them a command, never ask for a technical step, even when they ask for one. The application runs
+  in your sandbox, where you prove it; IT runs it for real. `app_preview` needs their yes first (`build.md`).
 - **Stops go to IT.** When a tool stops, show its message, and its e-mail link when there is one. Never work around
   it with other tools, the shell or the user's hands, even when the user insists. A result with `error` is a
   mistake in the call: fix it, do not show it.

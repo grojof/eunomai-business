@@ -24,7 +24,7 @@ from packaging.markers import InvalidMarker, Marker, UndefinedComparison, Undefi
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
-from . import auth, settings
+from . import auth, settings, support
 from .support import Unreachable
 
 MIN_AGE_DAYS = 14
@@ -642,3 +642,38 @@ def audit(folder: Path) -> dict:
     elif not files and not loose:
         result.update(verdict="allowed", note="the project installs no packages: nothing to check")
     return result
+
+
+# What the audit says about a package, as a person can read it.
+_PLAIN_REASONS = (("known vulnerabilities", "has a known security problem"),
+                  ("two weeks", "is too new to trust yet"),
+                  ("source repository", "does not show where it comes from"),
+                  ("unmaintained", "is no longer maintained"),
+                  ("yanked", "was withdrawn by its authors"), ("deprecated", "was withdrawn by its authors"),
+                  ("pre-release", "is a test release"),
+                  ("registry published", "does not match what its authors published"),
+                  ("does not exist", "could not be found"))
+
+
+def _plain_reasons(result: dict) -> list[str]:
+    found = {}
+    for item in result["blocked"]:
+        for reason in item["reasons"]:
+            plain = next((words for key, words in _PLAIN_REASONS if key in reason), "did not pass a check")
+            found[f"{item['package']} {plain}"] = None
+    if result["not_pinned"] or result.get("reasons"):
+        found["the list of what the application uses is incomplete, out of date or names somewhere not allowed"] = None
+    return list(found) or ["what the application uses could not be confirmed"]
+
+
+def refusal(workspace: str, result: dict, outcome: str) -> dict:
+    """A tool's answer when the audit of a saved version is not `allowed`: `outcome`, the reasons in plain words, a
+    report for IT, and the audit's own findings for Claude."""
+    reasons = _plain_reasons(result)
+    message = f"{outcome}, because of what it uses: {'; '.join(reasons[:5])}. Your work is safe on this computer."
+    details = {"Workspace": workspace, "Version": result["head"][:12], "Packages": "; ".join(
+        f"{item['package']} {item['version']}: {', '.join(item['reasons'])}" for item in result["blocked"]),
+        "Not pinned": "; ".join(result["not_pinned"])}
+    stop = support.report(support.NeedsIT(message, "the dependency audit refused a version", details))
+    return {**stop, "status": "audit_refused", "workspace": workspace, "reasons": reasons, "blocked": result["blocked"],
+            "not_pinned": result["not_pinned"]}

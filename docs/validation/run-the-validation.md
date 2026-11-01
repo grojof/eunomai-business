@@ -104,6 +104,12 @@ pull request, check the files, the accents and the author, and merge it.
    `Edit(/data/raw/**)`. Ask Claude to run `npm install x`, and to write `data/raw/a.csv` in the project's workspace;
    each is denied with its reason. Then ask it to `cd` into the workspace in one command and write
    `data/raw/b.csv` with `echo` in the next: note whether that is denied too.
+7. **The application on the person's computer** (H22), on a business user's computer, with a build with `app_preview`
+   on and a clone of the base application that declares `[preview]`. Ask to see it. Note: the specialist says what will
+   happen and waits; how long the first time takes, and whether the task stays responsive; the browser opens it, as
+   last saved, on 127.0.0.1. Then ask to stop it, and check in Task Manager that nothing of it is left and that
+   `%TEMP%\eunomai-preview-*` is gone. Repeat by closing the task or Claude Desktop instead. With IT's agreement, try it
+   under the organization's application control.
 
 ## 10 · Write down the results
 

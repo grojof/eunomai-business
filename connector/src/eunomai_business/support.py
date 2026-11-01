@@ -8,9 +8,18 @@ it stops, keeps the user's work, and returns three things: a sentence the user u
 import os
 import platform
 import re
+import socket
 import time
 from importlib.metadata import PackageNotFoundError, version
 from urllib.parse import quote
+
+import httpx
+import urllib3
+
+# Mistakes in how a tool was called: Claude fixes the call. A server that cannot be reached is the user's network.
+# Anything else unexpected goes to IT, never to the user.
+_FOR_CLAUDE = (ValueError, FileExistsError, FileNotFoundError, PermissionError)
+_NETWORK = (httpx.TransportError, urllib3.exceptions.HTTPError, ConnectionError, TimeoutError, socket.gaierror)
 
 
 class NeedsIT(Exception):
@@ -59,3 +68,21 @@ def unreachable() -> dict:
     return {"status": "unreachable",
             "user_message": "The server could not be reached. Check the network or VPN and try again; your work "
                             "is safe on this computer."}
+
+
+def safe(call, *args) -> dict:
+    """A tool's answer, whatever happens in `call`."""
+    try:
+        return call(*args)
+    except NeedsIT as exc:
+        return report(exc)
+    except Unreachable:
+        return unreachable()
+    except _FOR_CLAUDE as exc:
+        return {"error": clean(f"{type(exc).__name__}: {exc}", 300)}
+    except _NETWORK:
+        return unreachable()
+    except Exception as exc:
+        return report(NeedsIT("Something unexpected happened. Your work is safe on this computer.",
+                              "unexpected error in the connector",
+                              {"Tool": getattr(call, "__name__", "?"), "Error": f"{type(exc).__name__}: {exc}"[:500]}))

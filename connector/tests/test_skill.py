@@ -41,6 +41,21 @@ def test_folder_access_is_requested_in_the_same_task_with_the_old_sentence_as_a_
     assert start.index("mcp__cowork__request_cowork_directory") < start.index("open a new task")
 
 
+def test_the_person_agrees_before_anything_runs_on_their_computer():
+    build = " ".join(reference("build").split())
+    assert "Wait for their yes" in build and "app_preview_stop" in build and "`starting`" in build
+    assert build.index("Wait for their yes") < build.index("`app_preview(workspace)`")
+    assert "except `app_preview`" in SPECIALIST
+
+
+def test_the_risk_of_a_preview_is_said_where_it_is_decided():
+    docs = Path(__file__).resolve().parents[2] / "docs"
+    for page in ("decisions.md", "barriers.md", "configuration.md"):
+        text = " ".join((docs / page).read_text(encoding="utf-8").split())
+        assert "code an AI wrote and nobody has reviewed yet, on the person's computer, with their rights" in text, page
+        assert "reduce that risk and do not remove it" in text, page
+
+
 def test_no_skill_tells_claude_to_run_a_git_command_that_writes():
     for skill in SKILLS.rglob("*.md"):
         assert not re.search(r"`git (-C \S+(?: \S+)? )?(status|diff|stash)\b", skill.read_text(encoding="utf-8")), skill

@@ -176,9 +176,52 @@ computer itself. These barriers keep that from becoming a way to run commands on
 | Clones never fetch submodules (dulwich's default, not exposed as an option) | A submodule could bring code from another server |
 | A save point never carries the project's context (`AGENTS.md`, `CLAUDE.md`), its declaration (`.eunomai/`), Claude's configuration (`.claude/`, `.mcp.json`) or continuous integration (`.gitea/`, `.github/`...): they are put back as the last save point has them, regardless of case and never through a link. Adding or changing a file Windows runs on a double click (`.bat`, `.ps1`, `.lnk`...) stops the save; removing one is allowed. Every path must be valid on Windows and stay in the workspace, in the index too. The tree actually committed is checked again | The context steers Claude and only IT changes it; integration runs on IT's servers; the workspace folder is on the user's computer, where a double click would run what the sandbox wrote; the sandbox can write the index and race the save |
 
+## The preview on the person's computer
+
+Off by default. Where IT turned it on, `app_preview` shows the real application in the person's browser, through the
+connector ([decision 7](decisions.md#7--nothing-runs-on-the-users-computer-except-a-preview-it-turns-on)).
+
+**This runs code an AI wrote and nobody has reviewed yet, on the person's computer, with their rights, outside any
+sandbox.** The barriers below reduce that risk and do not remove it. They keep a mistake from becoming an incident;
+they do not stop code written to do harm, and a program with the person's rights can undo most of them.
+
+| Barrier | Why |
+|---|---|
+| Two keys, both needed: `app_preview` in the build, and `[preview]` in the project's declaration on the main branch, read from the server, never from the workspace | Neither an organization's build nor one project turns it on alone, and the sandbox cannot rewrite what is run |
+| It runs a copy of the saved version, in a temporary folder outside the workspace, never the working folder | Nothing unsaved runs, and no file the sandbox just wrote |
+| It refuses unless the audit of that same copy says `allowed` and the copy has a `uv.lock`; if the audit cannot run, it refuses | Only packages the rules allow, and exactly those |
+| Installed with `uv sync --frozen`, hashes verified, development packages out, wheels only (`--no-build`), the project itself not installed (`--no-install-project`), uv's configuration files ignored (`--no-config`), on uv's own Python | Nothing is resolved anew, no package or build backend runs code at installation, and a file in the copy cannot redirect uv |
+| Each command is a list of words run as `uv run --frozen <words>`, never through a shell; a shell, `uv` or `pip` as the program, or shell text in a word, makes the declaration invalid; `{port}` is the only substitution | What IT reviewed is what runs |
+| The environment is built from a short list: what uv and the system need, and `[preview.environment]`, which cannot replace those. A proxy's address reaches the installation only. The person's own folders are replaced by empty ones, and `UV_PROJECT_ENVIRONMENT` points inside the temporary folder | The person's tokens, the connector's settings and every other variable stay out of its reach through the environment |
+| It listens on 127.0.0.1 only: a free port is chosen, a `run` that names any other host or a socket is invalid, it must answer before the person is told it is ready, and on Windows the system's own table must show no process of the tree listening beyond this computer, on any port | Nothing is offered to the network |
+| One preview per workspace, across connectors; a newer saved version replaces the one running | Nothing is left running by mistake |
+| It stops by itself: on `app_preview_stop`, when the connector ends, however it ends, and after 60 minutes. On Windows every process runs in a job object from its first instruction, cannot leave it, and dies with it; elsewhere a process group. A small watcher removes the temporary folder if the connector is killed | Nothing outlives the session |
+| The person is told first, in one plain sentence, and agrees in the conversation | They decide. This one is a rule the specialist follows: the connector cannot check it |
+| Cowork tasks in the cloud are refused by the guard | The computer is not there |
+
+**What it does not stop.** While it runs, the application is a program of the person's:
+
+- **Their files and network.** It can read anything they can read and send it anywhere they can reach. The allow-list
+  covers the environment, not the disk: a saved password, a document, a browser's profile.
+- **Their sign-in.** DPAPI stops other users, not a program running as this one, so it can read the git sign-in and
+  act as the person on the git server, within what the server lets them do.
+- **What it leaves behind.** Stopping the tree ends what it started directly. A file written elsewhere, a scheduled
+  task, or a program started through a service outside the tree, stays.
+- **The port, while it is open.** 127.0.0.1 keeps other computers out, not other programs here: other people signed
+  in to a shared computer, and any web page open in the browser, can send it requests.
+- **What the audit cannot see.** The audit judges packages by rules, not by reading them, and it says nothing about
+  the code the assistant wrote.
+- **A later listener.** The check on what it listens on is made once, as it starts. On Linux and macOS it covers only
+  the application's port, and a program that starts a session of its own leaves the process group.
+
+The real controls stay outside: least privilege for the person's account, what they can reach on the network,
+application control, and IT's review. Before turning it on, read [configuration](configuration.md#seeing-the-application-on-a-persons-computer).
+
 ## What eunomai-business does not protect
 
 Said plainly, so nobody relies on it for these:
+
+- **A preview's code.** It runs with the person's rights: [what the preview does not stop](#the-preview-on-the-persons-computer).
 
 - **What goes into a save point.** A secret, a huge file or a wrong line ending is saved as it is (the connector
   reports CRLF in changed files, but does not block it). Projects decide their own rules

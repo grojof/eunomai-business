@@ -1037,6 +1037,15 @@ def update(workspace: str) -> dict:
                                                   "your work is kept."])}
 
 
+def saved_head(workspace: str) -> str:
+    """The commit of what is saved."""
+    with _repo(workspace) as repo:
+        commit = _ref(repo, b"HEAD")
+        if commit is None:
+            raise PermissionError("nothing is saved yet")
+        return commit.decode()
+
+
 @_one_at_a_time
 def export_saved(workspace: str, target: Path, head: str | None = None) -> dict:
     """Write the saved version's files to `target`, outside the workspace: what was saved, never what is in the

@@ -2,14 +2,11 @@
 organization's build enables them (EUNOMAI_DIAGNOSTICS=1)."""
 
 import os
-import socket
 
-import httpx
-import urllib3
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
-from . import auth, deps, gitops, hook, probe, settings, support
+from . import auth, deps, gitops, hook, preview, probe, settings, support
 
 mcp = MCPServer("eunomai-business", instructions=(
     "The user is not technical. When a tool result has a `user_message`, show that message, in the user's "
@@ -20,27 +17,7 @@ mcp = MCPServer("eunomai-business", instructions=(
     "signed in yet, a name that is not allowed): take the step it names or correct the call; never show it to the "
     "user. Never try to work around a stop with other tools or the shell."))
 
-# Mistakes in how a tool was called: Claude fixes the call. A server that cannot be reached is the user's network.
-# Anything else unexpected goes to IT, never to the user.
-_FOR_CLAUDE = (ValueError, FileExistsError, FileNotFoundError, PermissionError)
-_NETWORK = (httpx.TransportError, urllib3.exceptions.HTTPError, ConnectionError, TimeoutError, socket.gaierror)
-
-
-def _safe(call, *args):
-    try:
-        return call(*args)
-    except support.NeedsIT as exc:
-        return support.report(exc)
-    except support.Unreachable:
-        return support.unreachable()
-    except _FOR_CLAUDE as exc:
-        return {"error": support.clean(f"{type(exc).__name__}: {exc}", 300)}
-    except _NETWORK:
-        return support.unreachable()
-    except Exception as exc:
-        return support.report(support.NeedsIT(
-            "Something unexpected happened. Your work is safe on this computer.", "unexpected error in the connector",
-            {"Tool": getattr(call, "__name__", "?"), "Error": f"{type(exc).__name__}: {exc}"[:500]}))
+_safe = support.safe
 
 
 # --- sign-in --------------------------------------------------------------------------------------------
@@ -119,40 +96,6 @@ def version_save(workspace: str, message: str) -> dict:
     return _safe(gitops.save, workspace, message)
 
 
-# What the audit says about a package, as a person can read it.
-_PLAIN_REASONS = (("known vulnerabilities", "has a known security problem"),
-                  ("two weeks", "is too new to trust yet"),
-                  ("source repository", "does not show where it comes from"),
-                  ("unmaintained", "is no longer maintained"),
-                  ("yanked", "was withdrawn by its authors"), ("deprecated", "was withdrawn by its authors"),
-                  ("pre-release", "is a test release"),
-                  ("registry published", "does not match what its authors published"),
-                  ("does not exist", "could not be found"))
-
-
-def _plain_reasons(audit: dict) -> list[str]:
-    found = {}
-    for item in audit["blocked"]:
-        for reason in item["reasons"]:
-            plain = next((words for key, words in _PLAIN_REASONS if key in reason), "did not pass a check")
-            found[f"{item['package']} {plain}"] = None
-    if audit["not_pinned"] or audit.get("reasons"):
-        found["the list of what the application uses is incomplete, out of date or names somewhere not allowed"] = None
-    return list(found) or ["what the application uses could not be confirmed"]
-
-
-def _audit_refused(workspace: str, audit: dict) -> dict:
-    reasons = _plain_reasons(audit)
-    message = (f"This version was not sent, because of what it uses: {'; '.join(reasons[:5])}. Your work is safe on "
-               "this computer.")
-    details = {"Workspace": workspace, "Version": audit["head"][:12], "Packages": "; ".join(
-        f"{item['package']} {item['version']}: {', '.join(item['reasons'])}" for item in audit["blocked"]),
-        "Not pinned": "; ".join(audit["not_pinned"])}
-    stop = support.report(support.NeedsIT(message, "the dependency audit refused a version", details))
-    return {**stop, "status": "audit_refused", "workspace": workspace, "reasons": reasons, "blocked": audit["blocked"],
-            "not_pinned": audit["not_pinned"]}
-
-
 def _code_declared(workspace: str) -> bool:
     """Whether the project may hold code. A main branch that cannot be read says nothing, so it counts."""
     files = gitops.project_files(workspace)
@@ -170,7 +113,7 @@ def _audit_gate(workspace: str) -> tuple[dict | None, dict | None]:
         return None, {"workspace": workspace, "status": "audit_unavailable",
                       "user_message": "This version was not sent: the checks on what it uses could not run. Check the "
                                       "network or VPN and try again; your work is safe on this computer."}
-    return audit, None if audit["verdict"] == "allowed" else _audit_refused(workspace, audit)
+    return audit, None if audit["verdict"] == "allowed" else deps.refusal(workspace, audit, "This version was not sent")
 
 
 def _send(workspace: str) -> dict:
@@ -234,6 +177,8 @@ def _specialist_settings(workspace: str) -> dict:
                 "reason": "the project's main branch could not be read on the server, so neither could its declaration"}
             result["project_context"] = files["context"]
             result["test"] = settings.test(files["declaration"])
+            declared = settings.preview(files["declaration"])
+            result["preview"] = {"available": bool(values["app_preview"] and declared and "invalid" not in declared)}
     return result
 
 
@@ -242,8 +187,9 @@ def specialist_settings(workspace: str = "") -> dict:
     """The organization's choices for the specialist: languages; the organization's context and the skills it
     provides for given purposes; and, for a workspace, whether code may be written there and with which technologies
     (empty list: any), as the project declares it, the project's test environment if it declares one (`test`:
-    branch and url), and the project's context, all as IT keeps them on the main branch. For the work, these come
-    before anything personal in the session."""
+    branch and url), whether the application can be seen on this computer (`preview`: `available`), and the project's
+    context, all as IT keeps them on the main branch. For the work, these come before anything personal in the
+    session."""
     return _safe(_specialist_settings, workspace)
 
 
@@ -268,6 +214,24 @@ def version_to_test(workspace: str) -> dict:
     everyone else the answer says so and the version goes through IT's review as usual. One version at a time: it
     replaces whatever was being tried there. Production always takes IT's review."""
     return _safe(_to_test, workspace)
+
+
+@mcp.tool()
+def app_preview(workspace: str) -> dict:
+    """Show the application, as last saved, in the person's browser on their computer, on 127.0.0.1 only. It runs code
+    nobody has reviewed yet, on their computer, with their rights: tell them first, in one plain sentence, and call
+    this only after they agree in the conversation. Works where IT turned it on and the project declares it; refused
+    unless the audit allows the saved version. `status`: "ready" (with `url`), "starting" (call again with the same
+    workspace to follow it), or a refusal to show with `user_message`: "not_turned_on", "not_declared", "no_lockfile",
+    "audit_refused", "audit_unavailable", "needs_it". It stops by itself after 60 minutes and with the connector; a
+    newer saved version replaces the one running. `unsaved_changes` true means what is on screen lacks them."""
+    return _safe(preview.start, workspace)
+
+
+@mcp.tool()
+def app_preview_stop(workspace: str) -> dict:
+    """Stop the application running on the person's computer: every process it started, and its temporary copy."""
+    return _safe(preview.stop, workspace)
 
 
 @mcp.tool()

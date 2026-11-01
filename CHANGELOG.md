@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Decision 7 changes: a person can see the real application on their own computer.** Off by default, with two keys:
+  `app_preview` in the build and `[preview]` in the project's declaration. New tools `app_preview` and
+  `app_preview_stop`, on the connector, so nothing is written for the person to run. It runs a copy of the saved
+  version, refused unless the audit allows it and it has a `uv.lock`, through `uv` with `--frozen`, never a shell, in an
+  environment built from a short list, on 127.0.0.1 only. It stops, its whole process tree and temporary folder with
+  it, on request, with the connector, and after 60 minutes. **This runs code nobody has reviewed yet, with the
+  person's rights, outside any sandbox; the limits reduce that risk and do not remove it** ([barriers](docs/barriers.md#the-preview-on-the-persons-computer)).
+  H21 failed: a server in the sandbox cannot be opened from the computer. To validate: H22.
 - **The specialist asks for the folder in the same task:** after `workspace_clone`, or when the folder is not
   selected, it requests it with `mcp__cowork__request_cowork_directory` and carries on; the sentence asking for a new
   task stays as the fallback when that tool is not there or fails. To validate: H23.
