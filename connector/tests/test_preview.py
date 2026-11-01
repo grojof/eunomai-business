@@ -847,11 +847,13 @@ def test_a_child_a_setup_step_left_stops_with_the_preview(signed_in, workspaces,
 @pytest.mark.preview
 @needs_uv
 @pytest.mark.skipif(sys.platform == "win32", reason="process groups")
-def test_the_groups_of_every_step_are_in_the_state(signed_in, workspaces, turned_on, pids):
-    name, _ = project(signed_in, declaration(pids, '["python", "generate.py"]'))
+def test_the_groups_of_every_step_still_alive_are_in_the_state(signed_in, workspaces, turned_on, tmp_path, pids):
+    text = declaration(pids, '["python", "leave.py"]') + f'LEFT_FILE = "{(tmp_path / "left").as_posix()}"\n'.encode()
+    name, ws = project(signed_in, text)
+    (ws / "leave.py").write_bytes(LEAVE)
+    gitops.save(name, "A step that leaves a child")
     assert show(name)["status"] == "ready"
-    groups = json.loads(preview._state_file(name).read_text())["groups"]
-    assert len(groups) >= 2
+    assert len(json.loads(preview._state_file(name).read_text())["groups"]) >= 2
 
 
 @pytest.mark.parametrize("marker, called", [("right", True), ("wrong", False), (None, False)])
