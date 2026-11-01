@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **What a preview may run is an allow-list** (independent review): a saved script with its own lockfile ran packages no
+  audit saw, because `uv run app.py` honours them. A script is no longer a program, `--no-build` applies at run time
+  too, and a program must be python with a file of the project, `python -m` with a module other than `pip`,
+  `ensurepip` or `venv`, or a console script of a package in the lock, checked once installed. `python -c` is
+  refused. What runs has only the project's own programs on its `PATH`. A host option must say exactly `127.0.0.1`:
+  the address anywhere else in the command no longer passes, and `[preview.environment]` is checked too. On Linux and
+  macOS the listening table is read instead of trying the computer's addresses. These checks catch slips, not malice:
+  IT reviews the declaration. `app_preview` must be exactly `true`.
 - **Ways around the audit closed** (independent review): `package.json` and the root of `package-lock.json` must agree;
   npm entries with no version or a link are refused, not skipped; peer and optional dependencies count; each folder
   that declares packages needs a pinned list of its own and its kind; a `pyproject.toml` must be answered by the

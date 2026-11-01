@@ -172,7 +172,8 @@ def _specialist_settings(workspace: str) -> dict:
             result["project_context"] = files["context"]
             result["test"] = settings.test(files["declaration"])
             declared = settings.preview(files["declaration"])
-            result["preview"] = {"available": bool(values["app_preview"] and declared and "invalid" not in declared)}
+            result["preview"] = {"available": values["app_preview"] is True and bool(declared)
+                                 and "invalid" not in declared}
     return result
 
 

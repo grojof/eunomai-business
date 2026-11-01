@@ -100,54 +100,84 @@ def test(declaration: dict | None) -> dict | None:
 
 
 _PROGRAM = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
-# A program that would run text as commands, or change what is installed: `uv run` starts it, so a list does not stop it.
-_NOT_A_PROGRAM = {"sh", "bash", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "wsl", "env", "sudo", "uv",
-                  "uvx", "pip", "pip3"}
+_SCRIPTS = (".py", ".pyw", ".pyz")  # `uv run` reads a script's own metadata and lockfile; `python <file>` does not
+_MODULE = re.compile(r"[A-Za-z_][\w.]*\Z")
+PYTHONS = {"python", "python3"}
+_NOT_MODULES = {"pip", "ensurepip", "venv"}
+NOT_SCRIPTS = {"pip", "pip3", "uv", "uvx"}  # they change what is installed, whichever package brings them
 _SHELL_TEXT = re.compile(r"[;&|`<>\n\r]|\$\(")
 _PLACEHOLDER = re.compile(r"\{[^{}]*\}")
-_ADDRESS = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}|\[?::|\blocalhost\b|\*:", re.IGNORECASE)
-_HOST_OPTIONS = {"--host", "--bind", "-b", "--listen", "--address", "--interface"}
-_LISTENS_ELSEWHERE = {"--uds", "--fd"}
 _THIS_COMPUTER = "127.0.0.1"
+_HOST_OPTIONS = ("--host", "--bind", "--listen", "--address", "--interface")
+_SHORT_HOST = re.compile(r"-[bhH]")
+_LISTENS_ELSEWHERE = {"--uds", "--fd"}
+_ELSEWHERE = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}|\[?::|\blocalhost\b|\*:|(?:^|=)0:", re.IGNORECASE)
+_HOST_VARIABLE = re.compile(r"_(?:HOST|BIND|LISTEN|ADDR|ADDRESS|INTERFACE)\Z")
 _VARIABLE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
-# What the connector sets or keeps out itself: a project does not replace it.
-_RESERVED = re.compile(r"(?:UV_|PYTHON|LD_|DYLD_|VIRTUAL_ENV\Z|PATH\Z|PATHEXT\Z|SYSTEM|WINDIR\Z|COMSPEC\Z|HOME\Z"
-                       r"|USERPROFILE\Z|APPDATA\Z|LOCALAPPDATA\Z|TEMP\Z|TMP\Z|TMPDIR\Z)")
+# What the connector sets or keeps out itself, and what steers a tool: a project does not replace it.
+_RESERVED = re.compile(r"(?:UV_|PYTHON|PIP_|LD_|DYLD_|SSL_|GIT_|NODE_|CONDA_|VIRTUAL_ENV\Z|PATH\Z|PATHEXT\Z|SYSTEM|WINDIR\Z"
+                       r"|COMSPEC\Z|HOME\Z|USERPROFILE\Z|APPDATA\Z|LOCALAPPDATA\Z|TEMP\Z|TMP\Z|TMPDIR\Z|.*_PROXY\Z)")
 
 
-def _entry_problem(entry) -> str | None:
-    """Why a command the project declares cannot be run as it is, never through a shell."""
-    if not isinstance(entry, list) or not entry or not all(isinstance(word, str) and word for word in entry):
-        return "a list of words, with the program first"
-    if not _PROGRAM.match(entry[0]):
-        return f"its program must be a plain name, not {entry[0]!r}"
-    if entry[0].lower().removesuffix(".exe") in _NOT_A_PROGRAM or any(_SHELL_TEXT.search(word) for word in entry):
-        return "it must not need a shell"
+def _python_problem(arguments: list[str]) -> str | None:
+    first = arguments[0] if arguments else ""
+    if first == "-m":
+        module = arguments[1] if len(arguments) > 1 else ""
+        if not _MODULE.match(module) or module.split(".")[0].lower() in _NOT_MODULES:
+            return "python -m needs a module of the application, not pip, ensurepip or venv"
+        return None
+    if not first or first.startswith("-") or first.startswith(("/", "\\", "~")) or ":" in first \
+            or ".." in re.split(r"[\\/]", first):
+        return "python runs a file of the project, or -m <module>, and nothing else"
     return None
 
 
+def _entry_problem(entry) -> str | None:
+    """Why a command the project declares cannot be run as it is. Its shape only: which console scripts exist is known
+    once the locked packages are installed, and the connector checks that then."""
+    if not isinstance(entry, list) or not entry or not all(isinstance(word, str) and word for word in entry):
+        return "a list of words, with the program first"
+    if not _PROGRAM.match(entry[0]) or entry[0].lower().endswith(_SCRIPTS):
+        return f"its program must be python or a package's console script, not {entry[0]!r}"
+    if any(_SHELL_TEXT.search(word) for word in entry):
+        return "it must not need a shell"
+    return _python_problem(entry[1:]) if entry[0].lower() in PYTHONS else None
+
+
+def _names_elsewhere(word: str) -> bool:
+    return bool(_ELSEWHERE.search(word.replace(_THIS_COMPUTER, "")))
+
+
 def _host_problem(run: list[str]) -> str | None:
-    """Why the application might listen anywhere but on this computer, as far as its command line shows."""
+    """Why the application might listen anywhere but on this computer, as far as its command line shows. A host option
+    must say so, in full: 127.0.0.1 elsewhere in the command says nothing about what it listens on."""
+    wanted = f"run must say --host {_THIS_COMPUTER}, in full, and name no other host"
     named = False
     for index, word in enumerate(run):
         option, _, value = word.partition("=")
-        if option in _LISTENS_ELSEWHERE:
-            return f"run must listen on {_THIS_COMPUTER} only, not through {option}"
-        if option in _HOST_OPTIONS:
+        if option in _LISTENS_ELSEWHERE or _SHORT_HOST.match(word) or _names_elsewhere(word):
+            return wanted
+        if len(option) > 2 and any(full.startswith(option) for full in _HOST_OPTIONS):
             value = value or (run[index + 1] if index + 1 < len(run) else "")
-            if value.split(":")[0] != _THIS_COMPUTER:
-                return f"run must listen on {_THIS_COMPUTER} only, not {value}"
-        found = [text for text in _ADDRESS.findall(value or word) if text != _THIS_COMPUTER]
-        if found:
-            return f"run must listen on {_THIS_COMPUTER} only, not {found[0]}"
-        named = named or _THIS_COMPUTER in word
-    return None if named else f"run must say {_THIS_COMPUTER}"
+            if option not in _HOST_OPTIONS or value not in (_THIS_COMPUTER, f"{_THIS_COMPUTER}:{{port}}"):
+                return wanted
+            named = True
+    return None if named else wanted
+
+
+def _environment_problem(environment: dict) -> str | None:
+    """A host an application or its server reads from the environment, in the same words."""
+    for name, value in environment.items():
+        host = _HOST_VARIABLE.search(name) and value.split(":")[0] != _THIS_COMPUTER
+        if host or any(_names_elsewhere(word) or _SHORT_HOST.fullmatch(word) for word in value.split()):
+            return f"{name} must name {_THIS_COMPUTER} and no other host"
+    return None
 
 
 def preview(declaration: dict | None) -> dict | None:
     """How the project is run on the person's computer, if it says: `setup` (commands), `run` (a command) and
-    `environment`. None when it says nothing; {"invalid": reason} when IT must correct it. Only what cannot reach a
-    shell or listen beyond this computer is valid: this runs outside every sandbox (docs/barriers.md)."""
+    `environment`. None when it says nothing; {"invalid": reason} when IT must correct it. This catches slips, not
+    malice: IT reviews the declaration, as anything else on the main branch (docs/barriers.md)."""
     if declaration is None:
         return None
     try:
@@ -183,4 +213,7 @@ def preview(declaration: dict | None) -> dict | None:
     reserved = [name for name in environment if not _VARIABLE.match(name) or _RESERVED.match(name)]
     if reserved:
         return {"invalid": f"[preview.environment] cannot set {', '.join(sorted(reserved))}; IT corrects it"}
+    problem = _environment_problem(environment)
+    if problem:
+        return {"invalid": f"[preview.environment] {problem}; IT corrects it"}
     return {"setup": setup, "run": run, "environment": environment}

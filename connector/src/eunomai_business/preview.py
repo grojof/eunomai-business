@@ -35,6 +35,7 @@ _READY_WAIT = 120.0  # seconds the application has to answer
 _STEP_LIMIT = 600.0  # seconds for the installation and for each setup step
 _PREFIX = "eunomai-preview-"
 _LAST_LINES = 15
+_LOOPBACK = {"0100007F", "00000000000000000000000001000000", "0000000000000000FFFF00000100007F"}
 
 # What uv and the operating system need. Everything else stays out: the person's tokens, the connector's settings
 # (EUNOMAI_*), uv's and pip's own (a variable can name another index), and whatever else the computer has.
@@ -44,7 +45,7 @@ _SYSTEM = ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "OS", "N
 _PROXY = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy")
 _INSTALL = ("sync", "--frozen", "--no-dev", "--no-install-project", "--no-build", "--no-config", "--system-certs",
             "--managed-python")
-_RUN = ("run", "--frozen", "--no-sync", "--no-dev", "--no-config", "--managed-python")
+_RUN = ("run", "--frozen", "--no-sync", "--no-dev", "--no-build", "--no-config", "--managed-python")
 _HIDDEN = {"creationflags": 0x08000000} if sys.platform == "win32" else {}  # no console window flashes on the screen
 
 # It outlives a connector that is killed: when its input ends without "done", it stops the group (where there is no
@@ -334,8 +335,11 @@ class _Preview:
         self._remember()
 
     def environment(self, uv: str, extra: dict | None = None, installing: bool = False) -> dict:
+        """What uv and the system need. What runs finds only the project's own programs on its PATH."""
         system = os.environ.get("SYSTEMROOT", "")
-        path = [str(Path(uv).parent), *([f"{system}\\System32", system] if system else ["/usr/bin", "/bin"])]
+        path = [str(self.environment_folder / ("Scripts" if system else "bin"))]
+        if installing:
+            path = [str(Path(uv).parent), *([f"{system}\\System32", system] if system else ["/usr/bin", "/bin"])]
         built = {key: os.environ[key] for key in _SYSTEM if key in os.environ}
         built.update({"PATH": os.pathsep.join(path), "NO_COLOR": "1", "UV_PROJECT_ENVIRONMENT": str(self.environment_folder),
                       "UV_CACHE_DIR": self.uv_cache, "UV_PYTHON_INSTALL_DIR": self.uv_pythons,
@@ -426,34 +430,73 @@ def _answers(port: int) -> bool:
         connection.close()
 
 
+def _windows_beyond(lines: list[str], port: int, tree: set[int]) -> bool:
+    """From `netstat -ano`: whether the tree listens anywhere but here, on any port. The state, in the middle, is in
+    the computer's language and may be two words; a listener has no remote port."""
+    for line in lines:
+        words = line.split()
+        if len(words) >= 5 and words[0].startswith("TCP") and words[2].endswith(":0") and words[-1].isdigit():
+            address, _, listening = words[1].rpartition(":")
+            if (int(words[-1]) in tree or listening == str(port)) and address not in ("127.0.0.1", "[::1]"):
+                return True
+    return False
+
+
+def _linux_beyond(tables: list[str], port: int) -> bool:
+    """From /proc/net/tcp and tcp6: whether the port listens anywhere but on 127.0.0.1 or ::1."""
+    for table in tables:
+        for line in table.splitlines()[1:]:
+            fields = line.split()
+            address, _, hex_port = fields[1].partition(":") if len(fields) > 3 else ("", "", "0")
+            if fields[3:4] == ["0A"] and int(hex_port, 16) == port and address.upper() not in _LOOPBACK:
+                return True
+    return False
+
+
+def _lsof_beyond(text: str) -> bool:
+    """From `lsof -nP -iTCP:<port> -sTCP:LISTEN`, where there is no /proc: the name is the last word but one."""
+    return any(line.split()[-2].rpartition(":")[0] not in ("127.0.0.1", "[::1]")
+               for line in text.splitlines()[1:] if len(line.split()) > 2)
+
+
 def _listens_beyond_this_computer(current: _Preview, port: int) -> bool:
-    """A last look at what the application did with the address it was told to use, once, as it starts. On Windows the
-    system says what the tree listens on, on any port: a firewall silently drops a connection to the computer's own
-    address, so trying one proves nothing. Elsewhere, that attempt on the application's port is the look."""
+    """A last look at what the application did with the address it was told to use, once, as it starts: the system's
+    own table, since a firewall silently drops a connection to the computer's own address, so trying one proves
+    nothing. On Windows it covers the whole tree, on any port; elsewhere, the application's port."""
     if sys.platform == "win32":
         netstat = f"{os.environ.get('SYSTEMROOT', 'C:/Windows')}/System32/netstat.exe"
         lines = [line for protocol in ("TCP", "TCPv6") for line in subprocess.run(
             [netstat, "-ano", "-p", protocol], capture_output=True, text=True, timeout=30, errors="replace",
             **_HIDDEN).stdout.splitlines()]
-        tree = current.tree.processes()
-        for line in lines:
-            words = line.split()  # the state in the middle is in the computer's language; a listener has no remote port
-            if len(words) == 5 and words[0].startswith("TCP") and words[2].endswith(":0") and words[4].isdigit():
-                address, _, listening = words[1].rpartition(":")
-                if (int(words[4]) in tree or listening == str(port)) and address not in ("127.0.0.1", "[::1]"):
-                    return True
-        return False
-    try:
-        addresses = socket.gethostbyname_ex(socket.gethostname())[2]
-    except OSError:
-        return False
-    for address in addresses:
-        if not address.startswith("127."):
-            with socket.socket() as probe:
-                probe.settimeout(0.5)
-                if probe.connect_ex((address, port)) == 0:
-                    return True
-    return False
+        return _windows_beyond(lines, port, current.tree.processes())
+    tables = [Path(f"/proc/net/{name}") for name in ("tcp", "tcp6")]
+    if tables[0].exists():
+        return _linux_beyond([table.read_text() for table in tables if table.exists()], port)
+    return _lsof_beyond(subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True,
+                                       timeout=30, **_HIDDEN).stdout)
+
+
+def _console_scripts(environment: Path) -> set[str]:
+    """The programs the installed packages declare, which is what the lock installed and nothing else on the computer."""
+    found = set()
+    for points in environment.rglob("*.dist-info/entry_points.txt"):
+        section = ""
+        for line in points.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if line.startswith("["):
+                section = line
+            elif section == "[console_scripts]" and "=" in line:
+                found.add(line.split("=")[0].strip().lower())
+    return found
+
+
+def _check_programs(current: _Preview, declared: dict) -> None:
+    """What may run: python, as the declaration's shape allows it, or a console script of a package in the lock."""
+    scripts = _console_scripts(current.environment_folder)
+    for entry in [*declared["setup"], declared["run"]]:
+        program = entry[0].lower().removesuffix(".exe")
+        if program not in settings.PYTHONS and (program not in scripts or program in settings.NOT_SCRIPTS):
+            raise current.failed(f"checking {entry[0]}", f"{entry[0]} is not a console script of a package in the lock")
 
 
 def _bring_up(current: _Preview, declared: dict) -> None:
@@ -461,6 +504,7 @@ def _bring_up(current: _Preview, declared: dict) -> None:
     uv = _uv()
     current.uv_cache, current.uv_pythons = _uv_folder(uv, "cache", "dir"), _uv_folder(uv, "python", "dir")
     current.step(uv, list(_INSTALL), current.environment(uv, installing=True), "installing")
+    _check_programs(current, declared)
     environment = current.environment(uv, declared["environment"])
     for entry in declared["setup"]:
         current.step(uv, [*_RUN, *entry], environment, f"setup: {' '.join(entry)}")
@@ -534,7 +578,7 @@ def _answer(current: _Preview) -> dict:
 
 def start(workspace: str) -> dict:
     """See the application on this computer. Call it again while the answer is `starting`."""
-    if not settings.load()["app_preview"]:
+    if settings.load()["app_preview"] is not True:
         return {"workspace": workspace, "status": "not_turned_on",
                 "user_message": "Seeing the application on your computer is not turned on in your organization. IT "
                                 "decides that."}

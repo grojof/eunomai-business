@@ -8,7 +8,6 @@ real: a preview that survives its stop is the failure these exist for.
 import json
 import os
 import shutil
-import socket
 import subprocess
 import sys
 import textwrap
@@ -177,20 +176,31 @@ def test_a_declaration_that_is_not_valid_goes_to_it(signed_in, workspaces, turne
     assert answer["status"] == "needs_it" and "preview" in answer["it_report"] and not pids.exists()
 
 
+GOOD = 'run = ["x", "--host", "127.0.0.1", "--port", "{port}"]'
+
+
 @pytest.mark.parametrize("text, reason", [
     ('run = "uvicorn app:app --host 127.0.0.1 --port {port}"', "a list"),
     ('run = "python app.py && del *"', "a list"),
     ('run = []', "a list"),
     ('run = ["uvicorn app:app --host 127.0.0.1 --port {port}"]', "program"),
-    ('run = ["sh", "-c", "uvicorn --host 127.0.0.1 --port {port}"]', "shell"),
-    ('run = ["bash", "-c", "x --host 127.0.0.1 --port {port}"]', "shell"),
-    ('run = ["cmd", "/c", "x --host 127.0.0.1 --port {port}"]', "shell"),
-    ('run = ["cmd.exe", "/c", "x --host 127.0.0.1 --port {port}"]', "shell"),
-    ('run = ["powershell", "-c", "x --host 127.0.0.1 --port {port}"]', "shell"),
-    ('run = ["pwsh", "-c", "x --host 127.0.0.1 --port {port}"]', "shell"),
-    ('run = ["uv", "pip", "install", "x", "--host", "127.0.0.1", "--port", "{port}"]', "shell"),
     ('run = ["/usr/bin/python", "--host", "127.0.0.1", "--port", "{port}"]', "program"),
     ('run = ["..\\\\evil.exe", "--host", "127.0.0.1", "--port", "{port}"]', "program"),
+    ('run = ["app.py", "--host", "127.0.0.1", "--port", "{port}"]', "program"),
+    ('run = ["app.pyw", "--host", "127.0.0.1", "--port", "{port}"]', "program"),
+    ('run = ["APP.PYZ", "--host", "127.0.0.1", "--port", "{port}"]', "program"),
+    ('run = ["python", "-c", "x", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python3", "-X", "dev", "app.py", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python", "../app.py", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python", "/tmp/app.py", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python", "-m", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python", "-m", "pip", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python", "-m", "pip.__main__", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python", "-m", "ensurepip", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    ('run = ["python", "-m", "venv", "--host", "127.0.0.1", "--port", "{port}"]', "python"),
+    (GOOD + '\nsetup = [["python", "-m", "pip", "install", "evil"]]', "python"),
+    (GOOD + '\nsetup = [["python", "-c", "print(1)"]]', "python"),
     ('run = ["x", "--host", "127.0.0.1", "--port", "{port}", "&&", "del"]', "shell"),
     ('run = ["x", "--host", "127.0.0.1", "--port", "{port}; del"]', "shell"),
     ('run = ["x", "--host", "127.0.0.1", "--port", "{port}", "$(whoami)"]', "shell"),
@@ -202,28 +212,52 @@ def test_a_declaration_that_is_not_valid_goes_to_it(signed_in, workspaces, turne
     ('run = ["x", "--host", "::", "--port", "{port}"]', "127.0.0.1"),
     ('run = ["x", "--host", "localhost", "--port", "{port}"]', "127.0.0.1"),
     ('run = ["x", "--host", "192.168.1.5", "--port", "{port}"]', "127.0.0.1"),
+    ('run = ["x", "--host", "mypc", "--port", "{port}"]', "127.0.0.1"),
     ('run = ["x", "--host", "127.0.0.1", "--host", "0.0.0.0", "--port", "{port}"]', "127.0.0.1"),
+    ('run = ["x", "--host=127.0.0.1", "--host", "0.0.0.0", "--port", "{port}"]', "127.0.0.1"),
     ('run = ["gunicorn", "-b", "0.0.0.0:{port}", "--bind", "127.0.0.1:{port}"]', "127.0.0.1"),
     ('run = ["gunicorn", "--bind=0.0.0.0:{port}"]', "127.0.0.1"),
     ('run = ["x", "runserver", "0.0.0.0:{port}"]', "127.0.0.1"),
     ('run = ["x", "--port", "{port}"]', "127.0.0.1"),
     ('run = ["x", "--host", "127.0.0.1", "--uds", "/tmp/x", "--port", "{port}"]', "127.0.0.1"),
     ('run = ["x", "--host", "127.0.0.1", "--fd", "3", "--port", "{port}"]', "127.0.0.1"),
+    # 127.0.0.1 somewhere else in the command says nothing
+    ('run = ["python", "manage.py", "runserver", "0:{port}", "--note=127.0.0.1"]', "127.0.0.1"),
+    ('run = ["flask", "run", "-h", "0", "-p", "{port}", "--x=127.0.0.1"]', "127.0.0.1"),
+    ('run = ["python", "-m", "http.server", "{port}", "--bi", "0", "--x=127.0.0.1"]', "127.0.0.1"),
+    ('run = ["gunicorn", "-b0:{port}", "--x=127.0.0.1"]', "127.0.0.1"),
+    ('run = ["flask", "run", "-h", "mypc", "-p", "{port}", "--x=127.0.0.1"]', "127.0.0.1"),
+    ('run = ["x", "-H", "0:0:0:0:0:0:0:0", "{port}", "127.0.0.1"]', "127.0.0.1"),
+    ('run = ["x", "--host", "127.0.0.1", "-h", "0", "--port", "{port}"]', "127.0.0.1"),
+    ('run = ["x", "--ho", "0.0.0.0", "--host", "127.0.0.1", "--port", "{port}"]', "127.0.0.1"),
+    ('run = ["gunicorn", "-b", "127.0.0.1:{port}"]', "127.0.0.1"),
+    ('run = ["x", "runserver", "127.0.0.1:{port}"]', "127.0.0.1"),
     ('run = ["x", "--host", "127.0.0.1"]', "{port}"),
     ('run = ["x", "--host", "127.0.0.1", "--port", "8000"]', "{port}"),
     ('run = ["x", "--host", "127.0.0.1", "--port", "{port}", "--name", "{user}"]', "{port}"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\nsetup = "python -m x"', "setup"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\nsetup = ["python", "-m", "x"]', "setup"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\nsetup = [["sh", "-c", "x"]]', "shell"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\nsetup = [["python", "{port}"]]', "setup"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\nshell = true', "takes"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\n[preview.environment]\nA = 1', "text"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\n[preview.environment]\nPATH = "x"', "environment"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\n[preview.environment]\nUV_INDEX_URL = "x"', "environment"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\n[preview.environment]\nPYTHONPATH = "x"', "environment"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\n[preview.environment]\nUSERPROFILE = "x"', "environment"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\n[preview.environment]\nLD_PRELOAD = "x"', "environment"),
-    ('run = ["x", "--host", "127.0.0.1", "--port", "{port}"]\n[preview.environment]\nlower = "x"', "environment"),
+    (GOOD + '\nsetup = "python -m x"', "setup"),
+    (GOOD + '\nsetup = ["python", "-m", "x"]', "setup"),
+    (GOOD + '\nsetup = [["python", "{port}"]]', "setup"),
+    (GOOD + '\nshell = true', "takes"),
+    (GOOD + '\n[preview.environment]\nA = 1', "text"),
+    (GOOD + '\n[preview.environment]\nPATH = "x"', "environment"),
+    (GOOD + '\n[preview.environment]\nUV_INDEX_URL = "x"', "environment"),
+    (GOOD + '\n[preview.environment]\nPYTHONPATH = "x"', "environment"),
+    (GOOD + '\n[preview.environment]\nUSERPROFILE = "x"', "environment"),
+    (GOOD + '\n[preview.environment]\nLD_PRELOAD = "x"', "environment"),
+    (GOOD + '\n[preview.environment]\nlower = "x"', "environment"),
+    (GOOD + '\n[preview.environment]\nHTTPS_PROXY = "http://evil:1"', "environment"),
+    (GOOD + '\n[preview.environment]\nPIP_INDEX_URL = "http://x/"', "environment"),
+    (GOOD + '\n[preview.environment]\nSSL_CERT_FILE = "x"', "environment"),
+    (GOOD + '\n[preview.environment]\nNODE_OPTIONS = "--require ./x.js"', "environment"),
+    (GOOD + '\n[preview.environment]\nGIT_SSH_COMMAND = "x"', "environment"),
+    (GOOD + '\n[preview.environment]\nGUNICORN_CMD_ARGS = "-b 0.0.0.0:80"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nGUNICORN_CMD_ARGS = "--bind=0.0.0.0:80"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nGUNICORN_CMD_ARGS = "-b 0:80"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nFLASK_RUN_HOST = "0.0.0.0"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nFLASK_RUN_HOST = "mypc"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nUVICORN_HOST = "0"', "127.0.0.1"),
+    (GOOD + '\n[preview.environment]\nAPP_BIND = "*:80"', "127.0.0.1"),
 ])
 def test_a_declaration_that_could_escape_is_not_valid(text, reason):
     found = settings.preview({"text": f"[preview]\n{text}\n"})
@@ -246,11 +280,20 @@ def test_the_shape_in_the_documentation_is_valid():
 
 
 @pytest.mark.parametrize("run", [
-    '["gunicorn", "--bind", "127.0.0.1:{port}"]', '["gunicorn", "-b", "127.0.0.1:{port}"]',
-    '["x", "runserver", "127.0.0.1:{port}"]', '["x", "--host=127.0.0.1", "--port={port}"]',
+    '["gunicorn", "--bind", "127.0.0.1:{port}"]', '["gunicorn", "--bind=127.0.0.1:{port}"]',
+    '["x", "--host=127.0.0.1", "--port={port}"]', '["python", "-m", "app.server", "--host", "127.0.0.1", "--port", "{port}"]',
+    '["python", "app/main.py", "--host", "127.0.0.1", "--port", "{port}"]',
+    '["flask", "--app", "app", "run", "--host", "127.0.0.1", "--port", "{port}"]',
 ])
 def test_other_ways_of_saying_this_computer_only_are_valid(run):
     assert "invalid" not in settings.preview({"text": f"[preview]\nrun = {run}\n"})
+
+
+def test_ordinary_environment_values_are_valid():
+    found = settings.preview({"text": f'[preview]\n{GOOD}\n[preview.environment]\nAPP_ENVIRONMENT = "development"\n'
+                                      'FLASK_RUN_HOST = "127.0.0.1"\nGUNICORN_CMD_ARGS = "--workers 2"\n'
+                                      'WEB_CONCURRENCY = "2"\nGREETING = "version 1.2 of the demo"\n'})
+    assert "invalid" not in found
 
 
 @pytest.mark.parametrize("text", ['[test]\nbranch = "x"\n', "not toml ["])
@@ -315,6 +358,46 @@ def test_nothing_saved_is_a_mistake_in_the_call(signed_in, workspaces, turned_on
     name, _ = project(signed_in, declaration(pids))
     monkeypatch.setattr(gitops, "saved_head", lambda workspace: (_ for _ in ()).throw(PermissionError("nothing saved")))
     assert "error" in tools.app_preview(name)
+
+
+def test_a_turned_on_setting_must_be_exactly_true(signed_in, workspaces, browser, pids, monkeypatch):
+    name, _ = project(signed_in, declaration(pids))
+    for value in ("false", "yes", 1):
+        monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"app_preview": value}))
+        assert tools.app_preview(name)["status"] == "not_turned_on"
+        assert tools._specialist_settings(name)["preview"]["available"] is False
+
+
+def table(*lines: str) -> list[str]:
+    return ["Conexiones activas", "  Proto  Dirección local  Dirección remota  Estado  PID", *lines]
+
+
+@pytest.mark.parametrize("lines, tree, port, beyond", [
+    (["  TCP  127.0.0.1:8000  0.0.0.0:0  LISTENING  10"], {10}, 8000, False),
+    (["  TCP  [::1]:8000  [::]:0  LISTENING  10"], {10}, 8000, False),
+    (["  TCP  0.0.0.0:8000  0.0.0.0:0  LISTENING  10"], {10}, 8000, True),
+    (["  TCP  [::]:8000  [::]:0  LISTENING  10"], {10}, 8000, True),
+    (["  TCP  0.0.0.0:9000  0.0.0.0:0  LISTENING  10"], {10}, 8000, True),  # another port of the tree
+    (["  TCP  0.0.0.0:9000  0.0.0.0:0  LISTENING  11"], {10}, 8000, False),  # someone else's
+    (["  TCP  0.0.0.0:8000  0.0.0.0:0  EN ESCUCHA  10"], {10}, 8000, True),  # a state of two words
+    (["  TCP  192.168.1.5:8000  1.2.3.4:443  ESTABLISHED  10"], {10}, 8000, False),
+])
+def test_the_listening_table_of_windows_is_read_in_any_language(lines, tree, port, beyond):
+    assert preview._windows_beyond(table(*lines), port, tree) is beyond
+
+
+LINUX_TABLE = ("  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+               "   0: {address}:1F90 00000000:0000 {state} 00000000:00000000 00:00000000 00000000  1000        0 1\n")
+
+
+@pytest.mark.parametrize("address, state, beyond", [
+    ("0100007F", "0A", False), ("00000000", "0A", True), ("0101007F", "0A", True), ("0501A8C0", "0A", True),
+    ("00000000", "01", False), ("00000000000000000000000001000000", "0A", False),
+    ("0000000000000000FFFF00000100007F", "0A", False), ("00000000000000000000000000000000", "0A", True),
+])
+def test_the_listening_table_of_linux_is_read_not_guessed(address, state, beyond):
+    """A host name that resolves to 127.0.1.1 used to be skipped."""
+    assert preview._linux_beyond([LINUX_TABLE.format(address=address, state=state)], 0x1F90) is beyond
 
 
 def test_a_task_in_the_cloud_is_refused_by_the_guard(monkeypatch):
@@ -392,6 +475,124 @@ def test_the_environment_has_no_secret(signed_in, workspaces, turned_on, pids, m
     assert set(seen) <= allowed, set(seen) - allowed
 
 
+def evil_package(root: Path, marker: Path) -> Path:
+    """A local package no lockfile of the project's names, whose build leaves a mark. Nothing leaves this computer."""
+    package = root / "evilpkg"
+    (package / "evilpkg").mkdir(parents=True)
+    (package / "evilpkg" / "__init__.py").write_text("VALUE = 'unaudited package imported'\n", encoding="utf-8")
+    (package / "pyproject.toml").write_text('[project]\nname = "evilpkg"\nversion = "1.0"\n[build-system]\nrequires = []\n'
+                                            'build-backend = "b"\nbackend-path = ["."]\n', encoding="utf-8", newline="\n")
+    (package / "b.py").write_text(textwrap.dedent(f"""\
+        import pathlib, zipfile
+        pathlib.Path({marker.as_posix()!r}).write_text("code ran at installation")
+        META = "Metadata-Version: 2.1\\nName: evilpkg\\nVersion: 1.0\\n"
+        WHEEL = "Wheel-Version: 1.0\\nGenerator: x\\nRoot-Is-Purelib: true\\nTag: py3-none-any\\n"
+        def get_requires_for_build_wheel(c=None): return []
+        def prepare_metadata_for_build_wheel(d, c=None):
+            p = pathlib.Path(d) / "evilpkg-1.0.dist-info"; p.mkdir()
+            (p / "METADATA").write_text(META); (p / "WHEEL").write_text(WHEEL)
+            return p.name
+        def build_wheel(d, c=None, m=None):
+            n = "evilpkg-1.0-py3-none-any.whl"
+            with zipfile.ZipFile(pathlib.Path(d) / n, "w") as z:
+                z.write("evilpkg/__init__.py")
+                z.writestr("evilpkg-1.0.dist-info/METADATA", META)
+                z.writestr("evilpkg-1.0.dist-info/WHEEL", WHEEL)
+                z.writestr("evilpkg-1.0.dist-info/RECORD", "")
+            return n
+        """), encoding="utf-8", newline="\n")
+    return package
+
+
+def script_with_its_own_lockfile(folder: Path, package: Path, marker: Path) -> None:
+    """How a saved version would do it: inline metadata, and `uv lock --script` beside the script."""
+    (folder / "app.py").write_text(
+        f'# /// script\n# requires-python = ">=3.12"\n# dependencies = ["evilpkg @ {package.as_uri()}"]\n# ///\n'
+        + APP.decode().replace("import http.server,", "import evilpkg, http.server,"), encoding="utf-8", newline="\n")
+    subprocess.run(["uv", "lock", "--script", "app.py", "--no-config"], cwd=folder, check=True, capture_output=True)
+    assert (folder / "app.py.lock").exists()
+    marker.unlink(missing_ok=True)
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_script_with_its_own_lockfile_is_refused_end_to_end(signed_in, workspaces, turned_on, browser, pids, tmp_path):
+    marker = tmp_path / "BUILD_BACKEND_RAN"
+    name, ws = project(signed_in, declaration(pids))
+    script_with_its_own_lockfile(ws, evil_package(tmp_path, marker), marker)
+    gitops.save(name, "Inline metadata and a lockfile beside the script")
+    answer = show(name)
+    assert answer["status"] == "audit_refused" and browser == [] and not pids.exists() and not marker.exists()
+
+
+@pytest.mark.preview
+@needs_uv
+def test_even_past_the_audit_the_unaudited_package_does_not_run(signed_in, workspaces, turned_on, browser, pids,
+                                                                tmp_path, monkeypatch):
+    """Two more layers: `python app.py` ignores a script's metadata, and uv may not build anything."""
+    marker = tmp_path / "BUILD_BACKEND_RAN"
+    name, ws = project(signed_in, declaration(pids))
+    script_with_its_own_lockfile(ws, evil_package(tmp_path, marker), marker)
+    gitops.save(name, "Inline metadata and a lockfile beside the script")
+    monkeypatch.setattr(deps, "audit", lambda folder: {"verdict": "allowed", "files": [], "packages": 0, "blocked": [],
+                                                       "not_pinned": []})
+    answer = show(name)
+    assert answer["status"] == "needs_it" and "evilpkg" in answer["it_report"], answer
+    assert browser == [] and not marker.exists()
+
+
+@pytest.mark.preview
+@needs_uv
+def test_uv_refuses_to_build_what_a_script_asks_for(tmp_path):
+    """The script form itself, had it been declared: `--no-sync` does not cover it, `--no-build` does."""
+    marker = tmp_path / "BUILD_BACKEND_RAN"
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "pyproject.toml").write_bytes(PYPROJECT)
+    (app / "uv.lock").write_bytes(LOCK)
+    script_with_its_own_lockfile(app, evil_package(tmp_path, marker), marker)
+    run = subprocess.run(["uv", *preview._RUN, "app.py", "--host", "127.0.0.1", "--port", "1"], cwd=app,
+                         capture_output=True, text=True, timeout=120,
+                         env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(tmp_path / "env"),
+                              "UV_CACHE_DIR": str(tmp_path / "cache"), "PIDS_FILE": str(tmp_path / "p")})
+    assert run.returncode != 0 and not marker.exists(), run.stderr
+
+
+@pytest.mark.preview
+@needs_uv
+@pytest.mark.parametrize("program", ["sh", "cmd", "powershell", "mshta", "schtasks", "pip", "pythonw", "activate", "uv"])
+def test_a_program_that_is_no_packages_console_script_does_not_run(signed_in, workspaces, turned_on, browser, pids,
+                                                                   program):
+    name, _ = project(signed_in, declaration(pids, f'["{program}", "/c", "x"]'))
+    answer = show(name)
+    assert answer["status"] == "needs_it" and "console script" in answer["it_report"], answer
+    assert not pids.exists() and browser == [] and folders() == []
+    run = f'["{program}", "--host", "127.0.0.1", "--port", "{{port}}"]'
+    other, _ = project(signed_in, declaration(pids, run=run))
+    assert show(other)["status"] == "needs_it" and not pids.exists()
+
+
+@pytest.mark.preview
+@needs_uv
+def test_the_console_script_of_a_package_in_the_lock_is_allowed(tmp_path):
+    environment = tmp_path / "environment" / "Lib" / "site-packages" / "uvicorn-0.54.dist-info"
+    environment.mkdir(parents=True)
+    (environment / "entry_points.txt").write_text("[console_scripts]\nuvicorn = uvicorn.main:main\n\n[other]\nx = y\n")
+    assert preview._console_scripts(tmp_path / "environment") == {"uvicorn"}
+
+
+@pytest.mark.preview
+@needs_uv
+def test_the_run_path_holds_no_system_folder(signed_in, workspaces, turned_on, pids):
+    name, _ = project(signed_in, declaration(pids))
+    answer = show(name)
+    seen = httpx.get(answer["url"] + "env").json()
+    assert answer["status"] == "ready"
+    assert "system32" not in seen["PATH"].lower() and seen["PATH"].count(os.pathsep) <= 1
+    if sys.platform != "win32":
+        assert "/usr/bin" not in seen["PATH"]
+
+
 @pytest.mark.preview
 @needs_uv
 def test_setup_steps_run_before_the_application(signed_in, workspaces, turned_on, pids):
@@ -423,15 +624,9 @@ def test_an_application_that_does_not_start_is_told_plainly(signed_in, workspace
 @pytest.mark.preview
 @needs_uv
 @pytest.mark.parametrize("mode", ["everywhere", pytest.param("second", marks=pytest.mark.skipif(
-    sys.platform != "win32", reason="only the system's own table shows another port"))])
+    sys.platform != "win32", reason="elsewhere the table is read for the application's port"))])
 def test_an_application_that_answers_beyond_this_computer_is_stopped(signed_in, workspaces, turned_on, browser, pids,
                                                                      mode):
-    try:
-        addresses = [a for a in socket.gethostbyname_ex(socket.gethostname())[2] if not a.startswith("127.")]
-    except OSError:
-        addresses = []
-    if not addresses and sys.platform != "win32":
-        pytest.skip("this computer has no other address to reach it on")
     name, _ = project(signed_in, declaration(pids, mode=mode))
     answer = show(name)
     assert answer["status"] == "needs_it" and "beyond this computer" in answer["it_report"] and browser == []

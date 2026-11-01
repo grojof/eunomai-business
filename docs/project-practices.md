@@ -145,14 +145,16 @@ APP_ENVIRONMENT = "development"
 
 | Rule | Why |
 |---|---|
-| Each command is a list of words, run as `uv run --frozen <words>`. No shell: not as the program, nor `&&`, `\|`, `;`, `>` or `$(` in a word | What IT reviewed is what runs |
+| Each command is a list of words, run as `uv run --frozen <words>`, with no shell text (`&&`, `\|`, `;`, `>`, `$(`) in a word | What IT reviewed is what runs |
+| The program is `python <a file of the project>`, `python -m <module>` other than `pip`, `ensurepip` or `venv`, or a console script of a package in `uv.lock`. Never `python -c`, nor a script as the program (`app.py`): write `python app.py` | The last is checked once the packages are installed. A script as the program would bring its own metadata and lockfile |
 | `{port}` is the only substitution, in `run` only, and `run` must use it | The connector picks a free port |
-| `run` says `127.0.0.1`, and no other host, socket or file descriptor | Nothing is offered to the network |
-| `[preview.environment]` takes names and text, and cannot set `PATH`, the home and temporary folders, or `UV_*`, `PYTHON*`, `LD_*`, `DYLD_*` | The connector builds the environment from a short list; no secrets here either, this file is in the repository |
+| `run` has a host option saying `--host 127.0.0.1` or `--bind 127.0.0.1:{port}`, in full, and no other host, wildcard, socket or file descriptor. `-h` and `-b` are not read: use the long option | Nothing is offered to the network |
+| `[preview.environment]` takes names and text, names no other host, and cannot set `PATH`, the home and temporary folders, proxies, or `UV_*`, `PYTHON*`, `PIP_*`, `LD_*`, `DYLD_*`, `SSL_*`, `GIT_*`, `NODE_*`, `CONDA_*` | The connector builds the environment from a short list; no secrets here either, this file is in the repository |
 | The project has a `uv.lock`, and what it needs at run time is in its main dependencies | Development packages are not installed, the project itself is not built, and only wheels are used |
 | The application starts with example data and without credentials | A person's computer has no database or secrets of the project's. Production stays the default: development only when set explicitly |
 
-A declaration that breaks a rule shows nothing and goes to IT. Protect it like `AGENTS.md`.
+A declaration that breaks a rule shows nothing and goes to IT. These rules catch slips, not malice: **IT reviews the
+declaration**, so protect it like `AGENTS.md`.
 
 ## Checks on the server
 
