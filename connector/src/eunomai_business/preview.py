@@ -44,6 +44,10 @@ _PREFIX = "eunomai-preview-"
 _LAST_LINES = 15
 _END_WAIT = 30.0  # seconds a connector waits for a watcher that was asked to end
 _STALE = 2 * 60 * 60  # seconds after which a preview's folder no state file names is nobody's
+_HEX = re.compile(r"[0-9a-f]+")
+_PHASES = ("preparing", "ready", "ending")
+_STARTING = ("The application is being prepared; the first time can take a couple of minutes. If this reply ends before "
+             "it is ready, the preparation stops and starts over.")
 _PYTHON_VERSION = re.compile(r"3\.\d+(\.\d+)?")
 _LOOPBACK = {"0100007F", "00000000000000000000000001000000", "0000000000000000FFFF00000100007F"}
 
@@ -152,10 +156,30 @@ def _read_state(state_path: Path) -> dict:
     return state if isinstance(state, dict) else {}
 
 
-def _found(workspace: str) -> dict:
-    """The preview of a workspace, if its watcher lives."""
-    path = _state_file(workspace)
-    return _read_state(path) if _watching(path) else {}
+def _whole_number(value: object, lowest: int, highest: int | None = None) -> bool:
+    return type(value) is int and value >= lowest and (highest is None or value <= highest)
+
+
+def _preview_state(path: Path) -> dict:
+    """The one reader of a state file. The application runs as the person and can write it, so every field is checked
+    by type and range, and anything else makes it a broken state: nothing, for whoever asks."""
+    state = _read_state(path)
+    try:
+        began, deadline, port = state["began"], state["deadline"], state["port"]
+        good = (isinstance(state["workspace"], str) and _state_file(state["workspace"]) == path
+                and isinstance(state["folder"], str) and Path(state["folder"]).name.startswith(_PREFIX)
+                and all(isinstance(state[key], str) and _HEX.fullmatch(state[key]) and len(state[key]) in lengths
+                        for key, lengths in (("token", (32,)), ("head", (40, 64)), ("declaration", (16,))))
+                and state["phase"] in _PHASES and type(state["keeps_running"]) is bool
+                and all(type(value) in (int, float) and 0 <= value for value in (began, deadline))
+                and began <= time.time() + 60
+                and (_whole_number(port, 1024, 65535) or (port == 0 and state["phase"] != "ready"))
+                and isinstance(state["groups"], list) and all(_whole_number(group, 2) for group in state["groups"])
+                and _whole_number(state["watcher"], 2) and isinstance(state["image"], str)
+                and (state["created"] is None or _whole_number(state["created"], 1)))
+    except (KeyError, TypeError, ValueError):
+        return {}
+    return state if good else {}
 
 
 def _clear(state_path: Path) -> bool:
@@ -176,19 +200,51 @@ def _clear(state_path: Path) -> bool:
     return ended
 
 
-def _end(path: Path) -> bool:
-    """Ask a live watcher to end its preview, from any connector. True only when it did, and its folder is gone."""
-    folder = _read_state(path).get("folder")
-    path.with_suffix(".stop").touch()
-    deadline = time.time() + _END_WAIT
+def _clear_if_free(state_path: Path) -> bool:
+    """`_clear`, only while holding the lock: between looking and clearing, a new watcher may have the workspace."""
+    alive = state_path.with_suffix(".alive")
+    try:
+        with open(alive, "a+b") as file:
+            if not watcher.lock(file):
+                return False
+            ended = _clear(state_path)
+            watcher.unlock(file)
+    except OSError:
+        return False
+    with contextlib.suppress(OSError):
+        alive.unlink(missing_ok=True)
+    return ended
+
+
+def _wait_for_watcher(path: Path, seconds: float) -> bool:
+    deadline = time.time() + seconds
     while _watching(path) and time.time() < deadline:
         time.sleep(0.05)
-    if _watching(path):
+    return not _watching(path)
+
+
+def _end_watcher(state: dict) -> bool:
+    """A watcher that does not answer, suspended or with its stop file taken away: the process the state names, if it
+    is the program and the start time said there, and the program it should be."""
+    own = watcher.normalized(getattr(sys, "_base_executable", sys.executable))
+    return bool(state) and state["image"] == own and watcher.end_process(state["watcher"], state["created"], own)
+
+
+def _end(path: Path) -> bool:
+    """End a preview from any connector, which asks its watcher first. True only when it ended, and its folder went."""
+    state = _preview_state(path)
+    folder = state.get("folder")
+    with contextlib.suppress(OSError):
+        path.with_suffix(".stop").touch()
+    if not _wait_for_watcher(path, _END_WAIT) and not (_end_watcher(state) and _wait_for_watcher(path, _END_WAIT)):
         return False
-    path.with_suffix(".stop").unlink(missing_ok=True)
-    if path.exists():  # it could not remove the folder: this connector tries
-        _clear(path)
-    return not path.exists() and not (folder and Path(folder).exists())
+    with contextlib.suppress(OSError):
+        path.with_suffix(".stop").unlink(missing_ok=True)
+        if sys.platform == "win32":  # it could not remove a file this connector was looking at
+            path.with_suffix(".alive").unlink(missing_ok=True)
+    if path.exists():  # it could not remove the folder, or it was ended: this connector does
+        _clear_if_free(path)
+    return not path.exists() and not (isinstance(folder, str) and Path(folder).exists())
 
 
 def _take_note(workspace: str) -> str:
@@ -207,7 +263,7 @@ def _sweep() -> None:
         if _watching(state_path):
             named.add(_read_state(state_path).get("folder"))
         else:
-            _clear(state_path)
+            _clear_if_free(state_path)
     for note in folder.glob("*.ended") if folder.is_dir() else ():
         if time.time() - note.stat().st_mtime > _STALE:
             note.unlink(missing_ok=True)
@@ -250,7 +306,7 @@ def _uv_folder(uv: str, *arguments: str) -> str:
 
 
 class _Preview:
-    def __init__(self, workspace: str, head: str, main: str | None = None, note: str = ""):
+    def __init__(self, workspace: str, head: str, main: str | None = None, note: str = "", declaration: str = "0" * 16):
         self.workspace, self.key, self.head, self.main, self.note = workspace, _key(workspace), head, main, note
         self.token = secrets.token_hex(16)
         self.folder = Path(tempfile.mkdtemp(prefix=_PREFIX))
@@ -259,16 +315,19 @@ class _Preview:
         for folder in (self.app, self.home, self.temp):
             folder.mkdir()
         (self.folder / "live").write_text(self.token, encoding="utf-8")
-        self.url, self.outcome, self.delivered, self.closed, self.handed_over = "", None, False, False, False
+        self.url, self.port, self.outcome, self.closed, self.handed_over = "", 0, None, False, False
         self.uv_cache, self.uv_pythons, self.python, self.keeps_running = "", "", (), False
         self.settled, self.ended = threading.Event(), threading.Event()
         self._closing, self._asking = threading.Lock(), threading.Lock()
         self.pipe = self._start_watcher()
         try:
             answer = self.ask({"folder": str(self.folder), "state": str(_state_file(workspace)), "token": self.token,
-                               "workspace": workspace, "head": head, "limit": TIME_LIMIT, "log": str(self.log)})
+                               "workspace": workspace, "head": head, "limit": TIME_LIMIT, "log": str(self.log),
+                               "declaration": declaration})
         except _Gone:
-            answer = {}
+            _remove(self.folder)
+            raise NeedsIT("The application could not be prepared on your computer. Your work is safe; IT can look at it.",
+                          "the process that looks after a preview ended as it started", {"Workspace": workspace}) from None
         if "watching" not in answer:
             self.pipe.stdin.close()
             _remove(self.folder)
@@ -310,7 +369,8 @@ class _Preview:
 
     def hand_over(self) -> None:
         """The application answers: from here on the preview is the watcher's, and nothing ties it to this process."""
-        self.ask({"do": "ready", "url": self.url})
+        if "error" in self.ask({"do": "ready", "port": self.port}):
+            raise self.failed("run", "the process that looks after a preview could not take it over")
         self.handed_over = True
         self.pipe.stdin.close()
         self.pipe.stdout.close()
@@ -399,6 +459,8 @@ class _Preview:
             deadline = time.time() + _END_WAIT
             while _watching(path) and _read_state(path).get("token") == self.token and time.time() < deadline:
                 time.sleep(0.05)
+            if _watching(path) and _read_state(path).get("token") == self.token:
+                _end(path)
         removed = _remove(self.folder)
         if _previews.get(self.key) is self:
             del _previews[self.key]
@@ -409,6 +471,11 @@ class _Preview:
 _lock = threading.Lock()
 _previews: dict[str, _Preview] = {}  # the ones this connector is preparing, until the answer has been given
 _unread: dict[str, _Preview] = {}  # one that ended without becoming ready, until a call has told why
+_fresh: dict[str, tuple[str, str]] = {}  # started here and not told yet as ready: its token and why it was started again
+
+
+def _address(port: int) -> str:
+    return f"http://127.0.0.1:{port}/"
 
 
 def _free_port() -> int:
@@ -539,9 +606,14 @@ def _bring_up(current: _Preview, declared: dict) -> None:
         time.sleep(0.2)
     if _listens_beyond_this_computer(current, port):
         raise current.failed("run", "the application answers beyond this computer")
-    current.url = f"http://127.0.0.1:{port}/"
+    current.port, current.url = port, _address(port)
     current.hand_over()
     webbrowser.open(current.url)
+
+
+def _fingerprint(declared: dict) -> str:
+    """What was declared when a preview started: a changed `[preview]` starts it again."""
+    return hashlib.sha256(json.dumps(declared, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def _how_long(minutes: int, keeps_running: bool) -> str:
@@ -585,7 +657,11 @@ def _prepared(current: _Preview, declared: dict) -> dict:
 
 def _work(current: _Preview, declared: dict) -> None:
     current.outcome = support.safe(_prepared, current, declared)
-    if current.outcome.get("status") != "ready":
+    if current.outcome.get("status") == "ready":
+        _fresh[current.key] = (current.token, current.note)  # from here on it is the watcher's, and the state speaks
+        if _previews.get(current.key) is current:
+            del _previews[current.key]
+    else:
         if not current.closed:  # a preview stopped or replaced has nothing left to tell
             _unread[current.key] = current
         current.close()
@@ -594,7 +670,8 @@ def _work(current: _Preview, declared: dict) -> None:
 
 
 _ENDED_BY_ITSELF = {"application": "It had stopped by itself, so it is being started again.",
-                    "time_limit": "It had reached its time limit, so it is being started again."}
+                    "time_limit": "It had reached its time limit, so it is being started again.",
+                    "silent": "It had stopped answering, so it is being started again."}
 
 
 def _with_note(answer: dict, note: str) -> dict:
@@ -606,39 +683,53 @@ def _with_note(answer: dict, note: str) -> dict:
 
 def _answer(current: _Preview) -> dict:
     if not current.settled.is_set():
-        return _with_note({"workspace": current.workspace, "status": "starting", "user_message":
-                           "The application is being prepared; the first time can take a couple of minutes."},
-                          current.note)
-    current.delivered = True
+        return _with_note(_starting(current.workspace), current.note)
     if _unread.get(current.key) is current:
         del _unread[current.key]
-    if _previews.get(current.key) is current and current.outcome.get("status") == "ready":
-        del _previews[current.key]
+    if current.outcome.get("status") == "ready":
+        _fresh.pop(current.key, None)
     return _with_note(current.outcome, current.note)
 
 
 def _running(workspace: str, state: dict) -> dict:
-    """The preview that is there, from any connector: its address and the time it has left, and no second copy."""
-    left = float(state.get("deadline") or 0) - time.time()
-    minutes, keeps_running = max(1, math.ceil(left / 60)), state.get("keeps_running") is True
-    url = str(state.get("url") or "")
-    webbrowser.open(url)
+    """The preview that is there, from any connector: its address and the time it has left, and no second copy. The
+    time never exceeds the limit, whatever the state says, and what it says of a version is not told as fact."""
+    limit = math.ceil(TIME_LIMIT / 60)
+    left = min(state["deadline"], state["began"] + TIME_LIMIT) - time.time()
+    minutes, keeps_running, url = min(limit, max(1, math.ceil(left / 60))), state["keeps_running"], _address(state["port"])
+    token, note = _fresh.get(_key(workspace), ("", ""))
+    first = token == state["token"]  # started by this connector, and the person was only told `starting`
+    if first:
+        del _fresh[_key(workspace)]
+    else:
+        webbrowser.open(url)
     saved = gitops.saved_summary(workspace)
-    return {"workspace": workspace, "status": "ready", "url": url, "version": str(state.get("head") or "")[:12],
-            "branch": saved["branch"], "unsaved_changes": saved["unsaved_changes"], "minutes": minutes,
-            "keeps_running": keeps_running, "already_running": True,
-            "user_message": f"The application is already running, at {url}, and is open in your browser. "
-                            f"{_how_long(minutes, keeps_running)}"}
+    words = (f"The application is open in your browser, at {url}." if first else
+             f"The application started earlier is still running, at {url}, and is open in your browser.")
+    return _with_note({"workspace": workspace, "status": "ready", "url": url, "version": state["head"][:12],
+                       "branch": saved["branch"], "unsaved_changes": saved["unsaved_changes"], "minutes": minutes,
+                       "keeps_running": keeps_running, "already_running": not first,
+                       "user_message": f"{words} {_how_long(minutes, keeps_running)}"}, note if first else "")
 
 
-def _NOT_STOPPED(workspace: str) -> dict:
-    return {"workspace": workspace, "status": "not_stopped",
-            "user_message": "The application could not be stopped from here. It stops by itself within the hour."}
+def _NOT_STOPPED(workspace: str, words: str = "The application could not be stopped from here and may still be "
+                                             "running. IT can look at it.") -> dict:
+    report = support.report(NeedsIT(words, "a preview could not be stopped, or its end confirmed",
+                                    {"Workspace": workspace}))
+    return {**report, "workspace": workspace, "status": "not_stopped"}
 
 
 def _starting(workspace: str) -> dict:
-    return {"workspace": workspace, "status": "starting",
-            "user_message": "The application is being prepared; the first time can take a couple of minutes."}
+    return {"workspace": workspace, "status": "starting", "user_message": _STARTING}
+
+
+def _still_answers(port: int) -> bool:
+    """A busy application may take a moment: only one that stays silent is taken for gone."""
+    for attempt in range(3):
+        if _answers(port):
+            return True
+        time.sleep(attempt)
+    return False
 
 
 def start(workspace: str) -> dict:
@@ -668,14 +759,22 @@ def start(workspace: str) -> dict:
             current.close()
             current = None
         if current is None:
-            state = _found(workspace)
-            if state and state.get("head") == head:
-                return _running(workspace, state) if state.get("phase") == "ready" else _starting(workspace)
-            if state and not _end(_state_file(workspace)):  # another saved version, whoever started it
-                return _NOT_STOPPED(workspace)
+            path, silent, wanted = _state_file(workspace), False, _fingerprint(declared)
+            if _watching(path):
+                state = _preview_state(path)
+                if state and state["head"] == head and state["declaration"] == wanted:
+                    if state["phase"] == "preparing":
+                        return _starting(workspace)
+                    if state["phase"] == "ready":
+                        if _still_answers(state["port"]):
+                            return _running(workspace, state)
+                        silent = True
+                if not _end(path):  # another version, a changed declaration, or a state that cannot be believed
+                    return _NOT_STOPPED(workspace)
             _sweep()
+            note = _take_note(workspace)
             try:
-                current = _previews[key] = _Preview(workspace, head, files.get("tip"), _take_note(workspace))
+                current = _previews[key] = _Preview(workspace, head, files.get("tip"), "silent" if silent else note, wanted)
             except _Taken:
                 return _starting(workspace)
             threading.Thread(target=_work, args=(current, declared), daemon=True).start()
@@ -692,16 +791,20 @@ def stop(workspace: str) -> dict:
     now is not."""
     path = _state_file(workspace)
     with _lock:
-        current, was_preparing = _previews.get(_key(workspace)), False
+        current = _previews.get(_key(workspace))
         if current is not None:
-            was_preparing = not current.handed_over
             current.close()
-        if _watching(path):
+        state, watched, there = _preview_state(path), _watching(path), path.exists()
+        if watched:
             if not _end(path):
                 return _NOT_STOPPED(workspace)
-            was_running = True
+            ended = True
         else:
-            was_running = path.exists() and _clear(path)
-    if was_running or was_preparing:
+            ended = there and _clear_if_free(path)
+    if state.get("port") and _answers(state["port"]):  # what got out of the tree, or a watcher that was ended
+        return _NOT_STOPPED(workspace)
+    if there and not state and not watched:
+        return _NOT_STOPPED(workspace, "It could not be confirmed that the application has stopped. IT can look at it.")
+    if ended or current is not None:
         return {"workspace": workspace, "status": "stopped", "user_message": _STOPPED}
     return {"workspace": workspace, "status": "not_running", "user_message": _NOT_RUNNING}

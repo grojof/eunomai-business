@@ -102,11 +102,11 @@ def pids(tmp_path) -> Path:
     return tmp_path / "pids.json"
 
 
-def project(server, text: bytes | None, lock: bool = True) -> tuple[str, Path]:
+def project(server, text: bytes | None, lock: bool = True, app: bytes = APP) -> tuple[str, Path]:
     """A project with an application on its main branch, cloned, on a version."""
     name = f"preview-{uuid.uuid4().hex[:8]}"
     server.initialize(name)
-    files = {"pyproject.toml": PYPROJECT, "app.py": APP, "message.txt": b"saved\n", "fail.py": b"print('setup broke')\n"
+    files = {"pyproject.toml": PYPROJECT, "app.py": app, "message.txt": b"saved\n", "fail.py": b"print('setup broke')\n"
              b"import sys; sys.exit(4)\n", "generate.py": b"import pathlib; pathlib.Path('message.txt')"
              b".write_text('generated')\n", **({"uv.lock": LOCK} if lock else {})}
     server.server_commit(name, "main", files)
@@ -1111,7 +1111,7 @@ def test_junk_in_a_state_file_never_blocks_a_preview(junk):
 def test_a_state_file_is_written_whole():
     """Another connector must never read half of one: it is written beside the real one and moved over it."""
     source = Path(watcher.__file__).read_text(encoding="utf-8")
-    assert "os.replace(temporary, self.path)" in source
+    assert "replace_file(temporary, self.path)" in source
     current = preview._Preview("atomic", "0" * 40)
     try:
         assert json.loads(preview._state_file("atomic").read_text())["token"] == current.token

@@ -6,6 +6,7 @@ Gitea API calls the connector makes. Nothing leaves this computer.
 
 import atexit
 import base64
+import contextlib
 import json
 import os
 import shutil
@@ -93,20 +94,40 @@ def alive(pid: int) -> bool:
 
 
 def stop_previews() -> None:
-    """Everything previews a test left running: a preview outlives what started it, a test run included."""
+    """Everything previews a test left running, whatever the test did: a preview outlives what started it, a test run
+    included, and a state file that goes makes its watcher end what it holds."""
     from eunomai_business import data_dir, preview
 
     for current in list(preview._previews.values()):
-        current.close()
+        with contextlib.suppress(Exception):
+            current.close()
     preview._previews.clear()
     preview._unread.clear()
     folder = data_dir() / "previews"
-    for state in folder.glob("*.json") if folder.is_dir() else ():
-        if preview._watching(state):
-            preview._end(state)
-        preview._clear(state)
-    for note in folder.glob("*.ended") if folder.is_dir() else ():
-        note.unlink(missing_ok=True)
+    for state in [*folder.glob("*.json")] if folder.is_dir() else ():
+        with contextlib.suppress(Exception):
+            if preview._watching(state):
+                preview._end(state)
+    if folder.is_dir():
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+_PREVIEWS_BEFORE = set(Path(tempfile.gettempdir()).glob("eunomai-preview-*"))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def nothing_of_a_run_stays():
+    """A run that leaves a preview running or a folder in the temporary folder fails, and is cleaned up all the same."""
+    yield
+    stop_previews()
+    new = lambda: set(Path(tempfile.gettempdir()).glob("eunomai-preview-*")) - _PREVIEWS_BEFORE  # noqa: E731
+    deadline = time.time() + 30
+    while new() and time.time() < deadline:
+        time.sleep(0.2)
+    left = new()
+    for folder in left:
+        shutil.rmtree(folder, ignore_errors=True)
+    assert not left, f"a test left previews behind: {sorted(p.name for p in left)}"
 
 
 def free_port() -> int:

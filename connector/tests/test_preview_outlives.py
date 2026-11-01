@@ -148,11 +148,16 @@ def computer(tmp_path, server, connector_environment, monkeypatch) -> dict:
     environment.pop("VIRTUAL_ENV", None)
     monkeypatch.setenv("LOCALAPPDATA", str(data))
     yield {"environment": environment, "data": data}
-    for state in (data / "eunomai-business" / "previews").glob("*.json"):  # whatever a failed test left running
-        state.with_suffix(".stop").touch()
     for connector in Connector.started:
         connector.process.kill()
     Connector.started.clear()
+    folder = data / "eunomai-business" / "previews"
+    for state in [*folder.glob("*.json")] if folder.is_dir() else ():  # whatever a failed test left running
+        state.with_suffix(".stop").touch()
+    deadline = time.time() + 20
+    while folder.is_dir() and [*folder.glob("*.json")] and time.time() < deadline:
+        time.sleep(0.1)
+    shutil.rmtree(folder, ignore_errors=True)  # with no state file, a watcher ends what it holds
 
 
 def ready_project(server, computer: dict, tmp_path: Path, connector: Connector) -> tuple[str, Path]:

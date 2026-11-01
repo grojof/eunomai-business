@@ -11,13 +11,15 @@ follow. `launch` is what breaks out of a job a host holds the connector in, when
 The connector speaks to it over its standard input and output, one JSON object a line, until the preview is ready.
 After that, a connector knows it from the files it leaves beside the state file:
 
-    <name>.json    the state, written whole
+    <name>.json    the state, written whole. The application runs as the person and can rewrite it, so a connector
+                   believes nothing in it that does not pass its reader, and it protects against the sandbox only
     <name>.alive   locked for as long as it lives: the system frees a lock when a process dies, however it dies, and
                    a number that came back as another process holds no lock
     <name>.stop    its presence asks it to end
     <name>.ended   why it ended by itself, for the next `app_preview` to tell
 """
 
+import contextlib
 import json
 import os
 import queue
@@ -48,10 +50,18 @@ if WINDOWS:
     _kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
     _kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
     _kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    _kernel32.OpenProcess.restype = wintypes.HANDLE
+    _kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    _kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    _kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    _kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+                                                     ctypes.POINTER(wintypes.DWORD)]
+    _kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE, *[ctypes.POINTER(wintypes.FILETIME)] * 4]
     _kernel32.IsProcessInJob.argtypes = [wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)]
     _ntdll.NtResumeProcess.argtypes = [wintypes.HANDLE]
     _KILL_ON_CLOSE, _EXTENDED_LIMITS, _ACCOUNTING, _PROCESS_LIST = 0x2000, 9, 1, 3
     _LETS_GO = 0x0800 | 0x1000  # JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
+    _CAN_TERMINATE, _CAN_LOOK = 0x0001, 0x1000
 
     class BasicLimits(ctypes.Structure):
         _fields_ = [("process_time", ctypes.c_int64), ("job_time", ctypes.c_int64), ("flags", wintypes.DWORD),
@@ -101,14 +111,81 @@ def unlock(file) -> None:
         pass
 
 
+def normalized(path: str) -> str:
+    return os.path.normcase(os.path.realpath(path))
+
+
+def _handle_identity(handle) -> tuple:
+    size, name = wintypes.DWORD(32768), ctypes.create_unicode_buffer(32768)
+    times = [wintypes.FILETIME() for _ in range(4)]
+    if not _kernel32.QueryFullProcessImageNameW(handle, 0, name, ctypes.byref(size)) or \
+            not _kernel32.GetProcessTimes(handle, *[ctypes.byref(time_) for time_ in times]):
+        return ()
+    return normalized(name.value), (times[0].dwHighDateTime << 32) | times[0].dwLowDateTime
+
+
+def identity(pid: int) -> tuple:
+    """What tells a process from one that later got its number: its program and when it started. Empty if unknown."""
+    if WINDOWS:
+        handle = _kernel32.OpenProcess(_CAN_LOOK, False, pid)
+        if not handle:
+            return ()
+        try:
+            return _handle_identity(handle)
+        finally:
+            _kernel32.CloseHandle(handle)
+    try:
+        started = open(f"/proc/{pid}/stat", encoding="utf-8", errors="replace").read().rpartition(")")[2].split()[19]
+        return normalized(os.readlink(f"/proc/{pid}/exe")), int(started)
+    except (OSError, ValueError, IndexError):
+        return ()
+
+
+def end_process(pid: int, created: int, image: str) -> bool:
+    """End a process only if it is the one meant. A watcher that no longer answers goes this way, and on Windows the
+    job goes with it, as only the watcher holds it."""
+    if WINDOWS:
+        handle = _kernel32.OpenProcess(_CAN_TERMINATE | _CAN_LOOK, False, pid)
+        if not handle:
+            return False
+        try:
+            return _handle_identity(handle) == (image, created) and bool(_kernel32.TerminateProcess(handle, 1))
+        finally:
+            _kernel32.CloseHandle(handle)
+    if identity(pid) != (image, created):
+        return False
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except OSError:
+        return False
+    return True
+
+
+def replace_file(temporary: str, target: str) -> None:
+    """On Windows a file someone is reading cannot be replaced, for as long as they read it."""
+    try:
+        for _ in range(30):
+            try:
+                os.replace(temporary, target)
+                return
+            except PermissionError:
+                time.sleep(0.1)
+        os.replace(temporary, target)
+    finally:
+        with contextlib.suppress(OSError):
+            os.remove(temporary)
+
+
 class Tree:
-    """Everything a preview starts, stopped together. On Windows a job object with no name, so nothing in it can open it
-    and keep it alive: processes start suspended, so none has a child before it is in the job, cannot leave it, and die
-    when its last handle closes, this process being the only holder. Elsewhere a process group per step, every one of
-    them kept; a program that starts a session of its own leaves it, a limit Windows does not have."""
+    """Everything a preview starts, stopped together. This stops an application that misbehaves, not one built to stay,
+    which, running as the person, can leave anything behind. On Windows a job object with no name: processes start
+    suspended, so none has a child before it is in the job, and they die when its last handle closes, this process
+    being the only holder it gave one to. Elsewhere a process group per step, every one of them kept. Once ended, no
+    more steps start."""
 
     def __init__(self):
-        self.groups, self.handle, self.children = set(), None, []
+        self.groups, self.handle, self.children, self.ended = set(), None, [], False
+        self.starting = threading.Lock()
         if WINDOWS:
             self.handle = _kernel32.CreateJobObjectW(None, None)
             if not self.handle:
@@ -122,18 +199,21 @@ class Tree:
     def start(self, arguments: list, folder: str, environment: dict, log) -> subprocess.Popen:
         options = {"cwd": folder, "env": environment, "stdin": subprocess.DEVNULL, "stdout": log,
                    "stderr": subprocess.STDOUT, "close_fds": True}
-        if not WINDOWS:
-            process = subprocess.Popen(arguments, start_new_session=True, **options)
-            self.groups = {group for group in self.groups if self._lives(group)} | {process.pid}
-            self.children.append(process)
+        with self.starting:
+            if self.ended:
+                raise PermissionError("the preview was stopped")
+            if not WINDOWS:
+                process = subprocess.Popen(arguments, start_new_session=True, **options)
+                self.groups = {group for group in self.groups if self._lives(group)} | {process.pid}
+                self.children.append(process)
+                return process
+            process = subprocess.Popen(arguments, creationflags=SUSPENDED | NO_WINDOW, **options)
+            if not _kernel32.AssignProcessToJobObject(self.handle, int(process._handle)):
+                error = ctypes.WinError(ctypes.get_last_error())
+                process.kill()
+                raise error
+            _ntdll.NtResumeProcess(int(process._handle))
             return process
-        process = subprocess.Popen(arguments, creationflags=SUSPENDED | NO_WINDOW, **options)
-        if not _kernel32.AssignProcessToJobObject(self.handle, int(process._handle)):
-            error = ctypes.WinError(ctypes.get_last_error())
-            process.kill()
-            raise error
-        _ntdll.NtResumeProcess(int(process._handle))
-        return process
 
     @staticmethod
     def _lives(group: int) -> bool:
@@ -162,13 +242,15 @@ class Tree:
         return list(found.ids[:found.listed])
 
     def kill(self) -> None:
-        if WINDOWS:
-            _kernel32.TerminateJobObject(self.handle, 1)
-        for group in self.groups:
-            try:
-                os.killpg(group, signal.SIGKILL)
-            except OSError:
-                pass
+        with self.starting:
+            self.ended = True
+            if WINDOWS:
+                _kernel32.TerminateJobObject(self.handle, 1)
+            for group in self.groups:
+                try:
+                    os.killpg(group, signal.SIGKILL)
+                except OSError:
+                    pass
 
 
 def detached() -> bool:
@@ -189,8 +271,9 @@ class Watcher:
     def __init__(self, config: dict):
         self.folder, self.path, self.token = config["folder"], config["state"], config["token"]
         self.workspace, self.head, self.limit = config["workspace"], config["head"], config["limit"]
+        self.declaration = config["declaration"]
         self.tree, self.application, self.log = Tree(), None, config["log"]
-        self.phase, self.url, self.began, self.deadline = "preparing", "", 0.0, 0.0
+        self.phase, self.port, self.began, self.deadline, self.steady_deadline = "preparing", 0, 0.0, 0.0, 0.0
         self.abandoned, self.handed_over, self.ending = threading.Event(), threading.Event(), threading.Event()
         self.asked = queue.Queue()
         self.stop_file, self.alive_file = self._beside(".stop"), self._beside(".alive")
@@ -210,13 +293,15 @@ class Watcher:
         return False
 
     def remember(self) -> None:
+        image, created = identity(os.getpid()) or ("", None)
         state = {"workspace": self.workspace, "folder": self.folder, "token": self.token, "head": self.head,
-                 "phase": self.phase, "url": self.url, "began": self.began, "deadline": self.deadline,
-                 "groups": sorted(self.tree.groups), "watcher": os.getpid(), "keeps_running": detached()}
+                 "declaration": self.declaration, "phase": self.phase, "port": self.port, "began": self.began,
+                 "deadline": self.deadline, "groups": sorted(self.tree.groups), "watcher": os.getpid(),
+                 "image": image, "created": created, "keeps_running": detached()}
         temporary = f"{self.path}.{os.getpid()}.tmp"
         with open(temporary, "w", encoding="utf-8") as file:
             json.dump(state, file)
-        os.replace(temporary, self.path)  # another connector never reads half of it
+        replace_file(temporary, self.path)  # another connector never reads half of it
 
     def reply(self, answer: dict) -> None:
         try:
@@ -266,7 +351,7 @@ class Watcher:
 
     def do_run(self, request: dict) -> dict:
         self.application = self.start(request)
-        self.began, self.deadline = time.time(), time.time() + self.limit
+        self.began, self.deadline, self.steady_deadline = time.time(), time.time() + self.limit, time.monotonic() + self.limit
         self.remember()
         return {"began": self.began}
 
@@ -277,8 +362,12 @@ class Watcher:
         return {"ids": self.tree.processes()}
 
     def do_ready(self, request: dict) -> dict:
-        self.phase, self.url = "ready", request["url"]
-        self.remember()
+        self.phase, self.port = "ready", int(request["port"])
+        try:
+            self.remember()
+        except OSError:
+            self.phase = "preparing"
+            raise
         self.handed_over.set()
         return {"deadline": self.deadline}
 
@@ -289,7 +378,8 @@ class Watcher:
             return "lost"
         if self.abandoned.is_set():
             return "abandoned"
-        if self.deadline and time.time() > self.deadline:
+        # one clock can be put back, and the other stands still while a computer sleeps
+        if self.deadline and (time.time() > self.deadline or time.monotonic() > self.steady_deadline):
             return "time_limit"
         if self.phase == "ready" and self.application.poll() is not None:
             return "application"
@@ -297,6 +387,10 @@ class Watcher:
 
     def end(self, reason: str) -> None:
         self.ending.set()
+        self.phase = "ending"
+        with contextlib.suppress(OSError):
+            if self.mine():
+                self.remember()
         self.tree.kill()
         deadline = time.time() + 10
         while self.tree.running() and time.time() < deadline:
@@ -305,7 +399,8 @@ class Watcher:
             temporary = f"{self.ended_file}.{os.getpid()}.tmp"
             with open(temporary, "w", encoding="utf-8") as file:
                 json.dump({"reason": reason, "head": self.head, "at": time.time()}, file)
-            os.replace(temporary, self.ended_file)
+            with contextlib.suppress(OSError):
+                replace_file(temporary, self.ended_file)
         for _ in range(REMOVE_TRIES):
             shutil.rmtree(self.folder, ignore_errors=True)
             if not os.path.exists(self.folder):
@@ -325,14 +420,17 @@ class Watcher:
             pass
         self.alive.close()
 
-    def forget(self) -> None:
+    def mine(self) -> bool:
         try:
             with open(self.path, encoding="utf-8") as file:
-                mine = json.load(file).get("token") == self.token
-            if mine:
-                os.remove(self.path)
+                return json.load(file).get("token") == self.token
         except (OSError, ValueError, AttributeError):
-            pass
+            return False
+
+    def forget(self) -> None:
+        if self.mine():
+            with contextlib.suppress(OSError):
+                os.remove(self.path)
 
     def run(self) -> None:
         threading.Thread(target=self.listen, daemon=True).start()

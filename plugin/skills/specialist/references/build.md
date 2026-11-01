@@ -75,7 +75,8 @@ your sandbox.
   so save first. Say first, in one plain sentence, what will happen: what was built so far will start on their
   computer, with their permissions, nobody has reviewed it yet, and it keeps running until they say stop or the hour
   ends, even if they close Claude. Wait for their yes. Then `app_preview(workspace)`; while it says `starting`, call it
-  again. With `ready`, show `user_message`, in every turn it is asked for: the same version answers the one running,
+  again in the same turn, without replying: if the turn ends first the preparation ends with it, and it starts over.
+  If you must reply, say that plainly. With `ready`, show `user_message`, in every turn it is asked for: the same version answers the one running,
   with the time it has left. Any other answer: show `user_message`, and do not offer it again in this task.
   `app_preview_stop(workspace)` when they say stop, whichever task started it, and show what it says: only `stopped`
   means it stopped. If `unsaved_changes` is true, what they see lacks the latest changes: say so.
