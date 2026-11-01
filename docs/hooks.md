@@ -22,8 +22,34 @@ to Anthropic's own `permissions.deny` with little change if that ever reaches ev
 |---|---|---|---|
 | Guard, `SessionStart` | A task starts | In the cloud, tells Claude the task is refused | Nothing happens |
 | Guard, `UserPromptSubmit` | Each message | In the cloud, blocks it with the reason | Nothing happens |
-| Guard, `PreToolUse` | Each write, shell command and connector call | Refuses the cloud; then the [file guard](barriers.md#between-claudes-sandbox-and-the-computer); then the organization's rules | The call is blocked (`onFailure: "block"`) |
+| Guard, `PreToolUse` | Each write, shell command and connector call | Refuses the cloud; then [git in a workspace](#git-from-the-sandbox-shell) and the [file guard](barriers.md#between-claudes-sandbox-and-the-computer); then the organization's rules | The call is blocked (`onFailure: "block"`) |
 | A project plugin's hook, `PreToolUse` | Each write and shell command | The project's rules, in its own workspaces only | The call is blocked |
+
+## Git from the sandbox shell
+
+Built in; no configuration changes it. Cowork's sandbox can create files in a workspace but not delete them, so a
+git command that touches `.git` leaves a lock or temporary objects behind, and the next save stops. Claude uses the
+connector instead (`workspace_status`, the version tools).
+
+| In a workspace, from the shell | Decision |
+|---|---|
+| `log`, `show`, `blame`, `grep`, `ls-files`, `ls-tree`, `cat-file`, `rev-parse`, `rev-list`, `shortlog`, `merge-base`, `show-ref`, `for-each-ref`, `name-rev`, `reflog` (reading), `version`, `help` | Allowed |
+| `diff` with `--cached`, `--staged`, `--no-index` or a range (`main..HEAD`) | Allowed |
+| Plain `diff`, `diff HEAD`, `status`, and every other command | Denied |
+| An option that writes a file or runs a program (`--output`, `grep -O`, `--ext-diff`), or any option before the command other than `--no-pager`, `-P`, `-p` and `--no-optional-locks`, such as `-c` | Denied |
+| Writing or removing anything in `.git`: `rm`, `mv`, `>`, `find -delete`, a script's `os.remove`, the file tools | Denied |
+
+| On a copy | Decision |
+|---|---|
+| `git -C /tmp/copy ...`, `cd /tmp/copy && git ...`, `--git-dir`, `--work-tree`, `GIT_DIR` with a folder outside a workspace | Allowed: any git command |
+| A copy named like the workspace, outside the folder Cowork mounts | Allowed: it is not the workspace |
+
+| Why | |
+|---|---|
+| `diff` is not read-only | With files that look changed, `git diff` and `git diff HEAD` rewrite the index, and `--no-optional-locks` does not stop it. Every file looks changed when Windows wrote the index and the sandbox reads it ([measured](sources.md#measured-on-real-installations)) |
+| A bare `git status` counts as inside | The hook does not see the sandbox shell's folder, which an earlier `cd` may have moved ([limits](#limits)). A command stays out only by showing it runs elsewhere |
+| On the computer's own shell (`Bash`) | The folder the hook receives is real, so outside a workspace nothing is denied |
+| Without registered workspaces | Nothing is denied |
 
 ## Add a rule
 
@@ -105,6 +131,10 @@ it.
 - **Not a security boundary.** Anthropic says it of its own rules: a command rule matches the text Claude writes,
   so `/usr/bin/npm` or `sh -c 'npm ci'` are not stopped. The boundaries are the connector's
   [barriers](barriers.md), IT's review of every version, and the network.
+- **Git in a workspace is guidance too.** The same text matching stops the usual forms (a path to git, wrappers,
+  `sh -c`, `xargs`, `find -exec`), not git run from a script or through a variable, a link to the workspace from
+  elsewhere, or a `git -C /tmp/copy push` into it. A quoted mention of a command that writes, such as
+  `echo "git status"`, is denied too.
 - **Only `Bash` and `Edit`.** Reads, web fetches and other tools are not ruled here; use the console's controls.
 - **The shell's folder.** A project's `Bash` rules, and relative paths in `Edit` rules, rely on the folder the hook
   receives being the shell's current one; if Cowork's shell keeps a `cd` from one call to the next, a rule may not

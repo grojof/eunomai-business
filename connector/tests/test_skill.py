@@ -1,0 +1,22 @@
+"""The specialist's rules that came from testing it with people: a rule that is lost here comes back as the same
+failure in a real task. These read the skill as it ships; what the model does with it is checked in validation."""
+
+import re
+from pathlib import Path
+
+SKILLS = Path(__file__).resolve().parents[2] / "plugin" / "skills"
+SPECIALIST = (SKILLS / "specialist" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def reference(stage: str) -> str:
+    return (SKILLS / "specialist" / "references" / f"{stage}.md").read_text(encoding="utf-8")
+
+
+def test_the_specialist_never_runs_git_in_the_workspace():
+    assert "Never run git in the workspace" in SPECIALIST
+    assert "`.git`" in SPECIALIST
+
+
+def test_no_skill_tells_claude_to_run_a_git_command_that_writes():
+    for skill in SKILLS.rglob("*.md"):
+        assert not re.search(r"`git (-C \S+(?: \S+)? )?(status|diff|stash)\b", skill.read_text(encoding="utf-8")), skill

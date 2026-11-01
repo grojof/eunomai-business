@@ -9,6 +9,10 @@ configuration files are put back as the last save point has them, and an executa
 
 Executables are refused everywhere Claude writes. Context and configuration rules apply inside workspaces only, so
 the plugin does not get in the way of Cowork's own files elsewhere.
+
+The hook also keeps the sandbox shell out of a workspace's repository: Cowork's sandbox can create files there but
+not delete them, so a git command that touches .git leaves a lock or temporary objects behind, and the next save
+stops. Like every rule on a shell command, this sees text and prevents mistakes; it is not a boundary.
 """
 
 import argparse
@@ -54,6 +58,12 @@ REASONS = {
     "config": "{name} configures Claude, the repository or its automation, and only IT changes it",
     "executable": "{name} would run on the user's computer with a double click; nothing that runs there is "
                   "written, the work is tried inside the sandbox",
+    "git": "git from the sandbox shell leaves files in a workspace's .git that the sandbox cannot remove, and then "
+           "saving stops. Use workspace_status to see what changed and the version tools to save. git log, git show "
+           "and git diff --cached only read, and any git command works on a copy outside the workspace "
+           "(git -C <copy>)",
+    "repository": "a workspace's .git belongs to the connector: nothing in it is written or removed from the sandbox, "
+                  "not even a leftover lock. If a save stops, show its message; the connector or IT resolves it",
 }
 
 
@@ -88,17 +98,167 @@ def reason(path: str, in_workspace: bool = True) -> str | None:
     return REASONS[found].format(name=_parts(path)[-1]) if found else None
 
 
-def shell_reason(command: str, in_workspace: bool = True) -> str | None:
+def shell_reason(command: str, in_workspace: bool = True, folders: list[str] | None = None) -> str | None:
     """Best effort for the sandbox shell: a command that writes an executable, or a protected file in a workspace.
-    Removing one is allowed, so Claude can clean up what version_save refused."""
+    Removing one is allowed, so Claude can clean up what version_save refused. With the workspaces' `folders`, a
+    target elsewhere does not count, and .git is left to `_repository_reason`, which follows the command's folder."""
     match = _EXECUTABLE_WRITE.search(command or "")
     if match:
         return REASONS["executable"].format(name=match.group(1))
-    match = _PROTECTED_WRITE.search(command or "") if in_workspace else None
-    if match:
-        found = "context" if match.group(1).lower().endswith(".md") else "config"
-        return REASONS[found].format(name=match.group(1))
+    for match in _PROTECTED_WRITE.finditer(command or "") if in_workspace else ():
+        target = match.group(1)
+        if folders and (_is_repository(target) or (_ABSOLUTE.match(target) and not _at_workspace(target, folders))):
+            continue
+        return REASONS["context" if target.lower().endswith(".md") else "config"].format(name=target)
     return None
+
+
+# --- the sandbox shell and a workspace's repository ----------------------------------------------------------------
+
+# Measured with git 2.55 on a repository whose files all look changed, as they do when the index was written on
+# Windows and is read in the sandbox: only these leave .git as it was. `git status`, `git diff` and `git diff HEAD`
+# rewrite the index, `git describe --dirty` too, and `--no-optional-locks` stops that for status but not for diff.
+_GIT_READS = {"log", "show", "blame", "ls-files", "ls-tree", "cat-file", "rev-parse", "rev-list", "shortlog", "grep",
+              "merge-base", "show-ref", "for-each-ref", "name-rev", "version", "help"}
+_GIT_PROGRAM = re.compile(r"(?:.*[\\/])?git(?:\.exe)?\Z", re.IGNORECASE)
+_GIT_HARMLESS = {"--no-pager", "-P", "-p", "--paginate", "--no-optional-locks"}
+_GIT_OTHER_OUTPUT = re.compile(r"--output\b|--open-files-in-pager\b|-O|--ext-diff\b")
+_GIT_RANGE = re.compile(r"\.\.\.?(?:[^./]|\Z)")  # main..HEAD, not ../file
+_GIT_FOLDER_VARIABLE = re.compile(r"(?:^|\s)GIT_(?:DIR|WORK_TREE)=(\S+)")
+_ABSOLUTE = re.compile(r"[\\/]|[A-Za-z]:")
+_PREFIX = re.compile(r"\A(?:env(?:\s+-\S+|\s+[A-Za-z_]\w*=\S*)*|exec|eval|sudo(?:\s+-\S+)*)\s+")
+# A command handed to another, the same way a shell would start it.
+_HANDED_ON = re.compile(r"(?:-exec(?:dir)?|-ok(?:dir)?|\bxargs(?:\s+-\S+(?:\s+\d+)?)*)\s+")
+_SCRIPTED_REMOVAL = re.compile(r"(?:\bos\.(?:remove|unlink|rmdir)|\bshutil\.rmtree|\.unlink\(|\.rmdir\(|\bunlinkSync\b"
+                               r"|\brmSync\b|\bRemove-Item\b).*?([\w./\\~-]*\.git)\b", re.IGNORECASE | re.DOTALL)
+_FIND_REMOVERS = {"rm", "unlink", "rmdir", "mv", "shred"}
+
+
+def _join(base: str | None, path: str) -> str | None:
+    """A folder as far as the text shows it: absolute, relative to a place not known, or None when a variable or the
+    home folder makes it impossible to tell."""
+    if not path or path[0] == "~" or "$" in path or "`" in path:
+        return None
+    return path if _ABSOLUTE.match(path) or base is None else f"{base}/{path}"
+
+
+def _at_workspace(place: str | None, folders: list[str], unknown: bool = False) -> bool:
+    """Whether a folder is a workspace or inside one, as the computer or the sandbox sees it. A copy elsewhere that
+    has the same name is not one; a place the text does not show is `unknown`."""
+    if place is None or not _ABSOLUTE.match(place):
+        return unknown
+    names = [part.lower() for part in rules.parts(place)]
+    workspaces = {rules.parts(folder)[-1].lower() for folder in folders if rules.parts(folder)}
+    mounted = names[names.index("mnt") + 1:] if "mnt" in names else []
+    return rules.relative(place, folders) is not None or bool(workspaces.intersection(mounted))
+
+
+def _is_repository(path: str | None) -> bool:
+    return bool(path) and ".git" in [part.lower() for part in rules.parts(path)]
+
+
+def _steps(command: str, here: str | None):
+    """Each simple command, in order, with the folder it runs in as far as the text shows, and its plain words: past
+    assignments, wrappers and quotes around the program's name."""
+    spot = here
+    for candidate in rules._candidates(command):
+        text = rules._forms(candidate)[-1]
+        while _PREFIX.match(text):
+            text = rules._forms(_PREFIX.sub("", text, count=1))[-1]
+        words = [word.strip("'\"") for word in rules._words(text)]
+        if words and words[0] in ("cd", "pushd"):
+            spot = _join(spot, next((word for word in words[1:] if not word.startswith("-")), ""))
+        elif words:
+            yield spot, words, candidate
+
+
+def _git_call(arguments: list[str]) -> tuple[list[tuple[str, str]], list[str], bool]:
+    """A git command's folders (-C, --git-dir, --work-tree), its subcommand with arguments, and whether every option
+    before the subcommand is known not to change what it does."""
+    folders, index, known = [], 0, True
+    while index < len(arguments) and arguments[index].startswith("-"):
+        word = arguments[index]
+        name, _, value = word.partition("=")
+        if word in ("--version", "--help"):
+            return folders, ["version"], known
+        if word.startswith("-C") or name in ("--git-dir", "--work-tree"):
+            value = word[2:] if word.startswith("-C") else value
+            if not value:
+                index += 1
+                value = arguments[index] if index < len(arguments) else ""
+            folders.append(("-C" if word.startswith("-C") else "other", value))
+        elif word not in _GIT_HARMLESS:
+            known = False
+        index += 1
+    return folders, arguments[index:], known
+
+
+def _git_only_reads(subcommand: list[str], known: bool) -> bool:
+    if not known:
+        return False
+    if not subcommand:
+        return True
+    name, rest = subcommand[0], subcommand[1:]
+    if any(_GIT_OTHER_OUTPUT.match(word) for word in rest):
+        return False
+    if name == "diff":
+        return any(word in ("--cached", "--staged", "--no-index")
+                   or (word[0] != "-" and word not in ("..", "...") and _GIT_RANGE.search(word)) for word in rest if word)
+    if name == "reflog":
+        return not rest or rest[0] == "show" or rest[0].startswith("-")
+    return name in _GIT_READS
+
+
+def _shown_folder(tool: str, cwd: str, folders: list[str]) -> str | None:
+    """The folder a command starts in, when the hook can know it. The computer's shell reports it; the sandbox shell
+    keeps its own, which reaches the hook only when it is a workspace's (H19)."""
+    if not _ABSOLUTE.match(cwd):
+        return None
+    return cwd if tool == "Bash" or _at_workspace(cwd, folders) else None
+
+
+def _git_reason(command: str, tool: str, cwd: str, folders: list[str]) -> str | None:
+    """A git command that can write, run in a workspace. In the sandbox shell, where the hook cannot see the folder,
+    only a command that shows it runs elsewhere stays out."""
+    if not folders:
+        return None
+    unknown = tool != "Bash"
+    for text in (command, _HANDED_ON.sub("; ", command)):
+        for spot, words, candidate in _steps(text, _shown_folder(tool, cwd, folders)):
+            if not _GIT_PROGRAM.fullmatch(words[0]):
+                continue
+            named, subcommand, known = _git_call(words[1:])
+            base = spot
+            for option, value in named:
+                base = _join(base, value) if option == "-C" else base
+            places = [_join(base, value) for option, value in named if option == "other"]
+            places += [_join(base, value) for value in _GIT_FOLDER_VARIABLE.findall(candidate)]
+            places = places or [base]
+            if any(_at_workspace(place, folders, unknown) for place in places) \
+                    and not _git_only_reads(subcommand, known):
+                return REASONS["git"]
+    return None
+
+
+def _repository_reason(command: str, tool: str, cwd: str, folders: list[str]) -> str | None:
+    """A shell command that writes or removes something inside a workspace's .git, wherever it stands."""
+    if not folders:
+        return None
+    unknown = tool != "Bash"
+
+    def inside(place: str | None) -> bool:
+        return _is_repository(place) and _at_workspace(place, folders, unknown)
+
+    here = _shown_folder(tool, cwd, folders)
+    for spot, words, candidate in _steps(command, here):
+        targets = [target for _, target in rules.shell_writes(candidate)]
+        if words[0] == "find" and len(words) > 1 and (
+                "-delete" in words or _FIND_REMOVERS.intersection(words) and "-exec" in " ".join(words)):
+            targets.append(words[1])
+        if any(inside(_join(spot, target)) for target in targets):
+            return REASONS["repository"]
+    return REASONS["repository"] if any(
+        inside(_join(here, found)) for found in _SCRIPTED_REMOVAL.findall(command)) else None
 
 
 def _workspace_folders() -> list[str]:
@@ -144,8 +304,11 @@ def decide(payload: dict, policy: list[dict] | None = None) -> str | None:
         path = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
         found = reason(path, _inside(path, _workspace_names()))
     elif tool in _SHELL_TOOLS:
-        command = str(tool_input.get("command") or "")
-        found = shell_reason(command, _inside(command + " " + str(payload.get("cwd") or ""), _workspace_names()))
+        command, folder = str(tool_input.get("command") or ""), str(payload.get("cwd") or "")
+        workspaces = _workspace_folders()
+        found = (_git_reason(command, tool, folder, workspaces)
+                 or _repository_reason(command, tool, folder, workspaces)
+                 or shell_reason(command, _inside(command + " " + folder, _workspace_names()), workspaces))
     if found or not policy or tool not in _WRITE_TOOLS | _SHELL_TOOLS:
         return found
     cwd = str(payload.get("cwd") or "")

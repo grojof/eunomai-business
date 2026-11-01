@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Git stays out of a workspace's sandbox shell:** the first real test left `.git/index.lock` after a `git status`,
+  which stopped `version_save`, temporary objects after a `git stash`, and the assistant then removed files inside
+  `.git`. The guard now denies, built in, git commands that can write in a workspace and anything that writes or
+  removes inside its `.git`, pointing to `workspace_status`; a copy elsewhere stays free. Measuring which commands
+  really write showed that `git diff` is not read-only: it rewrites the index, even with `--no-optional-locks`, so
+  only `--cached`, `--staged`, `--no-index` and ranges are allowed. `validate-git` no longer asks for `git status`.
 - **Dependency summaries say why a package moved:** one left only because it is newer than two weeks read as fixing
   a vulnerability, because the reason it is blocked contains the word.
 - **`dependency_audit` reads `uv.lock` and `vendor.json`:** every package a uv project locks is audited, development

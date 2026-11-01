@@ -167,9 +167,9 @@ Said plainly, so nobody relies on it for these:
 - **Branch protection on the server.** The connector never sends the main branch, but only the server stops
   anyone else (another tool, a person with Git) from doing so. Protect it on the server.
 - **Claude's own file tools and shell, beyond the file guard.** The guard hook denies writing executables, the
-  project's context and configuration ([architecture.md](architecture.md#hooks)), only best effort in the shell;
-  everything else is governed by Cowork and its permissions. Where code may be written is followed by the
-  specialist, not enforced.
+  project's context and configuration ([architecture.md](architecture.md#hooks)) and git in a workspace
+  ([hooks](hooks.md#git-from-the-sandbox-shell)), only best effort in the shell; everything else is governed by Cowork
+  and its permissions. Where code may be written is followed by the specialist, not enforced.
 - **Script sources Windows can run.** A `.js` file opens in Windows Script Host on a double click, and a `.py`
   file in Python where the launcher is installed; web applications need them, so they are not refused. Disable
   Windows Script Host on business users' computers (a standard hardening policy), and keep application control

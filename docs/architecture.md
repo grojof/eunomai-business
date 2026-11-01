@@ -210,6 +210,10 @@ A path is a workspace's when one of its folders has a registered workspace's nam
 same file count as protected too: trailing dots and spaces, alternate streams (`run.bat::x`), 8.3 short names.
 The guard is set to `onFailure: "block"`: a guard that cannot run stops the write instead of letting it through.
 
+From the shell it also denies git commands that can write in a workspace, and anything that writes or removes inside
+its `.git`: the sandbox cannot delete what git leaves there, and the next save stops
+([hooks and rules](hooks.md#git-from-the-sandbox-shell)).
+
 `version_save` enforces the same rules on the host, where the sandbox cannot reach: every path must be valid on
 Windows and stay inside the workspace; context and configuration files go back to how the last save point has them
 (matched regardless of case, never through a link); adding or changing an executable stops the save (removing one

@@ -140,6 +140,8 @@ Full status in [validation](validation/hypotheses.md). Facts measured here that 
 | A minimal React page (Vite, React, TypeScript, Tailwind, shadcn/ui on Radix, TanStack Query and Table) has about 200 lockfile entries, about 590 with the usual linting, testing and client generation (`npm install --package-lock-only --ignore-scripts`) | 2026-10-27 (decision 13) |
 | Inside a real local Cowork sandbox (Linux x86_64), Tailwind's `tailwindcss-linux-x64` downloaded, its SHA-256 matched and it ran. One sandbox, on one organization's network rules | 2026-10-30 ([open checks](recommended-stack.md#open-checks), H20) |
 | Chart.js 4.6.1 and ECharts 6.1.0 on the same data, under `style-src 'self'` in Chrome: Chart.js has no violation; ECharts' default tooltip has 9 to 10 distinct ones and loses its layout, none with `renderMode: "richText"`. Neither was tried with a screen reader | 2026-10-31 ([recommended stack](recommended-stack.md)) |
+| Cowork's sandbox can create files in a workspace but not delete them: its `git status` left `.git/index.lock`, which stopped `version_save`, and `git stash` left temporary objects | 2026-11-01 ([hooks and rules](hooks.md#git-from-the-sandbox-shell)) |
+| Git 2.55 on a repository whose files all look changed: `status`, `diff`, `diff --stat`, `diff HEAD` and `describe --dirty` rewrite `.git/index`; `--no-optional-locks` stops that for `status` and not for `diff`. `log`, `show`, `blame`, `grep`, `ls-files`, `ls-tree`, `cat-file`, `rev-parse`, `rev-list`, `shortlog`, `merge-base`, `show-ref`, `for-each-ref`, `name-rev`, `reflog`, `diff --cached` and `diff A B` leave `.git` as it was | 2026-11-01, on Windows, comparing every file in `.git` before and after |
 
 ## Research done
 

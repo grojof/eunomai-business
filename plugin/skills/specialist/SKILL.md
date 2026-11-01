@@ -97,6 +97,9 @@ lives (replace it, do not append history), and carry on.
 - **Stops go to IT.** When a tool stops, show its message, and its e-mail link when there is one. Never work around
   it with other tools, the shell or the user's hands, even when the user insists. A result with `error` is a
   mistake in the call: fix it, do not show it.
+- **Never run git in the workspace,** not even to look. Your shell leaves files there it cannot remove, and the next
+  save stops. `workspace_status` shows what changed and the version tools save. Never touch anything in `.git`, not
+  even to clean up: a lock in the way is a stop for IT.
 - **No claim without fresh evidence.** "Done", "works" or "passes" only with the output of a run in this session;
   "should" and "seems" are signs you have not checked.
 - **Official sources only.** Use the official documentation of every technology and cite it where a choice is not
