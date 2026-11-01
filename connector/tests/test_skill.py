@@ -105,6 +105,16 @@ def test_the_docs_describe_the_same_journey():
     assert "the prototype (it opens in the browser and responds to clicks)" not in guide
 
 
+def test_what_the_first_real_test_measured_is_recorded():
+    table = (Path(__file__).resolve().parents[2] / "docs" / "validation" / "hypotheses.md").read_text(encoding="utf-8")
+    rows = {line.split("|")[1].strip(): line for line in table.splitlines() if line.startswith("| H")}
+    assert all("2026-11-01" in rows[check] for check in ("H14", "H17", "H19", "H21", "H23"))
+    assert "Chromium" in rows["H14"]
+    assert "start.bat" in rows["H17"] and "before any hook" in rows["H17"]
+    assert "npm --version" in rows["H19"] and "stays open" in rows["H19"]
+    assert "**Fail**" in rows["H21"] and rows["H22"].rstrip().endswith("|")
+
+
 def test_no_skill_tells_claude_to_run_a_git_command_that_writes():
     for skill in SKILLS.rglob("*.md"):
         assert not re.search(r"`git (-C \S+(?: \S+)? )?(status|diff|stash)\b", skill.read_text(encoding="utf-8")), skill

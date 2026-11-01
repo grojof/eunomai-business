@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Validation, first real test with the plugin built from main (2026-11-01):** H14, H17 and H19 updated with what
+  was measured; H21 failed; H23 is new, for asking Cowork for a folder during a task.
 - **Real screens instead of a prototype, where a project allows code:** the specialist builds the first real screens
   with example data on the project's own base, and the person tries those through `app_preview` or the test
   environment before tests and the full specification are written. Where neither exists, screenshots if the sandbox
