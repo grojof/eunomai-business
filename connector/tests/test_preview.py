@@ -719,8 +719,8 @@ def test_at_the_time_limit_it_stops_by_itself(signed_in, workspaces, turned_on, 
     numbers, folder = json.loads(pids.read_text()), folders()[0]
     assert gone(*numbers, wait=20), "a process survived the time limit"
     deadline = time.time() + 15
-    while preview._key(name) in preview._previews and time.time() < deadline:
-        time.sleep(0.1)
+    while (preview._key(name) in preview._previews or folder.exists()) and time.time() < deadline:
+        time.sleep(0.1)  # the watcher removes the folder after the processes end
     assert not folder.exists()
     assert tools.app_preview_stop(name)["status"] == "not_running"
 

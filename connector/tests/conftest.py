@@ -89,8 +89,12 @@ def alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
-    stat = Path(f"/proc/{pid}/stat")
-    return not stat.exists() or stat.read_text().rpartition(")")[2].split()[0] != "Z"
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rpartition(")")[2].split()[0] != "Z"
+    except ProcessLookupError:  # it ended between the two looks
+        return False
+    except FileNotFoundError:  # this system has no such folder, or it ended between the two looks
+        return Path("/proc/self/stat").exists() is False
 
 
 def stop_previews() -> None:
