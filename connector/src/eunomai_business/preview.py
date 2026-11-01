@@ -328,6 +328,11 @@ class _Preview:
         except (OSError, ValueError):
             pass
 
+    def started(self) -> None:
+        """A step began: where there are process groups, each has its own, for the watcher and other connectors."""
+        self._tell_watcher(str(self.tree.group))
+        self._remember()
+
     def environment(self, uv: str, extra: dict | None = None, installing: bool = False) -> dict:
         system = os.environ.get("SYSTEMROOT", "")
         path = [str(Path(uv).parent), *([f"{system}\\System32", system] if system else ["/usr/bin", "/bin"])]
@@ -360,7 +365,7 @@ class _Preview:
     def step(self, uv: str, arguments: list[str], environment: dict, name: str) -> None:
         with open(self.log, "ab") as log:
             process = self.tree.start([uv, *arguments], self.app, environment, log)
-        self._tell_watcher(str(self.tree.group))
+        self.started()
         try:
             code = process.wait(timeout=_STEP_LIMIT)
         except subprocess.TimeoutExpired:
@@ -463,7 +468,7 @@ def _bring_up(current: _Preview, declared: dict) -> None:
     arguments = [word.replace("{port}", str(port)) for word in declared["run"]]
     with open(current.log, "ab") as log:
         current.process = current.tree.start([uv, *_RUN, *arguments], current.app, environment, log)
-    current._tell_watcher(str(current.tree.group))
+    current.started()
     deadline = time.time() + _READY_WAIT
     while not _answers(port):
         if current.process.poll() is not None or current.closed:
