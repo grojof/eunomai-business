@@ -17,8 +17,10 @@ refined, proven and ready to review.
    `failed` or `expired`, say so in one line and offer to try again.
 2. **Workspace.** The folder selected in this task must be a workspace: compare it with the paths from
    `workspace_list`, and use that workspace's name (not its path) in every call. If it is not one, ask which
-   project they mean (one listed, or the repository address IT gave them), `workspace_clone` it, and ask them in
-   one sentence to open a new task with that folder. Stop there.
+   project they mean (one listed, or the repository address IT gave them) and `workspace_clone` it if it is not on
+   this computer. Then request its folder with `mcp__cowork__request_cowork_directory`, and carry on in this same
+   task. If that tool is not there or it fails, ask them in one sentence to open a new task with that folder, and
+   stop there.
 3. **Latest changes:** `workspace_update(workspace)`.
 4. **Settings:** `specialist_settings(workspace)`: languages, the organization's context and skills, whether code
    may be written here and with which technologies, the project's test environment if it has one, and the

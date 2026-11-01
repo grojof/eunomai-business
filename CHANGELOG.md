@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **The specialist asks for the folder in the same task:** after `workspace_clone`, or when the folder is not
+  selected, it requests it with `mcp__cowork__request_cowork_directory` and carries on; the sentence asking for a new
+  task stays as the fallback when that tool is not there or fails. To validate: H23.
 - **Everything shown is in the user's language:** the first real test showed lines such as "Main branch, no open
   change → Stage 1 Understand" and "Now generation", and told a business user to run `uv run uvicorn` in a terminal.
   The rule now covers status lines between tool calls, stage names and commands.

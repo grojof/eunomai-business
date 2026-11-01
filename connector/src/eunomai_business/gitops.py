@@ -1,8 +1,8 @@
 """Workspaces, versions (branches) and save points (commits), without Git installed (dulwich).
 
 Each workspace is a clone in the workspaces folder the organization sets when it builds the plugin (default
-~/eunomai-business-workspaces/<workspace>). The user selects the workspace's folder in Cowork, so Claude edits the
-same files the connector saves. The git sign-in token goes only to the git server's own origin, as HTTP basic auth
+~/eunomai-business-workspaces/<workspace>). The task has access to the workspace's folder, so Claude edits the same
+files the connector saves. The git sign-in token goes only to the git server's own origin, as HTTP basic auth
 (login + OAuth access token); it is never written to .git/config, only to the encrypted sign-in record.
 """
 

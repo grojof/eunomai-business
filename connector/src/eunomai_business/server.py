@@ -75,7 +75,7 @@ def sign_out(provider: str) -> dict:
 @mcp.tool()
 def workspace_clone(repo_url: str, workspace: str = "") -> dict:
     """Clone a repository of the signed-in git server as a workspace in the user's workspaces folder.
-    Returns the folder path on this computer: the user selects that folder in Cowork to work on its files."""
+    Returns the folder path on this computer, for Cowork to give the task access to it."""
     return _safe(gitops.clone, repo_url, workspace)
 
 

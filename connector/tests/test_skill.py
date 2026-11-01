@@ -34,6 +34,13 @@ def test_everything_shown_to_the_user_is_in_their_language_and_plain_words():
     assert "stage names" in SPECIALIST and "never a command to run" in SPECIALIST
 
 
+def test_folder_access_is_requested_in_the_same_task_with_the_old_sentence_as_a_fallback():
+    start = " ".join(SPECIALIST.split("## Start of every session")[1].split("3. **Latest changes")[0].split())
+    assert "mcp__cowork__request_cowork_directory" in start and "this same task" in start
+    assert "not there or it fails" in start and "open a new task" in start
+    assert start.index("mcp__cowork__request_cowork_directory") < start.index("open a new task")
+
+
 def test_no_skill_tells_claude_to_run_a_git_command_that_writes():
     for skill in SKILLS.rglob("*.md"):
         assert not re.search(r"`git (-C \S+(?: \S+)? )?(status|diff|stash)\b", skill.read_text(encoding="utf-8")), skill

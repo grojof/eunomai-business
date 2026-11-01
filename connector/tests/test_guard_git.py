@@ -148,6 +148,21 @@ def test_a_repository_elsewhere_and_files_with_similar_names_are_left_alone(comm
     assert denied(command) is None, command
 
 
+@pytest.mark.parametrize("folder", [
+    "C:/Users/me/eunomai-business-workspaces/ws",  # the computer's path, which Cowork's file tools use
+    "/sessions/brave-owl/mnt/ws",  # mounted by name
+    "/sessions/brave-owl/mnt/eunomai-business-workspaces/ws",  # mounted under its parent
+    "/sessions/brave-owl/mnt/.requested/abc/ws",  # how a folder granted during a task is mounted has not been seen
+])
+def test_a_folder_granted_during_the_task_is_still_a_workspace(folder):
+    """mcp__cowork__request_cowork_directory mounts a folder the task was not opened with."""
+    assert denied(f"git -C {folder} status") and denied(f"cd {folder} && git stash")
+    assert denied(f"rm -f {folder}/.git/index.lock")
+    assert denied("git status", cwd=folder, tool="Bash")
+    assert guard.decide({"tool_name": "Write", "tool_input": {"file_path": f"{folder}/AGENTS.md"}})
+    assert guard.decide({"tool_name": "Edit", "tool_input": {"file_path": f"{folder}/.eunomai/project.toml"}})
+
+
 @pytest.mark.parametrize("tool", ["Write", "Edit", "MultiEdit"])
 def test_the_file_tools_cannot_write_into_a_workspaces_repository(tool):
     found = guard.decide({"tool_name": tool, "tool_input": {"file_path": WS + "/.git/index.lock"}})

@@ -165,7 +165,8 @@ sequenceDiagram
 - **The workspace is named by its path.** Under the current MCP protocol (`2026-07-28`) the client does not share
   its folders with the connector (roots are deprecated), so the connector cannot discover the folder selected in
   Cowork. It keeps workspaces in its own folder and returns their path; in a local Cowork session on Windows,
-  Claude's file tools and the connector see the same path.
+  Claude's file tools and the connector see the same path. A task opened without the folder asks Cowork for it and
+  carries on (H23).
 - **Per-user data lives in `%LOCALAPPDATA%\eunomai-business`**, not in `CLAUDE_PLUGIN_DATA`, which points inside
   each task's folder and does not outlive the task. Claude Desktop installed as a Windows package (MSIX) redirects
   that folder for the processes it starts unless it already exists ([where](data-on-computers.md)).
