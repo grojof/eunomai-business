@@ -320,3 +320,9 @@ def test_daily_commands_that_real_git_shows_do_not_write_pass(command):
 ])
 def test_their_writing_forms_stay_refused(command):
     assert denied(command, cwd="/sessions/brave-owl"), command
+
+
+@pytest.mark.parametrize("command", ["git -C mnt/sh* add .", "git -C mnt/w? add .", "git -C mnt/[w]s add .", "git -C /sessions/*/mnt/ws add .",
+                                     "git -C c* add ."])
+def test_a_folder_with_a_wildcard_could_be_anywhere(command):
+    assert denied(command, cwd="/sessions/brave-owl"), command

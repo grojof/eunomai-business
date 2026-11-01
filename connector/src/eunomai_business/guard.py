@@ -305,9 +305,9 @@ def _unwrap(words: list[str]) -> tuple[list[str], dict[str, str], str | None]:
 
 
 def _join(base: str | None, path: str) -> str | None:
-    """A folder as far as the text shows it: absolute, relative to a place not known, or None when a variable or the
-    home folder makes it impossible to tell."""
-    if not path or path[0] == "~" or "$" in path or "`" in path:
+    """A folder as far as the text shows it: absolute, relative to a place not known, or None when a variable, a
+    wildcard or the home folder makes it impossible to tell."""
+    if not path or path[0] == "~" or set(path) & set("$`*?["):
         return None
     return path if _ABSOLUTE.match(path) or base is None else f"{base}/{path}"
 

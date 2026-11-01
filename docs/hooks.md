@@ -43,7 +43,7 @@ connector instead (`workspace_status`, the version tools).
 | On a copy | Decision |
 |---|---|
 | `git -C /tmp/copy ...`, `cd /tmp/copy && git ...`, `env -C /tmp/copy git ...`, `--git-dir`, `GIT_DIR` with a folder outside a workspace | Allowed: any git command |
-| `git -C copy ...`, relative, when neither the command nor the folder the hook receives puts it in a workspace, it does not climb with `..`, is not `.`, and names no workspace | Allowed: any git command. This is a choice: after a `cd` into a workspace in an earlier call, the hook cannot tell |
+| `git -C copy ...`, relative, when neither the command nor the folder the hook receives puts it in a workspace, it does not climb with `..`, is not `.`, has no wildcard, and names no workspace | Allowed: any git command. This is a choice: after a `cd` into a workspace in an earlier call, the hook cannot tell |
 | `git clone <workspace> /tmp/copy` | Allowed: it reads the workspace and writes the copy |
 | `--work-tree` or `GIT_WORK_TREE` alone | Not enough: they move the files, and the repository is still the one found from the folder |
 | A copy named like the workspace, outside the folder Cowork mounts or in its `outputs` or `uploads` | Allowed: it is not the workspace |
