@@ -925,3 +925,127 @@ def test_pins_only_other_platforms_install_are_listed_apart(monkeypatch, tmp_pat
     result = deps.audit(tmp_path)
     assert result["not_installed_on_computers"] == ["requirements.txt: httpx2-jsfetch==1.0 (only on emscripten)"]
     assert any(b["package"] == "pywin32-ctypes" for b in result["blocked"])  # a Windows pin is still audited
+
+
+# --- ways around the audit, found by an independent review ---------------------------------------------------------
+
+def tree(folder, files: dict):
+    for path, text in files.items():
+        (folder / path).parent.mkdir(parents=True, exist_ok=True)
+        (folder / path).write_text(text, newline="\n")
+
+
+LEFT_PAD = {"version": "1.3.0", "integrity": "sha512-x",
+            "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz"}
+
+
+def npm_lock(root: dict, **packages) -> str:
+    return json.dumps({"lockfileVersion": 3, "packages": {"": root, "node_modules/left-pad": LEFT_PAD, **packages}})
+
+
+def test_a_package_json_that_asks_for_what_its_lockfile_omits_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"package.json": json.dumps({"dependencies": {"evil": "*"}, "scripts": {"postinstall": "node x.js"}}),
+                    "package-lock.json": npm_lock({"name": "x"})})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "package.json" in result["not_pinned"][0]
+
+
+def test_a_lockfile_root_that_lists_a_package_it_does_not_hold_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    declared = {"dependencies": {"evil": "*", "left-pad": "1.3.0"}}
+    tree(tmp_path, {"package.json": json.dumps(declared), "package-lock.json": npm_lock({"name": "x", **declared})})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_package_json_its_lockfile_answers_passes(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    declared = {"dependencies": {"left-pad": "1.3.0"}, "peerDependencies": {"left-pad": "*"}}
+    tree(tmp_path, {"package.json": json.dumps({"name": "x", **declared}),
+                    "package-lock.json": npm_lock({"name": "x", **declared})})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("entry", [{"resolved": "https://evil.example/e.tgz", "integrity": "sha512-x"},
+                                   {"link": True, "resolved": "../evil", "version": "1.0.0"},
+                                   {"link": True, "resolved": "packages/evil"}])
+def test_an_npm_entry_with_no_version_or_a_link_is_refused_not_skipped(monkeypatch, tmp_path, entry):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"package-lock.json": json.dumps({"lockfileVersion": 3, "packages": {
+        "": {"name": "x"}, "node_modules/left-pad": LEFT_PAD, "node_modules/evil": entry}})})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "node_modules/evil" in result["not_pinned"][0]
+
+
+@pytest.mark.parametrize("field", ["peerDependencies", "optionalDependencies"])
+def test_packages_declared_as_peers_or_optional_must_be_pinned(tmp_path, field):
+    tree(tmp_path, {"package.json": json.dumps({field: {"evil": "*"}})})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_pyproject_that_asks_for_what_the_list_beside_it_omits_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements.txt": "left-pad==1.3.0 --hash=sha256:ab\n",
+                    "pyproject.toml": '[project]\nname = "x"\nversion = "1"\ndependencies = ["evil"]\n'})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "evil (in pyproject.toml" in result["not_pinned"][0]
+
+
+def test_a_pyproject_the_list_beside_it_answers_passes(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements.txt": "left-pad==1.3.0 --hash=sha256:ab\n",
+                    "pyproject.toml": '[project]\nname = "x"\nversion = "1"\nrequires-python = ">=3.12"\ndependencies = '
+                                      '["Left_Pad>=1", "tomli; python_version < \'3.11\'", "x[extra]"]\n'})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("manifest, text", [
+    ("services/api/pyproject.toml", '[project]\nname = "x"\nversion = "1"\ndependencies = ["evil"]\n'),
+    ("services/api/package.json", '{"dependencies": {"evil": "*"}}'),
+    ("services/web/requirements.in", "evil\n"),
+])
+def test_a_project_in_a_subfolder_needs_a_list_of_its_own(monkeypatch, tmp_path, manifest, text):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements.txt": "left-pad==1.3.0 --hash=sha256:ab\n", manifest: text})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and manifest in result["reasons"][0]
+
+
+def test_a_list_for_another_ecosystem_does_not_answer_for_a_manifest(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements.txt": "left-pad==1.3.0\n", "package.json": '{"dependencies": {"evil": "*"}}'})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_a_folder_called_archive_is_read_like_any_other(tmp_path):
+    tree(tmp_path, {"archive/requirements.txt": "evil>=1\n"})
+    assert deps.audit(tmp_path)["verdict"] == "blocked"
+
+
+def test_lists_in_a_requirements_folder_are_read(monkeypatch, tmp_path):
+    registry(monkeypatch, {"evil": {"6.6.6": 100}}, vulns={("evil", "6.6.6"): ["GHSA-x"]})
+    tree(tmp_path, {"requirements/base.txt": "evil==6.6.6\n"})
+    result = deps.audit(tmp_path)
+    assert result["files"] == ["requirements/base.txt"] and [b["package"] for b in result["blocked"]] == ["evil"]
+
+
+def test_a_requirements_folder_answers_for_the_project_above_it(monkeypatch, tmp_path):
+    registry(monkeypatch, {"left-pad": {"1.3.0": 100}})
+    tree(tmp_path, {"requirements/base.txt": "left-pad==1.3.0\n",
+                    "pyproject.toml": '[project]\nname = "x"\nversion = "1"\ndependencies = ["left-pad"]\n'})
+    assert deps.audit(tmp_path)["verdict"] == "allowed"
+
+
+@pytest.mark.parametrize("name", ["app.py.lock", "tools/run.py.lock", "Gemfile.lock", "composer.lock", "x.LOCK"])
+def test_a_lockfile_the_audit_does_not_read_is_refused(tmp_path, name):
+    """`uv run script.py` honours a `script.py.lock` beside it: it installs what no audit saw."""
+    tree(tmp_path, {name: "version = 1\n"})
+    result = deps.audit(tmp_path)
+    assert result["verdict"] == "blocked" and "a lockfile the audit does not read" in result["not_pinned"][0]
+
+
+def test_a_wheel_with_a_local_path_beside_its_address_is_refused(monkeypatch, tmp_path):
+    registry(monkeypatch, {"fastapi": {"0.1.0": 100}})
+    files = 'wheels = [{ url = "https://files.pythonhosted.org/x.whl", path = "../../x.whl", hash = "sha256:aa" }]'
+    uv_project(tmp_path, locked("fastapi", "0.1.0", files=files))
+    assert deps.audit(tmp_path)["not_pinned"] == ["uv.lock: fastapi (only the public index)"]

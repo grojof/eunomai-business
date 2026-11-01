@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Ways around the audit closed** (independent review): `package.json` and the root of `package-lock.json` must agree;
+  npm entries with no version or a link are refused, not skipped; peer and optional dependencies count; each folder
+  that declares packages needs a pinned list of its own and its kind; a `pyproject.toml` must be answered by the
+  requirements lists beside it; a folder called `archive` is read; `requirements/*.txt` are read; a lockfile the audit
+  does not read, such as `script.py.lock`, is refused, as is a `uv.lock` wheel with a local path.
 - **The audit gate holds for every send** (independent review): it no longer depends on what a project declares, since
   a declaration that was not valid turned it off. `version_to_test` goes through it too: that code runs in an
   environment. A version with no packages needs no network. `version_propose` judges what the server holds: if the

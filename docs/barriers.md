@@ -72,14 +72,17 @@ The newest version that passes is recommended, with its runtime requirements. Th
 check allows.
 
 `dependency_audit` applies the same rules to every package a workspace pins, direct and indirect, in
-`requirements*.txt`, `package-lock.json` (version 2 or later), `uv.lock`, or `vendor.json`, outside environments and
-archives and never through a link. The rules name no library or framework: which technologies a project may use is
+`requirements*.txt`, `requirements/*.txt`, `package-lock.json` (version 2 or later), `uv.lock`, or `vendor.json`, outside
+environments and never through a link. The rules name no library or framework: which technologies a project may use is
 `allowed_technologies`, and a package IT vetted despite the origin rules is in `dependency_exceptions`
 ([configuration](configuration.md)). It blocks:
 
 - a requirement that is not an exact pin from the public index: ranges, URLs, local paths, other indexes or
   `--find-links`, and any `-r`/`-c` that does not name another pinned list in the same folder;
-- an npm entry not downloaded from the public registry under its own name;
+- an npm entry not downloaded from the public registry under its own name, with no version, or a link;
+- a `package-lock.json` that no longer answers the `package.json` beside it, or that lists a package it does not hold;
+- a lockfile the audit does not read, such as `script.py.lock`, which `uv run script.py` honours: it would install
+  what the audit never saw;
 - a `uv.lock` entry that does not come from the public index, other than the project itself, so a workspace member
   is refused too. Every entry has files, each with a hash that the registry published for that name and version:
   anyone can upload to the index, so an address says nothing about which package a file is;
@@ -97,7 +100,9 @@ archives and never through a link. The rules name no library or framework: which
   or only on Pythons older than the one a list was compiled for (`--python-version` in uv's header, or the
   `requires-python` of a `pyproject.toml` beside the list), is listed apart, not blocked;
 - declared packages (`pyproject.toml`, including its development groups, extras and dynamic dependencies,
-  `package.json`...) without a pinned list;
+  `package.json`, including peer and optional ones...) without a pinned list **in their own folder**, or in a
+  `requirements/` folder beside them: a list elsewhere in the tree, or of another ecosystem, answers for nothing here;
+- a `pyproject.toml` that asks for a package the requirements lists beside it leave out;
 - a `uv.lock` holding anything the audit does not read, and a pinned list that is a link: tools follow it.
 
 Every package in a `uv.lock` is audited, whatever marker leads to it: a marker in a lockfile cannot be told from one

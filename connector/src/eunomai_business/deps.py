@@ -39,6 +39,10 @@ _SOURCE_SHORT = re.compile(r"^(github|gitlab|bitbucket):[\w.-]+/[\w.-]+$|^git@[\
 # Project links a package labels as its code, wherever it is hosted (foss.heptapod.net, a foundation's own forge...)
 _SOURCE_LABELS = {"source", "source code", "sourcecode", "repository", "code", "github", "gitlab", "git", "scm"}
 _LOCKFILES = ("package-lock.json", "uv.lock", "vendor.json")
+# Those it reads, or takes as saying a project installs something. Any other, such as `script.py.lock`, which
+# `uv run script.py` honours, says what is installed in a way it cannot answer for.
+_KNOWN_LOCKS = {"uv.lock", "poetry.lock", "yarn.lock"}
+_NPM_DEPENDENCIES = ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")
 _PYPI_INDEX = "https://pypi.org/simple"
 _PYPI_FILE = re.compile(r"https://files\.pythonhosted\.org/[\w./%+~-]+")  # no query, fragment or backslash to hide in
 _UV_LOCK_FIELDS = {"version", "revision", "requires-python", "resolution-markers", "supported-markers",
@@ -49,7 +53,7 @@ _UV_SETTINGS = {"cache-keys", "default-groups", "dev-dependencies", "environment
 _NPM_NAME = re.compile(r"(@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*", re.IGNORECASE)
 _VENDOR_URL = re.compile(r"https://(github\.com|gitlab\.com|codeberg\.org|registry\.npmjs\.org)/[\w./%+~{}-]+")
 _VENDOR_HASHES = ("sha256", "sha384", "sha512", "executables")
-_SKIP_FOLDERS = {".git", ".venv", "venv", "node_modules", "__pycache__", "archive"}
+_SKIP_FOLDERS = {".git", ".venv", "venv", "node_modules", "__pycache__"}
 _UNREADABLE = (ValueError, UnicodeDecodeError, TypeError, AttributeError, KeyError, RecursionError)
 _AT_ONCE = 8  # packages checked at the same time: the audit runs before every send
 
@@ -296,7 +300,9 @@ def _project_files(folder: Path, links: bool = False):
 
 
 def _is_pinned_list(file: Path) -> bool:
-    return file.name.lower() in _LOCKFILES or fnmatch.fnmatch(file.name.lower(), "requirements*.txt")
+    name = file.name.lower()
+    return name in _LOCKFILES or fnmatch.fnmatch(name, "requirements*.txt") \
+        or (file.parent.name.lower() == "requirements" and name.endswith(".txt"))
 
 
 def _pinned_files(folder: Path) -> list[Path]:
@@ -341,14 +347,30 @@ def _requirements(text: str, siblings: set[str]) -> tuple[list[tuple[str, str]],
     return pins, loose, hashed and bool(pins), elsewhere
 
 
-def _npm_lock(text: str) -> tuple[list[tuple[str, str]], list[str], bool, list[str]]:
-    """Pins of an npm lockfile (version 2 or 3), each from the public registry under its own name."""
+def _npm_root_problems(root: dict, packages: dict, folder: Path) -> list[str]:
+    """Where a lockfile no longer answers `package.json` beside it, or lists what it does not hold: `npm install`
+    would write a new one and install what the audit never saw."""
+    manifest = folder / "package.json"
+    declared = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else root
+    problems = [f"package.json: {field} differ from the lockfile" for field in _NPM_DEPENDENCIES
+                if (declared.get(field) or {}) != (root.get(field) or {})]
+    return problems + [f"package.json: {name} is not in the lockfile" for field in _NPM_DEPENDENCIES[:2]
+                       for name in root.get(field) or {} if f"node_modules/{name}" not in packages]
+
+
+def _npm_lock(text: str, folder: Path) -> tuple[list[tuple[str, str]], list[str], bool, list[str]]:
+    """Pins of an npm lockfile (version 2 or 3), each from the public registry under its own name, which must still
+    answer the `package.json` beside it."""
     data = json.loads(text)
     if "packages" not in data:
         return [], ["lockfile version 1 is not supported: regenerate it with npm 7 or later"], False, []
-    pins, loose, hashed = [], [], True
+    pins, hashed = [], True
+    loose = _npm_root_problems(data["packages"].get("", {}), data["packages"], folder)
     for path, meta in data["packages"].items():
-        if not path or meta.get("link") or "version" not in meta:
+        if not path:
+            continue
+        if meta.get("link") or "version" not in meta:
+            loose.append(f"{path}: not a version from the public registry")
             continue
         name = meta.get("name") or path.rsplit("node_modules/", 1)[-1]
         resolved = meta.get("resolved") or ""
@@ -415,7 +437,8 @@ def _uv_lock(text: str, folder: Path, digests: dict) -> tuple[list[tuple[str, st
             continue
         if not version or not isinstance(version, str) or set(source) != {"registry"} or not files \
                 or str(source["registry"]).rstrip("/") != _PYPI_INDEX or not all(
-                    _PYPI_FILE.fullmatch(str(file.get("url", ""))) and file.get("hash") for file in files):
+                    _PYPI_FILE.fullmatch(str(file.get("url", ""))) and file.get("hash") and "path" not in file
+                    for file in files):
             loose.append(f"{name} (only the public index)")
             continue
         pins.append((name, version))
@@ -531,29 +554,65 @@ def _unpinned_requirements(pins: list[tuple[str, str]], python_from: tuple[int, 
     return sorted(missing), sorted(conditional)
 
 
+def _declares(file: Path) -> str | None:
+    """Which kind of pinned list a file asks for, if it says a project installs something."""
+    name = file.name.lower()
+    if name in ("setup.py", "setup.cfg", "pipfile", "requirements.in", "poetry.lock"):
+        return "python"
+    if name in ("yarn.lock", "pnpm-lock.yaml"):
+        return "npm"
+    try:
+        if name == "pyproject.toml":
+            data = tomllib.loads(file.read_text(encoding="utf-8"))
+            project, tool = data.get("project") or {}, data.get("tool") or {}
+            if project.get("dependencies") or tool.get("poetry") or (tool.get("uv") or {}).get("dev-dependencies") \
+                    or "dependencies" in (project.get("dynamic") or []) \
+                    or any((project.get("optional-dependencies") or {}).values()) \
+                    or any((data.get("dependency-groups") or {}).values()):
+                return "python"
+        if name == "package.json":
+            data = json.loads(file.read_text(encoding="utf-8"))
+            if any(data.get(field) for field in _NPM_DEPENDENCIES):
+                return "npm"
+    except _UNREADABLE:  # unreadable: treat as declaring, so it is not waved through
+        return "npm" if name == "package.json" else "python"
+    return None
+
+
 def _declares_packages(folder: Path) -> bool:
     """Whether a project without a pinned list still declares packages to install."""
-    for file in _project_files(folder):
-        name = file.name.lower()
-        if name in ("setup.py", "setup.cfg", "pipfile", "requirements.in", "poetry.lock", "yarn.lock",
-                    "pnpm-lock.yaml"):
-            return True
+    return any(_declares(file) for file in _project_files(folder))
+
+
+def _unpinned_folders(folder: Path, lists: list[Path]) -> list[str]:
+    """Files that ask for a kind of pinned list their own folder does not have: a list elsewhere in the tree says
+    nothing about them."""
+    def holds(here: Path, kind: str) -> bool:
+        return any(item.parent in (here, here / "requirements")
+                   and (item.name.lower() == "package-lock.json") == (kind == "npm")
+                   and item.name.lower() != "vendor.json" for item in lists)
+
+    return sorted(file.relative_to(folder).as_posix() for file in _project_files(folder)
+                  if (kind := _declares(file)) and not holds(file.parent, kind))
+
+
+def _left_out_of_lists(folder: Path, names_by_folder: dict[Path, set[str]]) -> list[str]:
+    """What a `pyproject.toml` asks for that the requirements lists beside it leave out. A `uv.lock` checks this itself."""
+    found = []
+    for here, names in names_by_folder.items():
+        project = here.parent if here.name.lower() == "requirements" else here
+        where = (project / "pyproject.toml").relative_to(folder).as_posix()
         try:
-            if name == "pyproject.toml":
-                data = tomllib.loads(file.read_text(encoding="utf-8"))
-                project, tool = data.get("project") or {}, data.get("tool") or {}
-                if project.get("dependencies") or tool.get("poetry") or (tool.get("uv") or {}).get("dev-dependencies") \
-                        or "dependencies" in (project.get("dynamic") or []) \
-                        or any((project.get("optional-dependencies") or {}).values()) \
-                        or any((data.get("dependency-groups") or {}).values()):
-                    return True
-            if name == "package.json":
-                data = json.loads(file.read_text(encoding="utf-8"))
-                if data.get("dependencies") or data.get("devDependencies"):
-                    return True
+            own, asked, _ = _own_project(project)
         except _UNREADABLE:
-            return True  # unreadable: treat as declaring, so it is not waved through
-    return False
+            found.append(f"{where}: not readable")
+            continue
+        python_from = _declared_python(project) or _SUPPORTED_PYTHONS[0]
+        for requirement in asked:
+            name, marker = _normalized(requirement.name), str(requirement.marker or "")
+            if name != own and name not in names and (not marker or _needed_on_a_computer(marker, python_from)):
+                found.append(f"{where}: {name} (in pyproject.toml, not in the list beside it)")
+    return found
 
 
 def audit(folder: Path) -> dict:
@@ -566,7 +625,11 @@ def audit(folder: Path) -> dict:
     # a tool follows a link the audit never reads
     loose += [f"{f.relative_to(folder).as_posix()}: a link, not a pinned list"
               for f in sorted(filter(_is_pinned_list, _project_files(folder, links=True)))]
+    loose += [f"{f.relative_to(folder).as_posix()}: a lockfile the audit does not read"
+              for f in sorted(_project_files(folder))
+              if f.name.lower().endswith(".lock") and f.name.lower() not in _KNOWN_LOCKS]
     listed: dict[tuple[str, str], None] = {}  # a requirements list may leave something out; a lockfile cannot
+    names_by_folder: dict[Path, set[str]] = {}
     digests: dict[tuple[str, str, str], set[str]] = {}
     installs = False  # whether any file says what the project installs
     for file in files:
@@ -576,7 +639,7 @@ def audit(folder: Path) -> dict:
         try:
             text = file.read_text(encoding="utf-8")
             if kind == "package-lock.json":
-                found, not_pinned, hashed, skipped = _npm_lock(text)
+                found, not_pinned, hashed, skipped = _npm_lock(text, file.parent)
             elif kind == "vendor.json":
                 found, not_pinned, hashed, skipped = _vendored(text)
             elif kind == "uv.lock":
@@ -591,6 +654,7 @@ def audit(folder: Path) -> dict:
             header = [(int(a), int(b)) for a, b in _COMPILED_FOR.findall(text)]  # every supported one
             compiled_for.append(min(header) if header else _declared_python(file.parent) or _SUPPORTED_PYTHONS[0])
             listed.update(dict.fromkeys(found))
+            names_by_folder.setdefault(file.parent, set()).update(name for name, _ in found)
         loose += [f"{where}: {line}" for line in not_pinned]
         elsewhere += [f"{where}: {line}" for line in skipped]
         if not hashed:
@@ -629,7 +693,12 @@ def audit(folder: Path) -> dict:
 
     with ThreadPoolExecutor(_AT_ONCE) as pool:
         blocked = [found for found in pool.map(judged, sorted(pins.items())) if found]
-    undeclared = not installs and not loose and _declares_packages(folder)
+    loose += _left_out_of_lists(folder, {here: names for here, names in names_by_folder.items()
+                                         if not (here / "uv.lock").is_file() and (
+        (here / "pyproject.toml").is_file() or (here.parent / "pyproject.toml").is_file())})
+    undeclared = _unpinned_folders(folder, files)
+    if not undeclared and not installs and not loose and _declares_packages(folder):
+        undeclared = ["no pinned list installs anything"]
     result = {"verdict": "allowed" if files and not blocked and not loose and not undeclared else "blocked",
               "files": [f.relative_to(folder).as_posix() for f in files], "packages": len(pins),
               "blocked": blocked, "not_pinned": loose, "without_hashes": unhashed}
@@ -638,7 +707,8 @@ def audit(folder: Path) -> dict:
     if elsewhere:
         result["not_installed_on_computers"] = elsewhere
     if undeclared:  # vendored files are not a list of what the project installs
-        result["reasons"] = ["packages are declared but not pinned: requirements*.txt, package-lock.json or uv.lock"]
+        result["reasons"] = ["packages are declared but not pinned, each folder needs requirements*.txt, "
+                             f"package-lock.json or uv.lock: {', '.join(undeclared[:10])}"]
     elif not files and not loose:
         result.update(verdict="allowed", note="the project installs no packages: nothing to check")
     return result
