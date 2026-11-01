@@ -204,7 +204,7 @@ def test_the_same_with_the_computers_own_shell_standing_in_a_workspace():
     "setsid git add .", "ionice git add .", "ionice -c 3 git add .", "flock /tmp/l git add .",
     "flock -w 5 /tmp/l git add .", "flock /tmp/l -c 'git add .'", "coproc git add .", "case x in x) git add . ;; esac",
     "(cd /tmp/copy); git add .", "pushd /tmp/copy; popd; git add .", "if false; then cd /tmp/copy; fi; git add .",
-    "true && cd /tmp/copy; git add .", "false || cd /tmp/copy; git add .", "for d in a; do cd /tmp/copy; done; git add .",
+    "false || cd /tmp/copy; git add .", "for d in a; do cd /tmp/copy; done; git add .",
     "cd /sessions/brave-owl/mnt/ws && (cd /tmp/copy); git add .",
     "cd /sessions/brave-owl/mnt/ws && pushd /tmp/copy; popd; git add .",
     "export GIT_DIR=/sessions/brave-owl/mnt/ws/.git; cd /tmp/copy; git add .",
@@ -232,7 +232,7 @@ def test_what_changes_a_workspaces_repository_does_not_get_through(command):
     "git --no-replace-objects log", "git --literal-pathspecs log -- a.txt",
     "git -C /sessions/brave-owl/mnt/outputs/ws add .", "git -C /sessions/brave-owl/mnt/uploads/ws status",
     "cd /sessions/brave-owl/mnt/outputs/ws && git stash",
-    "git -C copy add .", "git -C copy status", "git -C ../copy commit -m x",
+    "git -C copy add .", "git -C copy status",
 ])
 def test_what_a_model_writes_every_day_is_not_refused(command):
     assert denied(command, cwd="/sessions/brave-owl") is None, command
@@ -256,3 +256,67 @@ def test_the_parser_never_stops_a_hook_whatever_it_reads():
     for command in ['echo "unterminated', "echo 'unterminated", "cat <<EOF", "$(", "`", "(((", ")))", "\\", "<<", "x <(",
                     "a >", "cd", "pushd", "popd", "git -C", "git --git-dir", "find", "sh -c", "eval", "env -u", "for", "fi"]:
         guard.decide({"tool_name": SANDBOX, "cwd": WS, "tool_input": {"command": command}})
+
+
+# --- a second review: this rule helps against mistakes; the barrier is the connector -------------------------------
+
+@pytest.mark.parametrize("command", [
+    "git -C mnt/ws add .", "git -C ../mnt/ws add .", "git -C . add .", "git -C ../copy commit -m x", "git -C ws/app add .",
+    "cd /tmp/copy | cat; git add .", "cd /tmp/copy & git add .", "cd /tmp/copy &\ngit add .", "true | cd /tmp/copy; git add .",
+    "echo 'git add .' | sh", "echo 'git add .' | bash", "printf 'git stash' | /bin/sh", "bash <<< 'git add .'",
+    "sh <<< 'git stash'", "git grep -nO'touch .git/p' two", "git grep -hO'x' two", "git grep -O x",
+])
+def test_what_a_mistake_reaches_is_refused(command):
+    assert denied(command, cwd="/sessions/brave-owl"), command
+
+
+@pytest.mark.parametrize("command", ["echo x >& .git/config", "echo x &> .git/config", "echo x &>> .git/config"])
+def test_a_redirection_into_the_repository_is_seen(command):
+    assert denied(command), command
+
+
+@pytest.mark.parametrize("command", ["ls 2>&1 | head", "ls >&2", "ls 2>&-"])
+def test_a_redirection_to_a_stream_is_no_file(command):
+    assert denied(command) is None, command
+
+
+@pytest.mark.parametrize("command", [
+    "cp x ~/eunomai-business-workspaces/ws/.git/config", "echo x > ~/eunomai-business-workspaces/ws/.git/hooks/p",
+    r'echo x > "C:\Users\me\eunomai-business-workspaces\ws\.git\config"',
+])
+def test_the_computers_own_shell_outside_a_workspace_is_refused_a_path_that_names_one(command):
+    assert denied(command, cwd="C:/Users/me/other", tool="Bash"), command
+
+
+@pytest.mark.parametrize("command", [
+    r'git -C "C:\Users\me\eunomai-business-workspaces\ws" add .',
+    r"git -C 'C:\Users\me\eunomai-business-workspaces\ws' add .",
+    r'cd "C:\Users\me\eunomai-business-workspaces\ws" && git add .',
+])
+def test_a_windows_path_reads_the_same_in_either_quote(command):
+    assert denied(command, cwd="C:/Users/me", tool="Bash"), command
+
+
+@pytest.mark.parametrize("command", [
+    r'echo "a\"b"; git log', r'echo "cost: \$5" > /tmp/x', "git clone /sessions/brave-owl/mnt/ws /tmp/c",
+    "rm -rf /tmp/c && git clone /sessions/brave-owl/mnt/ws /tmp/c", "git clone mnt/ws /tmp/c",
+    "git clone --depth 1 /sessions/brave-owl/mnt/ws /tmp/c",
+    "mkdir -p /tmp/copy && cd /tmp/copy\ngit init\ngit add .", "cd /tmp/copy && ls\ngit status", "cd /tmp/copy\ngit status",
+    "cat > /tmp/n.md <<\\EOF\ngit clone x\nEOF", "cat > /tmp/n.md << 'END OF TEXT'\ngit clone x\nEND OF TEXT",
+    'cat > /tmp/n.md << "END OF TEXT"\ngit stash\nEND OF TEXT',
+    "git branch --show-current", "git branch", "git branch -a", "git branch -r", "git branch -vv", "git branch --list",
+    "git remote", "git remote -v", "git tag", "git tag -l", "git tag --list 'v*'", "git config --get user.name",
+    "git config --get-all remote.origin.url", "git config --list", "git --exec-path",
+])
+def test_daily_commands_that_real_git_shows_do_not_write_pass(command):
+    assert denied(command, cwd="/sessions/brave-owl") is None, command
+
+
+@pytest.mark.parametrize("command", [
+    "git branch new", "git branch -d old", "git branch -D old", "git branch -m a b", "git branch -u origin/x",
+    "git tag v1", "git tag -d v1", "git tag -a v1 -m x", "git remote add o x", "git remote remove o",
+    "git config user.name x", "git config --unset user.name", "git config --add a.b c", "git clone x", "git clone x y",
+    "git clone /tmp/src /sessions/brave-owl/mnt/ws/sub", "git --exec-path=/tmp/x log",
+])
+def test_their_writing_forms_stay_refused(command):
+    assert denied(command, cwd="/sessions/brave-owl"), command

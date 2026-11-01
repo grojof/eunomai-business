@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The git rule: daily commands pass, and a few mistakes no longer do** (second review): `git clone` to a copy, a `cd`
+  after `&&` on a following line, `branch --show-current`, `branch -a`, `remote -v`, `tag -l`, `config --get` and
+  `--exec-path` pass, as real git shows they do not write, as do heredocs with `<<\\EOF` and quoted delimiters. A
+  relative `git -C` that climbs, stays here or names a workspace is refused; a `cd` in a pipe or behind `&` no longer
+  moves what follows; text piped or `<<<` into a shell counts; Windows paths read alike in both quotes. The rule stays
+  a helper: `docs/hooks.md` lists what text matching does not see.
 - **A preview's declaration, fewer holes and fewer false refusals** (second review): `python.exe` no longer skips the
   shape check, and `pip3.13` is refused as an installer. `127.0.0.1:{port}` and `gunicorn -b` are accepted, and the
   environment check is limited to the host variables of the servers it knows: a database's address or a version is
