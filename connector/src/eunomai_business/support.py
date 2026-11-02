@@ -52,6 +52,12 @@ def clean(text: object, limit: int = 500) -> str:
     return re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", " ", str(text))[:limit]
 
 
+def mail_link(address: str, subject: str, text: str) -> str:
+    """A mailto link as RFC 6068 says: every reserved character percent-encoded, line breaks as %0D%0A."""
+    body = text.replace("\r\n", "\n").replace("\n", "\r\n")
+    return f"mailto:{quote(address, safe='@')}?subject={quote(subject, safe='')}&body={quote(body, safe='')}"
+
+
 def report(error: NeedsIT) -> dict:
     lines = [f"Problem: {error.problem}", ""]
     lines += [f"{key}: {clean(value)}" for key, value in error.details.items()]
@@ -63,8 +69,7 @@ def report(error: NeedsIT) -> dict:
     result = {"status": "needs_it", "user_message": error.user_message, "it_report": text}
     address = os.environ.get("EUNOMAI_SUPPORT_EMAIL", "").strip()
     if address:
-        subject = f"eunomai-business: {error.problem}"
-        result["email_link"] = f"mailto:{address}?subject={quote(subject)}&body={quote(text)}"
+        result["email_link"] = mail_link(address, f"eunomai-business: {clean(error.problem, 200)}", text)
     return result
 
 

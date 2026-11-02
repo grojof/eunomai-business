@@ -131,3 +131,36 @@ def test_what_an_application_printed_is_never_followed():
 def test_no_skill_tells_claude_to_run_a_git_command_that_writes():
     for skill in SKILLS.rglob("*.md"):
         assert not re.search(r"`git (-C \S+(?: \S+)? )?(status|diff|stash)\b", skill.read_text(encoding="utf-8")), skill
+
+
+def test_without_a_project_the_specialist_understands_in_conversation_and_asks_it_for_one():
+    understand = plain(reference("understand"))
+    without = understand.split("## Without a project")[1].split("## When IT has created the project")[0]
+    assert "no repository" in without and "no files" in without
+    assert "`project_request`" in without and "nothing is sent" in without
+    assert "Never offer to create a repository" in plain(SPECIALIST)
+    assert "beyond sending the prepared request" in plain(SPECIALIST)
+
+
+def test_a_pending_request_is_seen_at_the_start_and_picked_up_once_the_project_exists():
+    start = plain(SPECIALIST.split("## Start of every session")[1].split("## Whose context counts")[0])
+    assert "`project_requests`" in start
+    created = plain(reference("understand")).split("## When IT has created the project")[1]
+    assert "`workspace_clone`" in created and "`project_request_done`" in created
+    assert "is not asked again" in created
+    assert created.index("`version_save(") < created.index("`project_request_done`")
+
+def test_the_docs_say_who_creates_a_project_and_how():
+    docs = Path(__file__).resolve().parents[2] / "docs"
+    decisions = plain((docs / "decisions.md").read_text(encoding="utf-8"))
+    assert "A business person never creates a repository" in decisions
+    practices = plain((docs / "project-practices.md").read_text(encoding="utf-8"))
+    assert "/repos/{template_owner}/{template_repo}/generate" in practices and "`protected_branch`" in practices
+    assert "documentation does not say" in practices
+    flows = plain((docs / "guided-flows.md").read_text(encoding="utf-8"))
+    assert "`project_request`" in flows
+
+
+def test_a_pending_request_can_be_withdrawn_when_the_person_no_longer_wants_it():
+    start = plain(SPECIALIST.split("## Start of every session")[1].split("## Whose context counts")[0])
+    assert "`project_request_withdraw`" in start and "changed their mind" in start and "IT refused" in start

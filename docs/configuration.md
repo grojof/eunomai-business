@@ -52,7 +52,7 @@ python tools\build.py --all             # the configuration and every variant, e
 | `connector_source` | `bundled` | `bundled`: the connector ships inside the zip. `path`: it runs from `connector_path` (development only). Any other value is an error. |
 | `connector_path` | — | Folder of the connector source; required when `connector_source` is `path`. |
 | `workspaces_root` | `~/eunomai-business-workspaces` | Where each user's workspaces (local clones) go. `~` is the user's profile; `%VAR%` is expanded. Must be absolute after expansion. |
-| `support_email` | — | The address users send to when the connector stops and needs IT. Optional; without it users get the report but no e-mail link. |
+| `support_email` | — | The address users send to when the connector stops and needs IT, and where a request for a new project goes ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)). Optional; without it users get the report or the request to copy, but no e-mail link. |
 | `diagnostics` | `false` | `true` adds the diagnostic tools (`diag_*`), the validation skills and a hook log. For validating an installation; keep `false` for users. |
 | `providers` | — | Sign-in providers, by name. Must include `git`. See below. |
 
