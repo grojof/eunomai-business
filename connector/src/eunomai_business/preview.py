@@ -59,7 +59,9 @@ _LOOPBACK = {"0100007F", "00000000000000000000000001000000", "0000000000000000FF
 # What uv and the operating system need. Everything else stays out: the person's tokens, the connector's settings
 # (EUNOMAI_*), uv's and pip's own (a variable can name another index), and whatever else the computer has.
 _SYSTEM = ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "OS", "NUMBER_OF_PROCESSORS",
-           "PROCESSOR_ARCHITECTURE", "LANG", "LC_ALL", "LC_CTYPE", "TZ")
+           "PROCESSOR_ARCHITECTURE", "LANG", "LC_ALL", "LC_CTYPE", "TZ",
+           # where installed programs are, so a browser the computer has is found: never downloaded
+           "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432")
 # Only for installing, never for what the project runs: a proxy's address can hold a password.
 _PROXY = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy")
 _INSTALL = ("sync", "--frozen", "--no-dev", "--no-install-project", "--no-build", "--no-config", "--system-certs",
@@ -323,7 +325,7 @@ class _Preview:
         self.token, self.declaration, self.wanted_port = secrets.token_hex(16), declaration, port
         self.folder = Path(tempfile.mkdtemp(prefix=_PREFIX))
         self.app, self.home, self.temp = self.folder / "app", self.folder / "home", self.folder / "temp"
-        self.keep, self.log = _keep(workspace), self.folder / "preview.log"
+        self.keep, self.log = self.kept_folder(), self.folder / "preview.log"
         self.data, self.environment_folder = self.keep / "data", self.keep / "environment"
         self.made_keep = not self.keep.exists()  # nothing to keep for a first preview that never showed anything
         for folder in (self.app, self.home, self.temp, self.data):
@@ -337,7 +339,7 @@ class _Preview:
         self._closing, self._asking = threading.Lock(), threading.Lock()
         self.pipe = self._start_watcher()
         try:
-            answer = self.ask({"folder": str(self.folder), "state": str(_state_file(workspace)), "token": self.token,
+            answer = self.ask({"folder": str(self.folder), "state": str(self.state_path()), "token": self.token,
                                "workspace": workspace, "head": head, "limit": TIME_LIMIT, "log": str(self.log),
                                "declaration": declaration, "keep": str(self.keep)})
         except _Gone:
@@ -354,7 +356,7 @@ class _Preview:
         """Out of any job that lets it go, by the real interpreter, not a virtual environment's launcher. Its first
         process ends at once, so what stays has no parent to be found by; a job that refuses is respected: the preview
         works, ends with the host, and the person is told."""
-        state = _state_file(self.workspace)
+        state = self.state_path()
         state.parent.mkdir(parents=True, exist_ok=True)
         options = {"stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL,
                    "cwd": tempfile.gettempdir(),
@@ -369,6 +371,12 @@ class _Preview:
                 pipe = subprocess.Popen(command, creationflags=watcher.DETACHED, **options)
         pipe.wait(timeout=30)
         return pipe
+
+    def kept_folder(self) -> Path:
+        return _keep(self.workspace)
+
+    def state_path(self) -> Path:
+        return _state_file(self.workspace)
 
     def ask(self, request: dict) -> dict:
         """One question to the watcher, and its answer. No answer means it ended."""
@@ -468,7 +476,7 @@ class _Preview:
             if self.closed:
                 return not self.folder.exists()
             self.closed = True
-        path = _state_file(self.workspace)
+        path = self.state_path()
         if self.handed_over:
             if _read_state(path).get("token") == self.token and _watching(path):
                 _end(path)
@@ -716,21 +724,31 @@ def _how_long(minutes: int, keeps_running: bool) -> str:
     return f"It stops when this task ends, or in {minutes} minutes from this version."
 
 
-def _prepare(current: _Preview, declared: dict) -> dict:
-    """The saved version in the temporary folder, checked, and running. Refusals come back as answers."""
-    saved = gitops.export_saved(current.workspace, current.app, current.main, current.head)
+def _gate(current: _Preview, refused: str) -> dict | None:
+    """The saved version exported, checked against the main branch, audited, with a lockfile; or the answer that says
+    why not. What both a preview and a run of the tests go through first."""
+    current.saved = gitops.export_saved(current.workspace, current.app, current.main, current.head)
     try:
         audit = gitops.audit_saved(current.workspace, current.main, current.head, current.app)
     except support.Unreachable as exc:
         return support.audit_unavailable(
-            current.workspace, "The application cannot be shown now: the checks on what it uses could not run. Check "
-                               "the network or VPN and try again; your work is safe on this computer.", exc)
+            current.workspace, f"{refused} now: the checks on what it uses could not run. Check the network or VPN and "
+                               "try again; your work is safe on this computer.", exc)
     if audit["verdict"] != "allowed":
-        return deps.refusal(current.workspace, audit, "This version cannot be shown on your computer")
+        return deps.refusal(current.workspace, audit, refused)
     if not (current.app / "uv.lock").is_file():
         return {"workspace": current.workspace, "status": "no_lockfile",
-                "user_message": "This version cannot be shown on your computer yet: the list of exactly what it uses "
-                                "has not been made. Your work is safe on this computer."}
+                "user_message": f"{refused} yet: the list of exactly what it uses has not been made. Your work is safe on "
+                                "this computer."}
+    return None
+
+
+def _prepare(current: _Preview, declared: dict) -> dict:
+    """The saved version in the temporary folder, checked, and running. Refusals come back as answers."""
+    refusal = _gate(current, "This version cannot be shown on your computer")
+    if refusal:
+        return refusal
+    saved = current.saved
     _bring_up(current, declared)
     minutes = math.ceil(TIME_LIMIT / 60)
     reload = bool(current.wanted_port) and current.port == current.wanted_port

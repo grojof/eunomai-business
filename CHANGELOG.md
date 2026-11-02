@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **`app_tests`: the project's tests on the person's computer**, behind a build key of its own and `[tests]` on the
+  main branch: the preview's watcher, job, environment and audit, development packages too, for up to 20 minutes.
+  The model gets counts and at most ten failures, marked as the application's text; the output stays on the
+  computer for IT. Browser tests use a browser the computer has, as the declaration names it: Edge on Windows.
+  The specialist runs them before proposing and after fixing a failure.
 - **A preview a person keeps open while it changes**: a new version takes the address of the one it replaces, so the person
   reloads the page, keeps the data the declaration puts in `{data}`, and skips the installation when the lockfile,
   the declaration and the Python are the same: about 9 s for a change on the clean base application. The hour counts

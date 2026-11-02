@@ -523,6 +523,7 @@ def test_the_environment_has_no_secret(signed_in, workspaces, turned_on, pids, m
                "UV_PYTHON_INSTALL_DIR", "PATH", "PATHEXT", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP",
                "TMP", "TMPDIR", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "NO_COLOR", "LANG", "LC_ALL",
                "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "TZ",
+               "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432",  # where a browser the computer has is found
                # uv's own, on what it runs; Python's own on Windows; every one a name no organization's secret has
                "UV", "UV_RUN_RECURSION_DEPTH", "VIRTUAL_ENV", "__CF_USER_TEXT_ENCODING", "PWD", "LC_CTYPE", "SHLVL"}
     assert set(seen) <= allowed, set(seen) - allowed

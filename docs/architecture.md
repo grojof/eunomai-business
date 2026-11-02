@@ -152,8 +152,9 @@ sequenceDiagram
 | `auth` | Sign-in with any OAuth 2.0 provider (authorization code + PKCE, loopback redirect), token refresh | Standard OAuth 2.0; nothing server-specific |
 | `store` | Keeps sign-in records encrypted per user | The operating system (DPAPI on Windows, keyring elsewhere) |
 | `gitops` | Workspaces, versions, save points, sending, pull requests | Standard git over HTTPS (dulwich), except two Gitea-specific parts below |
-| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`, `specialist_settings`, `dependency_check`, `dependency_audit`, `app_preview`, `app_preview_stop`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
+| `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`, `specialist_settings`, `dependency_check`, `dependency_audit`, `app_preview`, `app_preview_stop`, `app_tests`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
 | `preview` | `app_preview`, off by default: the saved version in a temporary folder, audited, run through uv on 127.0.0.1, found again by any connector, with its whole process tree stopped on request and after 60 minutes ([barriers](barriers.md#the-preview-on-the-persons-computer)) | uv; a job object on Windows, a process group elsewhere |
+| `project_tests` | `app_tests`, off by default: the project's tests on the person's computer through the preview's watcher, gate and environment; counts and at most ten failures back, the output kept for IT | As `preview` |
 | `watcher` | What owns a preview: a detached process with the standard library alone, which starts its steps, holds its tree, enforces the limit and cleans up | A job object on Windows |
 | `support` | The stop: the user's message, IT's report, the e-mail link | — |
 | `settings` | The specialist's settings: languages, the organization's context and skills, where code may be written, and what a project declares, the preview included | — |

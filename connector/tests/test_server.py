@@ -8,7 +8,7 @@ import sys
 PRODUCT = {"sign_in_start", "sign_in_status", "whoami", "sign_out", "workspace_clone", "workspace_list",
            "workspace_status", "workspace_update", "version_create", "version_save", "version_send", "version_to_test",
            "version_propose", "specialist_settings", "dependency_check", "dependency_audit", "app_preview",
-           "app_preview_stop"}
+           "app_preview_stop", "app_tests"}
 DIAGNOSTICS = {"diag_environment", "diag_reach", "diag_hook_log"}
 
 # A fresh process per case: the diagnostic tools are registered when the server module is imported.

@@ -159,6 +159,27 @@ APP_DATABASE_URL = "sqlite:///{data}/preview.db"   # kept across versions, until
 A declaration that breaks a rule shows nothing and goes to IT. These rules catch slips, not malice: **IT reviews the
 declaration**, so protect it like `AGENTS.md`.
 
+## Running the tests on a person's computer
+
+Where IT turned on [`app_tests`](configuration.md#running-the-tests-on-a-persons-computer), the specialist runs the
+project's tests on the person's computer, those a sandbox cannot run included. Declare the command in
+`.eunomai/project.toml` on `main`:
+
+```toml
+[tests]
+run = ["pytest"]
+
+[tests.environment]
+APP_BROWSER_CHANNEL = "msedge"   # a browser the computer has; nothing is downloaded
+```
+
+| Rule | Why |
+|---|---|
+| `run` follows the rules of the preview's commands, with nothing in braces | What IT reviewed is what runs |
+| `[tests.environment]` follows the preview's, and cannot set `PYTEST_*` | The connector sets `PYTEST_ADDOPTS` to read the summary |
+| Browser tests use a browser the computer has, named by a variable the project reads, such as Edge (`msedge`) on Windows | Nothing is downloaded on a person's computer |
+| The tests' output is pytest's | The specialist reads its counts and short summary; the rest stays on the computer |
+
 ## Checks on the server
 
 What runs in a user's session is advisory for IT; what runs on the server is not:

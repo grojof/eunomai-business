@@ -8,7 +8,8 @@ import tomllib
 from urllib.parse import urlsplit
 
 DEFAULTS = {"docs_language": "en", "code_language": "", "free_development": False, "allowed_technologies": [],
-            "dependency_exceptions": [], "organization_context": "", "organization_skills": [], "app_preview": False}
+            "dependency_exceptions": [], "organization_context": "", "organization_skills": [], "app_preview": False,
+            "app_tests": False}
 
 
 def load() -> dict:
@@ -245,3 +246,34 @@ def preview(declaration: dict | None) -> dict | None:
     if problem:
         return {"invalid": f"[preview.environment] {problem}; IT corrects it"}
     return {"setup": setup, "run": run, "environment": environment}
+
+
+def tests(declaration: dict | None) -> dict | None:
+    """How the project's tests run on the person's computer, if it says: `run` (a command) and `environment`. The same
+    checks as the preview's, and no braces: nothing is put in. None when it says nothing; {"invalid": reason} when IT
+    must correct it. A browser the tests use is the project's to choose, through `environment`."""
+    if declaration is None:
+        return None
+    try:
+        declared = tomllib.loads(declaration.get("text", ""))
+    except tomllib.TOMLDecodeError:
+        return {"invalid": "the project's declaration is not valid TOML; IT corrects it"}
+    if "tests" not in declared:
+        return None
+    section = declared["tests"]
+    unknown = sorted(set(section) - {"run", "environment"}) if isinstance(section, dict) else ["(not a table)"]
+    if unknown:
+        return {"invalid": f"[tests] takes run and environment, not {', '.join(unknown)}; IT corrects it"}
+    run, environment = section.get("run"), section.get("environment", {})
+    problem = _entry_problem(run) or (is_installer(run[0]) and "it must not change what is installed")
+    if problem:
+        return {"invalid": f"[tests] run: {problem}; IT corrects it"}
+    if any(_PLACEHOLDER.search(word) for word in run):
+        return {"invalid": "[tests] run takes nothing in braces; IT corrects it"}
+    if not isinstance(environment, dict) or not all(isinstance(value, str) for value in environment.values()):
+        return {"invalid": "[tests.environment] takes names and text values; IT corrects it"}
+    reserved = [name for name in environment if not _VARIABLE.match(name) or _RESERVED.match(name)
+                or name.startswith("PYTEST_")]
+    if reserved:
+        return {"invalid": f"[tests.environment] cannot set {', '.join(sorted(reserved))}; IT corrects it"}
+    return {"run": run, "environment": environment}

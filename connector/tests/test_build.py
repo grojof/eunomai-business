@@ -76,6 +76,19 @@ def test_app_preview_reaches_the_connector(tmp_path, value):
     assert json.loads(mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_SPECIALIST"])["app_preview"] is value
 
 
+@pytest.mark.parametrize("value", [True, False])
+def test_app_tests_reaches_the_connector_on_its_own(tmp_path, value):
+    build.build(dict(EXAMPLE, app_tests=value), tmp_path)
+    mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
+    specialist = json.loads(mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_SPECIALIST"])
+    assert specialist["app_tests"] is value and specialist["app_preview"] is False
+
+
+def test_app_tests_is_off_in_the_example_and_must_be_true_or_false():
+    assert EXAMPLE["app_tests"] is False
+    assert "app_tests must be true or false" in build.validate(dict(EXAMPLE, app_tests="yes"))
+
+
 def test_app_preview_is_off_in_the_example_and_must_be_true_or_false():
     assert EXAMPLE["app_preview"] is False
     assert "app_preview must be true or false" in build.validate(dict(EXAMPLE, app_preview="yes"))
