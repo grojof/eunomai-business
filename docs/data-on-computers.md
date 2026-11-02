@@ -28,6 +28,7 @@ Look in both. Folders outside
 | The plugin | Managed by Claude Desktop (measured 2026-10-24: `%LOCALAPPDATA%\Claude-Data\claude_<id>\rpm\...\plugin_<id>`) | The zip's files: skills, connector source, the file guard hook, and measurement hooks when diagnostics are on | No | Claude Desktop's business; not yet measured |
 | Sign-in records | `<data>\signin-<hash>.dpapi`, one per provider (measured; the hash comes from the provider name and client ID) | Access token, refresh token, expiry times. Encrypted with DPAPI for that Windows user | **Yes** | **Yes**: delete them (below) |
 | Workspace registry | `<data>\workspaces.json` | Each workspace's folder, repository address and main branch, so the connector protects them | No | **Yes** |
+| Project requests | `<data>\project-requests\<request>.json` | A request for a new project: the suggested name, what it is for, who will use it, how it is done today, the first version, open questions, the message for IT and its dates; once its project is cloned, `done` with the workspace and repository, or `withdrawn` when the person no longer wants it. Kept, not deleted | Low: what the person told the assistant about their work | **Yes** |
 | Operation locks | `<data>\locks\` | Empty files that exist only while an operation runs | No | Normally empty |
 | Hook log (only with `diagnostics: true`) | `<data>\hooks.log`, and `hooks.log.1` after rotation (measured) | One JSON line per tool call: time, event, tool name, the names (not values) of its input fields, whether a guard-test marker matched, launch and run times, computer name, OS, shell, working folder, plugin folder, session ID. No file contents, no tokens | Low: paths include the Windows user name | **Yes**; rotated at 1 MB, so at most about 2 MB (a short session wrote 41 KB) |
 | Workspaces | `workspaces_root`, default `%USERPROFILE%\eunomai-business-workspaces\<name>` (measured) | Clones of the repositories: the user's work, versions not yet sent included | **As sensitive as the repositories** | **Yes, on purpose**: it is the user's work |
@@ -49,7 +50,8 @@ A preview's code runs with the person's rights, so it could
 When the connector stops, the report the user can send to IT contains the workspace's folder and repository,
 the version, its last save point and the main branch, the files involved, the error text for unexpected errors,
 the connector version and build, the computer's OS and the time. It never contains
-tokens. It travels only if the user sends the e-mail.
+tokens. It travels only if the user sends the e-mail. A request for a new project travels the same way: the
+person sends it, or copies its text; the connector sends nothing.
 
 ## Calls to public services
 
