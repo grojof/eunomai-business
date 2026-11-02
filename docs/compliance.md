@@ -70,4 +70,4 @@ Grouped by the control themes of an information-security management system (such
 - An impact assessment, where required.
 - Retention and backups of repositories; protection of the main branch on the git server.
 - Revoking access when someone leaves (identity provider, git server).
-- A `support_email` so that users can reach IT when the connector stops.
+- A `support_email` so that users can reach IT when the connector stops, and send requests for new projects.

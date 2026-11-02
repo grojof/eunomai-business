@@ -25,6 +25,20 @@
   from the latest version. A setup that fails on the data kept runs once more on none, and says so; `fresh` starts
   over on request. The data goes with a stop, the time limit and the sweep. Each test run has its own temporary
   folder, so two runs on one computer no longer count each other's previews.
+- **A business person never creates a repository** ([decision 15](docs/decisions.md#15--a-business-person-never-creates-a-repository)).
+  When someone wants a new application and no project exists, the specialist understands it in conversation, with
+  nothing written, and `project_request` turns it into a request for IT with a fixed format: an e-mail link to
+  `support_email` and the same text to copy; nothing is sent until the person sends it. A copy stays in the
+  connector's folder and `workspace_list` lists it; once IT has created the project, the specialist clones it, starts
+  the first proposal from the request without asking again, and `project_request_done` marks it done and keeps it.
+  The request's fixed text is in the organization's documentation language (Spanish, Catalan or English), with a
+  subject that always starts `eunomai-business:`. A request the person no longer wants is withdrawn with
+  `project_request_withdraw`: kept, and no longer asked about. The specialist never offers to create a repository. [Project practices](docs/project-practices.md#creating-a-project-from-the-template)
+  say how IT generates one from a Gitea template with `protected_branch`, and what Gitea's docs leave open: the
+  caller's permission, and any default protection for new repositories (H24). The connector creating repositories
+  itself was set aside for that reason.
+- **E-mail links to IT follow RFC 6068:** a stop's report and a project request are built by one function, with
+  line breaks as `%0D%0A`; a stop's subject is cleaned like its body.
 - **A preview belongs to its watcher** (first real test in Cowork): the application died seconds after each turn, as
   Cowork starts a process per turn and the connector lives one. A detached process now owns a preview: it starts every
   step, keeps the tree, enforces the 60 minutes, and survives a tree kill, a host's job that allows leaving, and a

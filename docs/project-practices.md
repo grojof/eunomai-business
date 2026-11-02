@@ -1,7 +1,7 @@
 ---
 type: how-to
 title: Good practices for project repositories
-description: "How to set up and run a repository that business users work on: main branch, line endings, ignored files, permissions, content."
+description: "How to set up and run a repository that business users work on: creating it from the organization's template, main branch, line endings, ignored files, permissions, content."
 tags: [repositories, git]
 audience: [repository-owners]
 related: [barriers.md]
@@ -12,6 +12,50 @@ related: [barriers.md]
 eunomai-business writes no rule into a project; it only refuses to save the files listed below. These are
 recommendations for whoever creates and runs a repository that business users work on. They apply to any git hosting (Gitea, GitHub, GitHub
 Enterprise, GitLab).
+
+## Creating a project from the template
+
+Business people never create repositories ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)).
+When someone wants a new application, IT receives a request by e-mail, with a subject that starts
+`eunomai-business:` (in English, `eunomai-business: new project request: <name>`): a suggested name, what it is for,
+who will use it, what was understood and the open questions. Its fixed text is in the organization's
+documentation language (`docs_language`: Spanish, Catalan or English, otherwise English); the person's words are
+as they wrote them. IT decides the name, creates the repository from the organization's template,
+gives the requester write access and replies with its address (`owner/name`). The person tells the assistant, which
+carries on from the request.
+
+**The template** is one repository with what every project starts from: a `main` branch with a README, the
+`.gitattributes` and `.gitignore` below, the project's context and declaration, and `main` protected as below.
+
+**In Gitea** (template repositories exist since 1.11):
+
+| Step | Through the API (1.24) |
+|---|---|
+| Make the template | `PATCH /repos/{owner}/{repo}` with `"template": true` |
+| Create a project from it | `POST /repos/{template_owner}/{template_repo}/generate`, with `name` and `owner` (required) and what to copy: `git_content` (the default branch's content), `protected_branch` (its protected branches), `labels`, `topics`, `avatar`, `webhooks`, `git_hooks`; also `description`, `private`, `default_branch`. It answers 201 with the repository, 409 when the name exists, 403, 404 or 422 |
+
+```json
+{"owner": "projects", "name": "alta-de-pedidos", "private": true,
+ "git_content": true, "protected_branch": true, "labels": true,
+ "webhooks": false, "git_hooks": false}
+```
+
+Generate with `protected_branch` so that `main`'s protection is copied, and leave out what the template should not
+hand to every project: `git_hooks` copies hooks that run on the server. A `.gitea/template` file in the template
+lists the files where `$REPO_NAME` and other variables are replaced; by default none are, and that file is not
+copied.
+
+**What Gitea's documentation does not say** (read 2026-11-02): the permission the caller needs, on the template or in
+the owner organization (the API page lists ways to authenticate and a 403, not a permission); and whether new
+repositories get any branch protection by default, organization-wide. Until a real Gitea shows both
+([H24](validation/hypotheses.md)), check on each new repository that `main` is protected before anyone else gets
+access.
+
+**In GitHub**, a repository created from a template "starts with a single commit", with the template's files from
+its default branch, or every branch with *Include all branches*. The page does not say whether branch protection or
+other settings are copied. On GitHub Team and Enterprise, an organization's rulesets can "target all repositories in
+your organization", or those matching a name or custom properties; the page does not say in so many words that a
+ruleset for all repositories covers a repository created later, so check it on the first one.
 
 ## Before users join
 

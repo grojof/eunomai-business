@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, one recommended stack, and its visual layer with a base application to clone."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, one recommended stack, its visual layer with a base application to clone, and new projects that IT creates from a request."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md, sources.md]
@@ -132,6 +132,11 @@ not stop code written to do harm. An organization that turns this on accepts tha
 - **Consequence:** the specialist builds real screens early instead of a prototype where it can show them
   ([guided flows](guided-flows.md)).
 - **To validate:** on a business user's computer, in Cowork ([H22](validation/hypotheses.md)).
+- **Set aside for now:** Claude Managed Agents with self-hosted sandboxes, which runs the tools on the
+  organization's own servers. It uses the API with an API key, so its use would be paid through the API, apart
+  from the subscription (the pages read state no price); it has no user interface, so one would have to be built;
+  it is in beta and not eligible for zero data retention ([sources](sources.md#plugins-connectors-and-extensions)). To look at again if an organization's
+  policies block what Cowork needs, or a preview on the person's computer is not acceptable.
 
 ## 8 · The project's context belongs to IT
 
@@ -340,3 +345,39 @@ How each part holds against misuse is in the template's and the agent's pages, a
 - **Consequence:** `dependency_audit` reads `uv.lock` and `vendor.json` as well as `requirements*.txt` and
   `package-lock.json`, by the same rules and with no library named in them
   ([barriers](barriers.md)).
+
+## 15 · A business person never creates a repository
+
+When someone wants a new application and no project exists, the specialist understands the idea in conversation, with
+no repository and no files written, and the connector turns it into a request for IT. IT creates the repository from
+the organization's template; the person comes back, the specialist clones it and carries on from the request.
+
+| Step | Who | What |
+|---|---|---|
+| 1 Understand | The specialist, in conversation | Goal, users, how it is done today, what the first version includes, open questions. Nothing is written anywhere |
+| 2 Request | The connector prepares it, the person sends it | `project_request` builds a message with a fixed format, in the organization's documentation language (`docs_language`: Spanish, Catalan or English, otherwise English): a suggested name, what it is for, who will use it, what was understood and the open questions. It returns an e-mail link to `support_email` and the same text to copy, and keeps a copy on the person's computer. Nothing is sent automatically |
+| 3 Create | IT | A repository from the organization's template, with `main` protected ([how](project-practices.md#creating-a-project-from-the-template)). IT decides the name |
+| 4 Carry on | The specialist, in the same task or a new one | `workspace_list` lists the pending request; once the person says the project exists, the specialist clones it, seeds the first proposal from the request, so Understand is not asked again, and marks the request done with `project_request_done`. It is kept, not deleted |
+| Or withdraw it | The person, through the specialist | When IT refused it or the person changed their mind, `project_request_withdraw` marks it withdrawn: kept, and no longer asked about at the start of a session |
+
+**Why.**
+
+| Reason | Evidence |
+|---|---|
+| IT controls which projects exist and what they are called | A repository is where permissions, protection, review and the project's context live ([decisions 8](#8--the-projects-context-belongs-to-it) and [10](#10--a-base-that-holds-for-everyone-projects-bring-their-own-capabilities)); each one is IT's to run |
+| The person does not wait for the part that needs no code | Understand happens while the request is with IT, and the request carries it, so nothing is asked twice |
+| Asking IT is a sentence the person already knows how to send | [Decision 6](#6--the-user-never-resolves-a-technical-problem): the specialist never offers to create a repository and never asks the person to do anything technical with IT beyond sending the prepared request |
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| The connector creates the repository from the template, as the person | Gitea's documentation of [template repositories](https://docs.gitea.com/usage/repository/template-repositories/) and of [generating from one](https://docs.gitea.com/api/1.24/operations/generate-repo/) does not say which permission the caller needs, nor whether new repositories get a default protection; a repository nobody protected would take changes to `main` directly. To look at again once a real Gitea shows both ([H24](validation/hypotheses.md)) |
+| The specialist sends the request itself | Nothing leaves the computer in the person's name without them seeing it; an e-mail link is the way stops already reach IT |
+| Writing the Understand summary into a folder before the project exists | A folder that is not a workspace has no versions, no barriers and no place in the registry; the connector's own folder holds the request instead |
+
+- **Consequence:** a request is a file in the connector's folder, pending, done or withdrawn, and never deleted
+  ([data on computers](data-on-computers.md#on-the-users-computer)); the same name while it is pending replaces it.
+- **Consequence:** the subject always starts `eunomai-business:`, whatever the language, so a mailbox rule can
+  recognise a request; the person's own words are never translated.
+- **Consequence:** without `support_email` the person copies the text and sends it to IT as they usually do.

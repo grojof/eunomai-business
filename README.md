@@ -14,7 +14,7 @@ the result receives work that is refined and ready to review, not a first draft.
 |---|---|---|
 | **Base plugin** (this repository), for every business user | A local connector that signs in through the organization and handles workspaces, versions, save points and pull requests on the organization's git server, without Git installed; and the barriers around it | Built |
 | **Configuration by each organization's IT** | Sign-in providers, workspaces folder, support address, the specialist's languages, where code may be written and with what, dependency exceptions, the organization's context and skills, diagnostics, and whether people may see the application on their own computer (off by default); set once when building the plugin. Users install and sign in; nothing else | Built |
-| **Guided flows** | The specialist's way of working: strict, defined flows that help users say what they want, so the repository ends up with clear specifications, living docs and tested code, and the pull request shows a reviewer what was not specified or not validated. Plus a skill for IT to review the other skills users rely on | First version, tested once with a business user |
+| **Guided flows** | The specialist's way of working: strict, defined flows that help users say what they want, so the repository ends up with clear specifications, living docs and tested code, and the pull request shows a reviewer what was not specified or not validated. When there is no project yet, a request for IT to create it, which the person sends. Plus a skill for IT to review the other skills users rely on | First version, tested once with a business user |
 | **Project plugins**, one per project | The project's own tools and the paths it protects, on top of the base plugin, made from a [template](templates/project-plugin/README.md) | Template built; the first project's plugin is next |
 
 It is the counterpart of [eunomai](https://github.com/grojof/eunomai): eunomai is flexible, for developers in
@@ -82,14 +82,14 @@ python tools\sbom.py
 | **Deploy it** (IT) | [Configuration](docs/configuration.md) · [Hooks and rules](docs/hooks.md) · [Run the validation](docs/validation/run-the-validation.md) · [Validation checks](docs/validation/hypotheses.md) |
 | **Trust it** (IT, security, data protection, auditors) | [Compliance](docs/compliance.md) · [Barriers](docs/barriers.md) · [Data on computers and servers](docs/data-on-computers.md) |
 | **Understand it** (IT, developers) | [Architecture](docs/architecture.md) · [Decisions](docs/decisions.md) · [Sources and evidence](docs/sources.md) · [Guided flows](docs/guided-flows.md) |
-| **Run a project repository** (repository owners) | [Good practices for project repositories](docs/project-practices.md) · [Recommended stack](docs/recommended-stack.md) |
+| **Run a project repository** (repository owners) | [Creating a project from the template](docs/project-practices.md#creating-a-project-from-the-template) · [Good practices for project repositories](docs/project-practices.md) · [Recommended stack](docs/recommended-stack.md) |
 | **Build on it** (organizations) | [Extensions](docs/extensions.md) |
 | **Follow it** | [Changelog](CHANGELOG.md) |
 
 ## Principles
 
 - **Simple for the user:** install the plugin, sign in once in the browser, work. No tokens, no config files,
-  no administrator rights.
+  no administrator rights, and no repositories to create: IT creates them on request.
 - **Reusable:** nothing tied to one organization or application; everything that varies is IT's configuration.
 - **Its own part only:** the plugin never manages a project's files; projects get
   [good practices](docs/project-practices.md), not impositions.
