@@ -28,6 +28,7 @@ Look in both. Folders outside
 | The plugin | Managed by Claude Desktop (measured 2026-10-24: `%LOCALAPPDATA%\Claude-Data\claude_<id>\rpm\...\plugin_<id>`) | The zip's files: skills, connector source, the file guard hook, and measurement hooks when diagnostics are on | No | Claude Desktop's business; not yet measured |
 | Sign-in records | `<data>\signin-<hash>.dpapi`, one per provider (measured; the hash comes from the provider name and client ID) | Access token, refresh token, expiry times. Encrypted with DPAPI for that Windows user | **Yes** | **Yes**: delete them (below) |
 | Workspace registry | `<data>\workspaces.json` | Each workspace's folder, repository address and main branch, so the connector protects them | No | **Yes** |
+| Project requests | `<data>\project-requests\<request>.json` | A request for a new project: the suggested name, what it is for, who will use it, how it is done today, the first version, open questions, the message for IT and its dates; once its project is cloned, `done` with the workspace and repository, or `withdrawn` when the person no longer wants it. Kept, not deleted | Low: what the person told the assistant about their work | **Yes** |
 | Operation locks | `<data>\locks\` | Empty files that exist only while an operation runs | No | Normally empty |
 | Hook log (only with `diagnostics: true`) | `<data>\hooks.log`, and `hooks.log.1` after rotation (measured) | One JSON line per tool call: time, event, tool name, the names (not values) of its input fields, whether a guard-test marker matched, launch and run times, computer name, OS, shell, working folder, plugin folder, session ID. No file contents, no tokens | Low: paths include the Windows user name | **Yes**; rotated at 1 MB, so at most about 2 MB (a short session wrote 41 KB) |
 | Workspaces | `workspaces_root`, default `%USERPROFILE%\eunomai-business-workspaces\<name>` (measured) | Clones of the repositories: the user's work, versions not yet sent included | **As sensitive as the repositories** | **Yes, on purpose**: it is the user's work |
@@ -37,7 +38,10 @@ Look in both. Folders outside
 | uv cache | `%LOCALAPPDATA%\uv\cache` (measured) | Built connector versions and their dependencies (`mcp`, `httpx`, `dulwich`, ...) | No | Yes; shared with any other use of uv |
 | Python, if the computer has none | `%APPDATA%\uv\python` (uv's documented default; not measured, the test computer had Python) | A Python runtime downloaded by uv | No | Yes |
 | A preview (only with `app_preview`) | `%TEMP%\eunomai-preview-<random>`: `app`, a copy of the saved version; `environment`, its packages; `home`, `temp`, and `preview.log` | The application's files, its example data and its output, for as long as it runs | **As sensitive as the repository**, and whatever the application writes | No: it stays while the preview runs, even with Claude Desktop closed, and goes when it stops, at the latest after 60 minutes. If its watcher is killed, the next preview removes it. What the application wrote elsewhere stays: it runs as the person |
-| A preview's state | `<data>\previews\<hash>.json`, with `.alive`, `.stop` and `.ended` beside it | Its workspace, saved version, a fingerprint of the declaration, folder, port, end time, process groups where there are any, and its watcher's number, program and start time, so any task's connector can find it and stop it; `.ended` holds why it ended by itself | No | Empty when no preview runs, but for an `.ended` nobody has read, removed after two hours |
+| A workspace's kept preview data (only with `app_preview`) | `%TEMP%\eunomai-preview-keep-<hash>`: `data`, what the application writes where the declaration says `{data}`; `environment`, its installed packages | What the person entered in the application, and its packages | **As sensitive as what they entered** | No: removed on stop, at the time limit and by the sweep after two hours unused; kept across new versions |
+| The tests' last output (only with `app_tests`) | `<data>\tests\<hash>.log`, one a workspace, replaced by its next run | Everything the tests printed, up to 5 MB: names, values, whatever they show | As sensitive as the repository | No: kept for IT, until the next run |
+| An audit a preview keeps (only with `app_preview`) | `<data>\audits\<hash>.json` | The last `allowed` answer of the dependency audit for a workspace's preview, and a fingerprint of what it read | No | Used for an hour, replaced by the next |
+| A preview's state | `<data>\previews\<hash>.json`, with `.alive`, `.stop`, `.ended` and `.kept` beside it | Its workspace, saved version, a fingerprint of the declaration, folder, port, end time, process groups where there are any, and its watcher's number, program and start time, so any task's connector can find it and stop it; `.ended` holds why it ended by itself | No | Empty when no preview runs, but for an `.ended` nobody has read, removed after two hours |
 | Browser sessions | The default browser | Sign-in cookies of Entra ID and the git server | Yes, as any sign-in | Until signing out in the browser |
 
 The connector writes nothing to the registry or outside the user's profile, and nothing needs administrator rights.
@@ -49,7 +53,8 @@ A preview's code runs with the person's rights, so it could
 When the connector stops, the report the user can send to IT contains the workspace's folder and repository,
 the version, its last save point and the main branch, the files involved, the error text for unexpected errors,
 the connector version and build, the computer's OS and the time. It never contains
-tokens. It travels only if the user sends the e-mail.
+tokens. It travels only if the user sends the e-mail. A request for a new project travels the same way: the
+person sends it, or copies its text; the connector sends nothing.
 
 ## Calls to public services
 

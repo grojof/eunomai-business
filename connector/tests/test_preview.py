@@ -516,13 +516,14 @@ def test_the_environment_has_no_secret(signed_in, workspaces, turned_on, pids, m
     assert "secret-value" not in json.dumps(seen)
     assert not [key for key in seen if key.startswith("EUNOMAI_") or "TOKEN" in key or "SECRET" in key]
     assert seen["APP_ENVIRONMENT"] == "development"
-    assert Path(seen["UV_PROJECT_ENVIRONMENT"]).is_relative_to(folders()[0])
+    assert Path(seen["UV_PROJECT_ENVIRONMENT"]).is_relative_to(preview._keep(name))
     profile = str(Path.home())
     assert profile not in (seen.get("USERPROFILE"), seen.get("HOME"), seen.get("APPDATA"), seen.get("LOCALAPPDATA"))
     allowed = {"APP_ENVIRONMENT", "PIDS_FILE", "APP_MODE", "UV_PROJECT_ENVIRONMENT", "UV_CACHE_DIR",
                "UV_PYTHON_INSTALL_DIR", "PATH", "PATHEXT", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP",
                "TMP", "TMPDIR", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "NO_COLOR", "LANG", "LC_ALL",
                "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "TZ",
+               "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432",  # where a browser the computer has is found
                # uv's own, on what it runs; Python's own on Windows; every one a name no organization's secret has
                "UV", "UV_RUN_RECURSION_DEPTH", "VIRTUAL_ENV", "__CF_USER_TEXT_ENCODING", "PWD", "LC_CTYPE", "SHLVL"}
     assert set(seen) <= allowed, set(seen) - allowed
@@ -1221,8 +1222,7 @@ def test_a_stop_during_the_copy_leaves_no_folder(signed_in, workspaces, turned_o
     real = gitops.export_saved
 
     def export(workspace, target, *args):
-        current = next(iter(preview._previews.values()))
-        current.close()  # the stop lands here; the copy then writes the folder again
+        preview.stop(workspace)  # the stop lands here; the copy then writes the folder again
         return real(workspace, target, *args)
 
     monkeypatch.setattr(gitops, "export_saved", export)
@@ -1405,3 +1405,28 @@ def test_no_command_opens_a_window_on_the_persons_computer():
 
 def test_its_state_lives_in_the_connectors_own_folder():
     assert preview._state_file("x").is_relative_to(data_dir())
+
+
+def test_this_run_has_a_temporary_folder_of_its_own():
+    """Another run on this computer counts the previews in its own, and never sees these."""
+    own = Path(preview.tempfile.gettempdir())
+    assert own.name == "temp" and own.parent.name.startswith("eunomai-tests-")
+    assert os.environ["TEMP"] == os.environ["TMP"] == os.environ["TMPDIR"] == str(own)
+
+
+def test_the_home_a_preview_gives_is_shaped_as_a_profile():
+    """Edge, started by the watcher, does not start under a profile whose folders are all the same one."""
+    current = preview._Preview("shaped-home", "0" * 40)
+    try:
+        environment = current.environment("uv")
+        home = Path(environment["USERPROFILE"])
+        assert Path(environment["APPDATA"]) == home / "AppData" / "Roaming" and Path(environment["APPDATA"]).is_dir()
+        assert Path(environment["LOCALAPPDATA"]) == home / "AppData" / "Local" and Path(environment["LOCALAPPDATA"]).is_dir()
+        assert home.is_relative_to(current.folder)
+    finally:
+        current.close()
+
+
+def test_an_export_can_leave_the_folders_state_for_later(signed_in, workspaces, tmp_path):
+    name, _ = project(signed_in, declaration(Path("x")))
+    assert set(gitops.export_saved(name, tmp_path / "copy", gitops.project_files(name)["tip"], None, False)) == {"head"}

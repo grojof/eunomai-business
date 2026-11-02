@@ -224,7 +224,8 @@ def fresh_watcher(tmp_path, **more) -> watcher.Watcher:
     state = tmp_path / "unit.json"
     state.write_text("{}")
     return watcher.Watcher({"folder": str(folder), "state": str(state), "token": "t", "workspace": "w", "head": "0" * 40,
-                            "limit": 60, "log": str(folder / "log"), "declaration": "0" * 16, **more})
+                            "limit": 60, "log": str(folder / "log"), "declaration": "0" * 16,
+                            "keep": str(tmp_path / f"{preview._PREFIX}keep-unit"), **more})
 
 
 def test_the_limit_holds_if_the_clock_is_put_back(tmp_path):
@@ -364,7 +365,7 @@ def test_a_preview_that_no_longer_listens_is_replaced(signed_in, workspaces, tur
     assert wait_for(lambda: not preview._answers(int(first["url"].rsplit(":", 1)[1].strip("/"))))
     pids.unlink()
     answer = show(name)
-    assert answer["status"] == "ready" and answer["already_running"] is False and answer["url"] != first["url"], answer
+    assert answer["status"] == "ready" and answer["already_running"] is False, answer
     assert gone(*numbers) and answer["ended_before"] == "silent"
 
 

@@ -33,6 +33,12 @@ for _old in _SANDBOX.parent.glob("eunomai-tests-*"):
         shutil.rmtree(_old, ignore_errors=True)
 os.environ["LOCALAPPDATA"] = str(_SANDBOX / "appdata")
 os.environ["HOME"] = str(_SANDBOX / "home")
+# Previews live in the temporary folder, and their tests count what is there: each run has a temporary folder of its
+# own, for it, the connectors it starts and their children, so two runs on one computer never see each other's.
+(_SANDBOX / "temp").mkdir()
+for _name in ("TEMP", "TMP", "TMPDIR"):
+    os.environ[_name] = str(_SANDBOX / "temp")
+tempfile.tempdir = None
 _HOSTILE = _SANDBOX / "hostile-gitconfig"
 _HOSTILE.write_text('[core]\n\tautocrlf = true\n[filter "evil"]\n\tclean = exit 1\n', encoding="utf-8")
 os.environ["GIT_CONFIG_SYSTEM"] = str(_HOSTILE)
@@ -105,6 +111,9 @@ def stop_previews() -> None:
     for current in list(preview._previews.values()):
         with contextlib.suppress(Exception):
             current.close()
+    for thread in threading.enumerate():  # a preparation a test left going would start a folder in the next one
+        if thread.name.startswith("preview "):
+            thread.join(30)
     preview._previews.clear()
     preview._unread.clear()
     folder = data_dir() / "previews"
@@ -114,9 +123,11 @@ def stop_previews() -> None:
                 preview._end(state)
     if folder.is_dir():
         shutil.rmtree(folder, ignore_errors=True)
+    for kept in Path(tempfile.gettempdir()).glob("eunomai-preview-keep-*"):  # a preview's data outlives what made it
+        shutil.rmtree(kept, ignore_errors=True)
 
 
-_PREVIEWS_BEFORE = set(Path(tempfile.gettempdir()).glob("eunomai-preview-*"))
+_PREVIEWS_BEFORE = set(Path(tempfile.gettempdir()).glob("eunomai-preview-*"))  # this run's own: empty
 
 
 @pytest.fixture(scope="session", autouse=True)
