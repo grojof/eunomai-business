@@ -149,3 +149,13 @@ def test_a_pending_request_is_seen_at_the_start_and_picked_up_once_the_project_e
     assert "`workspace_clone`" in created and "`project_request_done`" in created
     assert "is not asked again" in created
     assert created.index("`version_save(") < created.index("`project_request_done`")
+
+def test_the_docs_say_who_creates_a_project_and_how():
+    docs = Path(__file__).resolve().parents[2] / "docs"
+    decisions = plain((docs / "decisions.md").read_text(encoding="utf-8"))
+    assert "A business person never creates a repository" in decisions
+    practices = plain((docs / "project-practices.md").read_text(encoding="utf-8"))
+    assert "/repos/{template_owner}/{template_repo}/generate" in practices and "`protected_branch`" in practices
+    assert "documentation does not say" in practices
+    flows = plain((docs / "guided-flows.md").read_text(encoding="utf-8"))
+    assert "`project_request`" in flows
