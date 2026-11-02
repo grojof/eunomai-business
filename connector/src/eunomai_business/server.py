@@ -244,7 +244,7 @@ def version_to_test(workspace: str) -> dict:
 
 
 @mcp.tool()
-def app_preview(workspace: str) -> dict:
+def app_preview(workspace: str, fresh: bool = False) -> dict:
     """Show the application, as last saved, in the person's browser on their computer, on 127.0.0.1 only. It runs code
     nobody has reviewed yet, on their computer, with their rights: tell them first, in one plain sentence, and call
     this only after they agree in the conversation. Works where IT turned it on and the project declares it; refused
@@ -255,8 +255,10 @@ def app_preview(workspace: str) -> dict:
     Calling this for the same saved version and declaration answers the one running (`already_running` true);
     anything else, or one that no longer answers, replaces it. `keeps_running` false means the host holds it, and it
     ends with the task. `ended_before` says why it was started again. `unsaved_changes` true means what is on screen
-    lacks them."""
-    return _safe(preview.start, workspace)
+    lacks them. A new version takes the address of the one it replaces (`reload` true: say to reload the page; with
+    `address_changed`, give the new address) and the data it had; `data_reset` says it could not use them. `fresh`
+    true starts with no data from before: only when the person asks for it, or the data is in the way."""
+    return _safe(preview.start, workspace, fresh)
 
 
 @mcp.tool()

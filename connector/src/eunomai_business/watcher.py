@@ -271,13 +271,13 @@ class Watcher:
     def __init__(self, config: dict):
         self.folder, self.path, self.token = config["folder"], config["state"], config["token"]
         self.workspace, self.head, self.limit = config["workspace"], config["head"], config["limit"]
-        self.declaration = config["declaration"]
+        self.declaration, self.keep = config["declaration"], config["keep"]
         self.tree, self.application, self.log = Tree(), None, config["log"]
         self.phase, self.port, self.began, self.deadline, self.steady_deadline = "preparing", 0, 0.0, 0.0, 0.0
         self.abandoned, self.handed_over, self.ending = threading.Event(), threading.Event(), threading.Event()
         self.asked = queue.Queue()
         self.stop_file, self.alive_file = self._beside(".stop"), self._beside(".alive")
-        self.ended_file = self._beside(".ended")
+        self.ended_file, self.kept_file = self._beside(".ended"), self._beside(".kept")
         self.alive = None
 
     def _beside(self, suffix: str) -> str:
@@ -373,7 +373,11 @@ class Watcher:
 
     def reason_to_end(self) -> str:
         if os.path.exists(self.stop_file):
-            return "asked"
+            try:
+                with open(self.stop_file, encoding="utf-8") as file:
+                    return "replaced" if file.read().strip() == "replace" else "asked"
+            except OSError:
+                return "asked"
         if not os.path.exists(self.path):  # no connector could ever find it again
             return "lost"
         if self.abandoned.is_set():
@@ -406,6 +410,14 @@ class Watcher:
             if not os.path.exists(self.folder):
                 break
             time.sleep(0.5)
+        if reason in ("asked", "time_limit", "lost"):  # a new version, a turn cut short or a crash keep the data
+            for _ in range(REMOVE_TRIES):
+                shutil.rmtree(self.keep, ignore_errors=True)
+                if not os.path.exists(self.keep):
+                    break
+                time.sleep(0.5)
+            with contextlib.suppress(OSError):
+                os.remove(self.kept_file)
         if not os.path.exists(self.folder):  # or the state stays, for the next connector to finish the job
             self.forget()
         try:

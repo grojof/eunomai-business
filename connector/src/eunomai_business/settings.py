@@ -107,6 +107,7 @@ _NOT_MODULES = {"pip", "ensurepip", "venv"}
 _INSTALLERS = re.compile(r"(?:pip[\d.]*|uvx?)\Z")  # they change what is installed, whichever package brings them
 _SHELL_TEXT = re.compile(r"[;&|`<>\n\r]|\$\(")
 _PLACEHOLDER = re.compile(r"\{[^{}]*\}")
+_NAMED = re.compile(r"\{\s*[A-Za-z_]\w*\s*\}")  # in a value: a word in braces, where JSON has quotes
 _THIS_COMPUTER = "127.0.0.1"
 _HOST_OPTIONS = ("--host", "--bind", "--listen", "--address", "--interface")
 _SHORT_HOST = re.compile(r"-[bhH]")
@@ -126,7 +127,7 @@ def _python_problem(arguments: list[str]) -> str | None:
         if not _MODULE.match(module) or module.split(".")[0].lower() in _NOT_MODULES:
             return "python -m needs a module of the application, not pip, ensurepip or venv"
         return None
-    if not first or first.startswith("-") or first.startswith(("/", "\\", "~")) or ":" in first \
+    if not first or first.startswith(("-", "{")) or first.startswith(("/", "\\", "~")) or ":" in first \
             or ".." in re.split(r"[\\/]", first):
         return "python runs a file of the project, or -m <module>, and nothing else"
     return None
@@ -219,8 +220,8 @@ def preview(declaration: dict | None) -> dict | None:
     if problem:
         return {"invalid": f"[preview] run: {problem}; IT corrects it"}
     placeholders = {found for word in run for found in _PLACEHOLDER.findall(word)}
-    if placeholders != {"{port}"}:
-        return {"invalid": "[preview] run must use {port}, and nothing else in braces; IT corrects it"}
+    if "{port}" not in placeholders or not placeholders <= {"{port}", "{data}"}:
+        return {"invalid": "[preview] run must use {port}, and nothing else in braces but {data}; IT corrects it"}
     problem = _host_problem(run)
     if problem:
         return {"invalid": f"[preview] {problem}; IT corrects it"}
@@ -230,10 +231,13 @@ def preview(declaration: dict | None) -> dict | None:
         problem = _entry_problem(entry)
         if problem:
             return {"invalid": f"[preview] setup: {problem}; IT corrects it"}
-        if any(_PLACEHOLDER.search(word) for word in entry):
-            return {"invalid": "[preview] setup takes no braces: only run knows the port; IT corrects it"}
+        if any(found != "{data}" for word in entry for found in _PLACEHOLDER.findall(word)):
+            return {"invalid": "[preview] setup takes {data} and nothing else in braces: only run knows the port; IT "
+                               "corrects it"}
     if not isinstance(environment, dict) or not all(isinstance(value, str) for value in environment.values()):
         return {"invalid": "[preview.environment] takes names and text values; IT corrects it"}
+    if any(found != "{data}" for value in environment.values() for found in _NAMED.findall(value)):
+        return {"invalid": "[preview.environment] takes {data} and nothing else in braces; IT corrects it"}
     reserved = [name for name in environment if not _VARIABLE.match(name) or _RESERVED.match(name)]
     if reserved:
         return {"invalid": f"[preview.environment] cannot set {', '.join(sorted(reserved))}; IT corrects it"}

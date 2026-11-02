@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **A preview a person keeps open while it changes**: a new version takes the address of the one it replaces, so the person
+  reloads the page, keeps the data the declaration puts in `{data}`, and skips the installation when the lockfile,
+  the declaration and the Python are the same: about 9 s for a change on the clean base application. The hour counts
+  from the latest version. A setup that fails on the data kept runs once more on none, and says so; `fresh` starts
+  over on request. The data goes with a stop, the time limit and the sweep. Each test run has its own temporary
+  folder, so two runs on one computer no longer count each other's previews.
 - **A preview belongs to its watcher** (first real test in Cowork): the application died seconds after each turn, as
   Cowork starts a process per turn and the connector lives one. A detached process now owns a preview: it starts every
   step, keeps the tree, enforces the 60 minutes, and survives a tree kill, a host's job that allows leaving, and a

@@ -21,6 +21,7 @@ from pathlib import Path
 import httpx
 import pytest
 from test_preview import APP, LOCK, PYPROJECT, declaration
+from test_preview_live import LIVE, MIGRATE, live_declaration
 
 from conftest import alive
 from eunomai_business import preview
@@ -160,7 +161,7 @@ def computer(tmp_path, server, connector_environment, monkeypatch) -> dict:
     shutil.rmtree(folder, ignore_errors=True)  # with no state file, a watcher ends what it holds
 
 
-def ready_project(server, computer: dict, tmp_path: Path, connector: Connector) -> tuple[str, Path]:
+def ready_project(server, computer: dict, tmp_path: Path, connector: Connector, live: bool = False) -> tuple[str, Path]:
     """Signed in on that connector, with an application on the main branch, cloned, on a saved version."""
     started = connector.tool("sign_in_start", provider="git")
     httpx.get(started["url"], follow_redirects=True, trust_env=False)
@@ -171,8 +172,11 @@ def ready_project(server, computer: dict, tmp_path: Path, connector: Connector) 
     name = f"outlives-{uuid.uuid4().hex[:8]}"
     pids = tmp_path / "pids.json"
     server.initialize(name)
-    server.server_commit(name, "main", {"pyproject.toml": PYPROJECT, "uv.lock": LOCK, "app.py": APP,
-                                        "message.txt": b"saved\n", ".eunomai/project.toml": declaration(pids)})
+    files = {"pyproject.toml": PYPROJECT, "uv.lock": LOCK, "app.py": APP, "message.txt": b"saved\n",
+             ".eunomai/project.toml": declaration(pids)}
+    if live:  # one that keeps data, as the person's own application does
+        files.update({"app.py": LIVE, "migrate.py": MIGRATE, ".eunomai/project.toml": live_declaration(pids)})
+    server.server_commit(name, "main", files)
     connector.tool("workspace_clone", repo_url=f"{server.url}/me/{name}.git")
     assert connector.tool("version_create", workspace=name, name="draft/work").get("status") != "needs_it"
     return name, pids
@@ -249,6 +253,28 @@ def test_a_preview_outlives_its_connector_and_the_next_one_finds_it(server, comp
     second.end("tree" if WINDOWS else "group")
 
 
+def test_a_change_from_a_later_turn_keeps_the_address_and_the_data(server, computer, tmp_path):
+    """What a person sees: the tab they kept open shows the new version on reload, with what they entered."""
+    before = preview_folders(set())
+    first = Connector(computer["environment"])
+    name, pids = ready_project(server, computer, tmp_path, first, live=True)
+    shown = first.show(name)
+    first.end("tree" if WINDOWS else "group")
+    second = Connector(computer["environment"])
+    (Path(computer["environment"]["EUNOMAI_WORKSPACES_ROOT"]) / name / "message.txt").write_bytes(b"changed\n")
+    second.tool("version_save", workspace=name, message="A change")
+    began = time.time()
+    answer = second.show(name)
+    seconds = time.time() - began
+    assert answer["status"] == "ready" and answer["url"] == shown["url"] and answer["reload"] is True, answer
+    assert answer["installed"] is False and seconds < 30, seconds
+    assert httpx.get(answer["url"], trust_env=False).text == "changed\n"
+    assert httpx.get(answer["url"] + "runs", trust_env=False).text == "saved\nchanged\n"
+    assert second.tool("app_preview_stop", workspace=name)["status"] == "stopped"
+    assert left(computer) == [] and preview_folders(before) == set()
+    second.end("tree" if WINDOWS else "group")
+
+
 def test_a_new_connector_replaces_it_for_another_saved_version(server, computer, tmp_path):
     before = preview_folders(set())
     first = Connector(computer["environment"])
@@ -260,7 +286,8 @@ def test_a_new_connector_replaces_it_for_another_saved_version(server, computer,
     second.tool("version_save", workspace=name, message="Newer")
     pids.unlink()
     answer = second.show(name)
-    assert answer["status"] == "ready" and answer["already_running"] is False and answer["url"] != url, answer
+    assert answer["status"] == "ready" and answer["already_running"] is False and answer["reload"] is True, answer
+    assert answer["url"] == url
     assert gone(*numbers) and httpx.get(answer["url"], trust_env=False).text == "newer\n"
     assert second.tool("app_preview_stop", workspace=name)["status"] == "stopped"
     assert left(computer) == [] and preview_folders(before) == set()
