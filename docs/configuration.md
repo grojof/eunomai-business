@@ -66,6 +66,7 @@ python tools\build.py --all             # the configuration and every variant, e
 | `allowed_technologies` | `[]` | With free development, the technologies allowed; empty means any |
 | `deny` | `[]` | `{"rule": "Bash(<command>)" or "Edit(<path>)", "reason": "...", "examples": {"denied": [...], "allowed": [...]}}`: what Claude may not do, in Claude Code's permission syntax. `Bash` rules apply anywhere, `Edit` rules in workspaces; the build checks the examples ([hooks and rules](hooks.md)) |
 | `app_preview` | `false` | `true` lets people see the real application on their own computer, through the connector, where a project declares it. It runs code nobody has reviewed yet, with the person's rights, outside any sandbox: [read this first](#seeing-the-application-on-a-persons-computer). It applies to everyone who installs this build |
+| `app_tests` | `false` | `true` lets the specialist run a project's tests on the person's computer, through the connector, where the project declares `[tests]`: the same risk and limits as `app_preview`, for up to 20 minutes, and its own key, since tests can need what a preview does not, such as a browser. [Running the tests on a person's computer](#running-the-tests-on-a-persons-computer) |
 | `dependency_exceptions` | `[]` | `{"package": "pypi:<name>" or "npm:<name>", "reason": "..."}`: packages IT vetted despite failing the origin or activity rules. A known vulnerability is never excepted. A common case: `colorama`, which `pytest` and `click` need on Windows, has had no release in over three years. Another: `httpx2-jsfetch`, which `httpx2` needs only in a web browser, publishes no source repository. Without these two, a clone of the base application cannot be sent: the [audit decides the send](barriers.md#dependencies), for every project |
 | `organization_context` | `""` | Up to 4,000 characters the specialist should know about the organization: what it does, the systems that already exist (so it can propose them before building something new) |
 | `organization_skills` | `[]` | `{"skill": "<plugin:skill>", "use_for": "..."}`: the organization's own skills and what the specialist uses them for (for example, its brand for web pages). They apply only where they agree with eunomai-business's rules; conflicts are reported in the pull request. Review them first with the `review-skills` skill |
@@ -109,8 +110,10 @@ up to 20,000 characters, so a copy edited in the folder does not count), `organi
 
 With `app_preview` on, and `[preview]` in a project's declaration
 ([how a project declares it](project-practices.md#seeing-the-application-on-a-persons-computer)), the specialist can
-show the real application in the person's browser. It keeps running until they say stop or 60 minutes pass, even if
-they close the task or Claude Desktop.
+show the real application in the person's browser. It keeps running until they say stop or 60 minutes pass from its
+latest version, even if they close the task or Claude Desktop. Starting the same version again, fresh or after it
+stopped answering, keeps the time it had. A new version keeps the address and the data, so the
+person reloads the page; the data goes when they say stop or the hour ends.
 
 **The risk is yours to accept.** This runs code an AI wrote and nobody has reviewed yet, on the person's computer,
 with their rights, outside any sandbox. It can read what they can read, reach what they can reach and act as them on
@@ -127,6 +130,17 @@ people who will use it, and what they can reach, make that acceptable.
 | Application control | It runs Python from a temporary folder, `%TEMP%\eunomai-preview-*`. A policy that blocks programs there stops it, which is a good reason to allow it for a group, not for everyone |
 | Network | The first preview of a project downloads its packages, and its Python unless it was deployed: allow the [addresses](#installing-uv-in-an-organization) through the proxy, like the connector's |
 | `dependency_exceptions` | A preview is refused unless the audit allows the version, whatever the project declares |
+
+### Running the tests on a person's computer
+
+With `app_tests` on, and `[tests]` in a project's declaration
+([how a project declares it](project-practices.md#running-the-tests-on-a-persons-computer)), the specialist runs the
+project's tests on the person's computer before it proposes a version and after it fixes a failure: the tests a
+sandbox cannot run, such as those that need a browser. Everything said above of a preview holds: code nobody has
+reviewed, the person's rights, the same [barriers](barriers.md#the-preview-on-the-persons-computer), and a limit, here
+20 minutes. Development packages are installed as well, and the audit covers them. A browser is never downloaded: the
+tests use one the computer has, as the project's declaration names it. The specialist reads counts and at most ten
+failures; the whole output stays on the computer, in `<data>\tests`, for IT.
 
 ## Sign-in providers
 

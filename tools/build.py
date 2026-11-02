@@ -27,7 +27,7 @@ CONNECTOR_SRC = ROOT / "connector"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache",
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov")
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies",
-                   "dependency_exceptions", "organization_context", "organization_skills", "app_preview"}
+                   "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers", "deny"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -59,7 +59,7 @@ def validate_specialist(cfg: dict) -> list[str]:
     for key in ("docs_language", "code_language"):
         if cfg.get(key) and not LANGUAGE.match(str(cfg[key])):
             errors.append(f"{key} must be a language code such as en or es")
-    for key in ("free_development", "app_preview"):
+    for key in ("free_development", "app_preview", "app_tests"):
         if not isinstance(cfg.get(key, False), bool):
             errors.append(f"{key} must be true or false")
     if not _strings(cfg.get("allowed_technologies", [])):
