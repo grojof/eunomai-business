@@ -1,9 +1,7 @@
 name: Tests
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  pull_request:  # what merges has passed here; main is not tested again after a merge
   workflow_dispatch:  # started by the Dependencies workflow on its own pull requests
 
 permissions:
@@ -16,7 +14,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30  # the Windows job's connector suite alone took 14 minutes on 2026-11-02
     defaults:
       run:
         working-directory: connector

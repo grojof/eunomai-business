@@ -1268,7 +1268,7 @@ def saved_summary(workspace: str) -> dict:
 
 
 @_one_at_a_time
-def export_saved(workspace: str, target: Path, main: str, head: str | None = None) -> dict:
+def export_saved(workspace: str, target: Path, main: str, head: str | None = None, summary: bool = True) -> dict:
     """Write the saved version's files to `target`, outside the workspace: what was saved, never what is in the
     folder. The objects are in .git, which the sandbox can write, so the version is checked first, against `main`, the
     main branch's commit, and every path again; a saved link becomes a plain file holding its target, and a submodule
@@ -1291,26 +1291,32 @@ def export_saved(workspace: str, target: Path, main: str, head: str | None = Non
                 file = target / entry.path.decode("utf-8")
                 file.parent.mkdir(parents=True, exist_ok=True)
                 file.write_bytes(repo[entry.sha].data)
+        if not summary:  # whether the folder has changes not saved takes as long as the rest: asked apart
+            return {"head": commit.decode()}
         return {"head": commit.decode(), "unsaved_changes": _dirty(repo), "branch": _branch(repo)}
 
 
 _audits: dict[str, tuple[bytes, float, dict]] = {}  # workspace: its tree, when, and the `allowed` answer
 
 
-def audit_saved(workspace: str, main: str, head: str | None = None, copy: Path | None = None) -> dict:
+def audit_saved(workspace: str, main: str, head: str | None = None, copy: Path | None = None, kept=None) -> dict:
     """The dependency audit of what is saved, with the commit it answers for in `head`, once that passes the checks
     against `main`, the main branch's commit. An `allowed` answer is kept for that tree for a while, so a send and the
     proposal after it wait once; any other answer is asked again, since a registry that did not answer may come back.
-    `copy` is that commit's files, already exported."""
+    `copy` is that commit's files, already exported. `kept`, for a preview only, is a pair of calls: one that answers
+    an `allowed` it kept, or None, and one that keeps a new one; the checks against `main` run whatever it answers."""
     with _repo(workspace) as repo:
         commit = head.encode() if head else _ref(repo, b"HEAD")
         if commit is None:
             raise PermissionError("nothing is saved yet")
         tree = repo[commit].tree
         _check_changes(repo, workspace, commit, main)
-    kept = _audits.get(key(workspace))
-    if kept and kept[0] == tree and time.time() - kept[1] < _AUDIT_KEPT_SECONDS:
-        return {**kept[2], "head": commit.decode()}
+    remembered = _audits.get(key(workspace))
+    if remembered and remembered[0] == tree and time.time() - remembered[1] < _AUDIT_KEPT_SECONDS:
+        return {**remembered[2], "head": commit.decode()}
+    found = kept[0]() if kept else None
+    if found:
+        return {**found, "head": commit.decode()}
     if copy is not None:
         result = deps.audit(copy)
     else:
@@ -1319,6 +1325,8 @@ def audit_saved(workspace: str, main: str, head: str | None = None, copy: Path |
             result = deps.audit(Path(folder))
     if result["verdict"] == "allowed":
         _audits[key(workspace)] = (tree, time.time(), result)
+        if kept:
+            kept[1](result)
     return {**result, "head": commit.decode()}
 
 

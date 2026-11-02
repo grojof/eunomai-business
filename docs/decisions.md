@@ -91,7 +91,9 @@ There is one exception, off by default: where IT turns it on and a project decla
 application on their own computer, through the connector
 ([how it is held](barriers.md#the-preview-on-the-persons-computer)). Once running it belongs to a small detached
 process, not to the connector: it keeps running until the person says stop or 60 minutes pass, even if the task or
-Claude Desktop is closed, and the person is told so.
+Claude Desktop is closed, and the person is told so. The person keeps it open while it changes: a new version takes
+the address of the one it replaces, with the data it had, and reloading the page shows it; the hour counts from the
+latest version.
 
 **What changed, and why.** This decision used to have no exception: a person tried a clickable prototype, and saw the
 application through pictures from the sandbox. The product's owner decided that a person can see the real application
@@ -101,6 +103,8 @@ on their own computer, off by default and turned on by IT.
 |---|---|
 | A person judges the real thing better than a drawing of it, and a prototype is a second thing to agree on that then differs from the application | Two business-user tests (H11, H12): the prototype worked, the "screenshots" of the application could not be used, and the user tried to click them |
 | A preview cannot end with the connector, so the risk now lasts up to 60 minutes beyond the task. Nothing less shows anything: a person sees the answer after the turn, and the turn is when it would end | Cowork starts a process per turn, and the connector, a child of it, lives one turn. On 2026-11-01 the application was ready 12.5 and 11 seconds after being asked for, served a few requests, and was gone seconds after the turn ended ([H22](validation/hypotheses.md)) |
+| A change is seen in the tab already open, with what the person entered, in seconds: the address, the data and the installed packages stay while nothing they depend on changed. What the application writes then outlives a version, until a stop or the hour | The goal of a person who asks for a change and checks it. Measured times are in [sources](sources.md#measured-on-real-installations) |
+| The tests the sandbox cannot run, such as those in a browser, run on the person's computer too, with `app_tests`: the same barriers, a key of their own, and only a summary back | A browser the sandbox lacks, and a version proved where it will be seen. The sandbox keeps running the rest |
 | The sandbox cannot show it: it has only 127.0.0.1, and no process outlives its command | Measured on 2026-11-01 ([H21](validation/hypotheses.md), failed) |
 | The connector already runs on the user's computer and already uses uv | Decisions 1 and 9: nothing new is installed, nothing is written for the person to run, and every limit is enforced in code outside the sandbox |
 

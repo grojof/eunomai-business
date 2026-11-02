@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- **The tests run on pull requests only**, not again on main after a merge, and the job may take 30 minutes: on
+  2026-11-02 the Windows job finished every test after 14 minutes and was then cut at its 15-minute limit.
+- **What answers at the address is the preview's own** (review of the live preview): a program that took the port
+  first was shown to the person as their application; the system's table must now say the listener is in the
+  preview's tree. Read-only files no longer survive a removal that said it was done, and a stop or a fresh start
+  that cannot clear says so. A summary of the tests leads with the exit code's verdict. A kept environment is checked
+  against the lockfile by uv, not only against a record the application can write. `uv` and `pipx` are installers
+  as modules too. The programs' list follows no link out of the environment. Starting the same version again keeps
+  its hour.
+- **A change shows in about 4 s**: a preview keeps an `allowed` audit for an hour, for the same rules, exceptions and
+  every file the audit could read; sends, proposals and the test environment always audit afresh. Whether the
+  folder has unsaved changes is asked while the rest goes on, and the watcher reacts sooner. The home a preview or a
+  test run gives is shaped as a profile, which Edge needs to start: the base application's browser tests now pass
+  through `app_tests`, in the computer's Edge.
+- **`app_tests`: the project's tests on the person's computer**, behind a build key of its own and `[tests]` on the
+  main branch: the preview's watcher, job, environment and audit, development packages too, for up to 20 minutes.
+  The model gets counts and at most ten failures, marked as the application's text; the output stays on the
+  computer for IT. Browser tests use a browser the computer has, as the declaration names it: Edge on Windows.
+  The specialist runs them before proposing and after fixing a failure.
+- **A preview a person keeps open while it changes**: a new version takes the address of the one it replaces, so the person
+  reloads the page, keeps the data the declaration puts in `{data}`, and skips the installation when the lockfile,
+  the declaration and the Python are the same: about 9 s for a change on the clean base application. The hour counts
+  from the latest version. A setup that fails on the data kept runs once more on none, and says so; `fresh` starts
+  over on request. The data goes with a stop, the time limit and the sweep. Each test run has its own temporary
+  folder, so two runs on one computer no longer count each other's previews.
 - **A business person never creates a repository** ([decision 15](docs/decisions.md#15--a-business-person-never-creates-a-repository)).
   When someone wants a new application and no project exists, the specialist understands it in conversation, with
   nothing written, and `project_request` turns it into a request for IT with a fixed format: an e-mail link to

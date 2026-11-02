@@ -185,13 +185,15 @@ run = ["uvicorn", "app.main:app", "--no-proxy-headers", "--host", "127.0.0.1", "
 
 [preview.environment]
 APP_ENVIRONMENT = "development"
+APP_DATABASE_URL = "sqlite:///{data}/preview.db"   # kept across versions, until the person says stop
 ```
 
 | Rule | Why |
 |---|---|
 | Each command is a list of words, run as `uv run --frozen <words>`, with no shell text (`&&`, `\|`, `;`, `>`, `$(`) in a word | What IT reviewed is what runs |
 | The program is `python <a file of the project>`, `python -m <module>` other than `pip`, `ensurepip` or `venv`, or a console script of a package in `uv.lock`. Never `python -c`, nor a script as the program (`app.py`): write `python app.py` | The last is checked once the packages are installed. A script as the program would bring its own metadata and lockfile |
-| `{port}` is the only substitution, in `run` only, and `run` must use it | The connector picks a free port |
+| `{port}`, in `run` only, and `run` must use it. `{data}`, in `run`, `setup` and `[preview.environment]` values: an absolute folder of the connector's, kept across versions, never a program. Nothing else in braces, but JSON's | The connector picks the port, and keeps the address for the next version when it can. Data written in `{data}` survives a change; anywhere else in the copy it goes with each version |
+| `setup` runs on every version, on the data kept: make it a migration that leaves what is there | A setup that fails on that data runs once more on none, and the person is told the data was reset |
 | `run` says `--host 127.0.0.1`, `--bind` or `-b 127.0.0.1:{port}`, or a bare `127.0.0.1:{port}`, and no other host, wildcard, socket or file descriptor. `-h` is not read: use the long option. The connector cannot know every option: IT does not declare `--ip 0`, and if it did, the listening table would catch it as the application starts | Nothing is offered to the network |
 | `[preview.environment]` takes names and text. `GUNICORN_CMD_ARGS`, `FLASK_RUN_HOST`, `UVICORN_HOST`, `HOST` and `BIND`, if set, name 127.0.0.1. It cannot set `PATH`, the home and temporary folders, proxies, or `UV_*`, `PYTHON*`, `PIP_*`, `LD_*`, `DYLD_*`, `SSL_*`, `GIT_*`, `NODE_*`, `CONDA_*` | The connector builds the environment from a short list; no secrets here either, this file is in the repository |
 | A `.python-version`, if the project has one, holds one plain version such as `3.13`; blank lines and `#` comments are ignored | It is the Python the preview installs and runs on. Without one, uv chooses |
@@ -200,6 +202,27 @@ APP_ENVIRONMENT = "development"
 
 A declaration that breaks a rule shows nothing and goes to IT. These rules catch slips, not malice: **IT reviews the
 declaration**, so protect it like `AGENTS.md`.
+
+## Running the tests on a person's computer
+
+Where IT turned on [`app_tests`](configuration.md#running-the-tests-on-a-persons-computer), the specialist runs the
+project's tests on the person's computer, those a sandbox cannot run included. Declare the command in
+`.eunomai/project.toml` on `main`:
+
+```toml
+[tests]
+run = ["pytest"]
+
+[tests.environment]
+APP_BROWSER_CHANNEL = "msedge"   # a browser the computer has; nothing is downloaded
+```
+
+| Rule | Why |
+|---|---|
+| `run` follows the rules of the preview's commands, with nothing in braces | What IT reviewed is what runs |
+| `[tests.environment]` follows the preview's, and cannot set `PYTEST_*` | The connector sets `PYTEST_ADDOPTS` to read the summary |
+| Browser tests use a browser the computer has, named by a variable the project reads, such as Edge (`msedge`) on Windows | Nothing is downloaded on a person's computer |
+| The tests' output is pytest's | The specialist reads its counts and short summary; the rest stays on the computer |
 
 ## Checks on the server
 
