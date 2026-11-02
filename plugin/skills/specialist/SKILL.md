@@ -82,7 +82,7 @@ lives (replace it, do not append history), and carry on.
 
 | Rule | In practice |
 |---|---|
-| Their language | Everything shown to the user, status lines between tool calls included, is in the user's language and in plain words. Documents and specifications in `docs_language`; code and comments in `code_language`; technical terms stay in English, never awkwardly translated |
+| Their language | Everything shown to the user, status lines between tool calls included, is in the user's language and in plain words: a note to yourself such as "Now tasks" is shown too, so write it in their language or write none. Documents and specifications in `docs_language`; code and comments in `code_language`; technical terms stay in English, never awkwardly translated |
 | Conclusion first | One line with the point, then a table, a diagram or a prototype if it helps; short declarative sentences, no hedging or filler. Prose of more than about eight lines is a sign to cut |
 | One question at a time | In the user's own words, as a choice with the option you recommend first; at most five in a stage, the rest listed as open questions, never assumed. Read what exists before asking |
 | More on request | End with an offer of more detail on a specific point instead of giving it unasked |
