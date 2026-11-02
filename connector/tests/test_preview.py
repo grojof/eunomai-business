@@ -1412,3 +1412,8 @@ def test_this_run_has_a_temporary_folder_of_its_own():
     own = Path(preview.tempfile.gettempdir())
     assert own.name == "temp" and own.parent.name.startswith("eunomai-tests-")
     assert os.environ["TEMP"] == os.environ["TMP"] == os.environ["TMPDIR"] == str(own)
+
+
+def test_an_export_can_leave_the_folders_state_for_later(signed_in, workspaces, tmp_path):
+    name, _ = project(signed_in, declaration(Path("x")))
+    assert set(gitops.export_saved(name, tmp_path / "copy", gitops.project_files(name)["tip"], None, False)) == {"head"}

@@ -32,7 +32,7 @@ import time
 
 WINDOWS = sys.platform == "win32"
 BREAKAWAY, NO_WINDOW, DETACHED, NEW_GROUP, SUSPENDED = 0x01000000, 0x08000000, 0x00000008, 0x00000200, 0x00000004
-REMOVE_TRIES = 240  # half seconds: files stay locked for a moment after a process ends on Windows
+REMOVE_TRIES = 1200  # tenths of a second: files stay locked for a moment after a process ends on Windows
 LAST_LINES = 15
 
 if WINDOWS:
@@ -409,13 +409,13 @@ class Watcher:
             shutil.rmtree(self.folder, ignore_errors=True)
             if not os.path.exists(self.folder):
                 break
-            time.sleep(0.5)
+            time.sleep(0.1)
         if reason in ("asked", "time_limit", "lost"):  # a new version, a turn cut short or a crash keep the data
             for _ in range(REMOVE_TRIES):
                 shutil.rmtree(self.keep, ignore_errors=True)
                 if not os.path.exists(self.keep):
                     break
-                time.sleep(0.5)
+                time.sleep(0.1)
             with contextlib.suppress(OSError):
                 os.remove(self.kept_file)
         if not os.path.exists(self.folder):  # or the state stays, for the next connector to finish the job
@@ -452,7 +452,7 @@ class Watcher:
             if reason:
                 self.end(reason)
                 return
-            time.sleep(0.2)
+            time.sleep(0.05)  # a new version waits on this to take the address
 
 
 def launch(arguments: list) -> None:

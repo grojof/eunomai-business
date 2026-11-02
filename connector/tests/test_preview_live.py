@@ -280,3 +280,95 @@ def test_the_data_folder_is_the_connectors_and_absolute():
     data = preview._keep("where") / "data"
     assert data.is_absolute() and data.parent.name.startswith(preview._PREFIX)
     assert data.is_relative_to(Path(preview.tempfile.gettempdir()))
+
+
+# --- the audit a preview keeps --------------------------------------------------------------------------------------
+
+ALLOWED = {"verdict": "allowed", "files": ["uv.lock"], "packages": 0, "blocked": [], "not_pinned": [],
+           "without_hashes": []}
+
+
+@pytest.fixture
+def audits(monkeypatch) -> list:
+    """Every audit that really runs, with the in-process memory of one emptied before each, as a new turn has."""
+    calls = []
+
+    def audit(folder):
+        calls.append(folder)
+        return dict(ALLOWED)
+
+    monkeypatch.setattr(preview.deps, "audit", audit)
+    real = gitops.audit_saved
+
+    def fresh(*args, **kwargs):
+        gitops._audits.clear()
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(gitops, "audit_saved", fresh)
+    return calls
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_change_to_the_code_reuses_the_allowed_audit(signed_in, workspaces, turned_on, pids, audits):
+    name, ws = live_project(signed_in, pids)
+    show(name)
+    assert len(audits) == 1
+    change(name, ws, "app.py", LIVE + b"# a change to the code\n")
+    assert show(name)["status"] == "ready" and len(audits) == 1
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_send_never_takes_the_kept_audit(signed_in, workspaces, turned_on, pids, audits):
+    name, ws = live_project(signed_in, pids)
+    show(name)
+    change(name, ws, "app.py", LIVE + b"# a change to the code\n")
+    show(name)
+    assert len(audits) == 1
+    assert tools.version_send(name)["pushed"]
+    assert len(audits) == 2
+    tools.version_propose(name, "A change", "It changes the message.")
+    assert len(audits) == 3
+
+
+@pytest.mark.preview
+@needs_uv
+@pytest.mark.parametrize("what", ["lock", "exceptions", "an hour", "a new file", "the rules"])
+def test_anything_the_audit_depends_on_audits_again(signed_in, workspaces, turned_on, pids, audits, monkeypatch, what):
+    name, ws = live_project(signed_in, pids)
+    show(name)
+    if what == "lock":
+        change(name, ws, "uv.lock", LOCK + b"\n")
+    elif what == "exceptions":
+        monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"app_preview": True, "dependency_exceptions": [
+            {"package": "pypi:x", "reason": "r"}]}))
+        change(name, ws, "app.py", LIVE + b"# a change to the code\n")
+    elif what == "an hour":
+        kept = preview._audit_cache_file(name)
+        entry = json.loads(kept.read_text())
+        kept.write_text(json.dumps({**entry, "at": entry["at"] - 3601}))
+        change(name, ws, "app.py", LIVE + b"# a change to the code\n")
+    elif what == "a new file":
+        change(name, ws, "requirements.txt", b"# nothing\n")
+    else:
+        monkeypatch.setattr(preview, "_RULES", "another")
+        change(name, ws, "app.py", LIVE + b"# a change to the code\n")
+    assert show(name)["status"] in ("ready", "audit_refused", "needs_it") and len(audits) == 2
+
+
+def test_only_an_allowed_answer_is_kept(signed_in, workspaces, pids, tmp_path):
+    folder = tmp_path / "copy"
+    folder.mkdir()
+    (folder / "uv.lock").write_bytes(LOCK)
+    key = preview._audit_key(folder)
+    preview._keep_audit("refused-here", key, {**ALLOWED, "verdict": "blocked"})
+    assert preview._kept_audit("refused-here", key) is None
+    preview._keep_audit("allowed-here", key, ALLOWED)
+    assert preview._kept_audit("allowed-here", key)["verdict"] == "allowed"
+    assert preview._kept_audit("allowed-here", "another key") is None
+
+
+def test_barriers_say_why_a_kept_audit_is_for_previews_only():
+    text = " ".join((Path(preview.__file__).parents[3] / "docs" / "barriers.md").read_text(encoding="utf-8").split())
+    assert "never trust it" in text and "a forged entry gives it nothing it lacks" in text

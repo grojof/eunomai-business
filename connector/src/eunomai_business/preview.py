@@ -724,12 +724,96 @@ def _how_long(minutes: int, keeps_running: bool) -> str:
     return f"It stops when this task ends, or in {minutes} minutes from this version."
 
 
-def _gate(current: _Preview, refused: str) -> dict | None:
+# What an audit's answer depends on besides the files: the rules, as the connector that judged them has them.
+_RULES = hashlib.sha256(Path(deps.__file__).read_bytes()).hexdigest()
+_AUDIT_KEPT = 60 * 60  # seconds a preview trusts an `allowed` it kept
+# Files whose content an audit never reads, unless they are in a folder of vendored files: what a change to the
+# application's code touches. Every other file counts by its content, and every file by its name.
+_NOT_AUDITED = {".py", ".pyi", ".html", ".htm", ".jinja", ".j2", ".css", ".scss", ".js", ".mjs", ".ts", ".md", ".rst",
+                ".po", ".mo", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2", ".ttf"}
+
+
+def _audit_key(folder: Path) -> str:
+    """What the audit of an export depends on: the rules, the organization's exceptions, the name of every file and
+    link, and the content of every file it could read. A change to the application's code keeps it."""
+    digest = hashlib.sha256()
+    digest.update(_RULES.encode() + b"\0")
+    digest.update(json.dumps(settings.load()["dependency_exceptions"], sort_keys=True).encode() + b"\0")
+    for top, folders, files in sorted(os.walk(folder, followlinks=False)):
+        folders.sort()
+        for name in sorted(files + [f for f in folders if (Path(top) / f).is_symlink()]):
+            path = Path(top) / name
+            relative = path.relative_to(folder).as_posix()
+            digest.update(relative.encode() + b"\0")
+            vendored = any(part.lower() == "vendor" for part in path.relative_to(folder).parts[:-1])
+            if path.is_symlink():
+                digest.update(b"link:" + os.readlink(path).encode() + b"\0")
+            elif vendored or path.suffix.lower() not in _NOT_AUDITED:
+                digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def _audit_cache_file(workspace: str) -> Path:
+    return data_dir() / "audits" / f"{_state_file(workspace).stem}.json"
+
+
+def _kept_audit(workspace: str, key: str) -> dict | None:
+    """An `allowed` a preview of this workspace kept, for the same files, within the hour. Anything else is nothing."""
+    entry = _read_state(_audit_cache_file(workspace))
+    result, at = entry.get("result"), entry.get("at")
+    if entry.get("key") != key or not isinstance(result, dict) or type(at) not in (int, float) \
+            or not 0 <= time.time() - at < _AUDIT_KEPT or result.get("verdict") != "allowed":
+        return None
+    return result
+
+
+def _keep_audit(workspace: str, key: str, result: dict) -> None:
+    if result.get("verdict") != "allowed":
+        return
+    path = _audit_cache_file(workspace)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps({"key": key, "at": time.time(), "result": result}), encoding="utf-8")
+    with contextlib.suppress(OSError):
+        os.replace(temporary, path)
+    with contextlib.suppress(OSError):
+        temporary.unlink(missing_ok=True)
+
+
+def _later(call, *arguments):
+    """`call` started now, in a thread; what is returned waits for its answer, or raises what it raised."""
+    found: dict = {}
+
+    def run():
+        try:
+            found["value"] = call(*arguments)
+        except Exception as exc:  # noqa: BLE001  raised again where the answer is asked for
+            found["error"] = exc
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+
+    def answer():
+        thread.join()
+        if "error" in found:
+            raise found["error"]
+        return found["value"]
+
+    return answer
+
+
+def _gate(current: _Preview, refused: str, kept: bool = False) -> dict | None:
     """The saved version exported, checked against the main branch, audited, with a lockfile; or the answer that says
-    why not. What both a preview and a run of the tests go through first."""
-    current.saved = gitops.export_saved(current.workspace, current.app, current.main, current.head)
+    why not. What both a preview and a run of the tests go through first. `kept`, for a preview only: an `allowed`
+    kept within the hour for the same files stands; nothing that sends ever asks for one."""
+    current.summary = _later(gitops.saved_summary, current.workspace)  # needed only for the answer
+    gitops.export_saved(current.workspace, current.app, current.main, current.head, False)
+    keeping = None
+    if kept:
+        key = _audit_key(current.app)
+        keeping = (lambda: _kept_audit(current.workspace, key), lambda result: _keep_audit(current.workspace, key, result))
     try:
-        audit = gitops.audit_saved(current.workspace, current.main, current.head, current.app)
+        audit = gitops.audit_saved(current.workspace, current.main, current.head, current.app, keeping)
     except support.Unreachable as exc:
         return support.audit_unavailable(
             current.workspace, f"{refused} now: the checks on what it uses could not run. Check the network or VPN and "
@@ -745,11 +829,11 @@ def _gate(current: _Preview, refused: str) -> dict | None:
 
 def _prepare(current: _Preview, declared: dict) -> dict:
     """The saved version in the temporary folder, checked, and running. Refusals come back as answers."""
-    refusal = _gate(current, "This version cannot be shown on your computer")
+    refusal = _gate(current, "This version cannot be shown on your computer", kept=True)
     if refusal:
         return refusal
-    saved = current.saved
     _bring_up(current, declared)
+    saved = current.summary()
     minutes = math.ceil(TIME_LIMIT / 60)
     reload = bool(current.wanted_port) and current.port == current.wanted_port
     moved = bool(current.wanted_port) and not reload

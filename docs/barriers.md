@@ -257,6 +257,11 @@ they do not stop code written to do harm, and a program with the person's rights
   20 minutes, with the development packages too. What returns to the model is counts and at most ten failures, each
   a test's name and a line, marked as the application's text; whether they passed is the exit code's. The output,
   which can say anything, stays on the computer.
+- **An audit a preview keeps.** A preview keeps an `allowed` audit for an hour, for the same rules, exceptions,
+  file names and the content of every file the audit could read, so a change to the code is shown in seconds. That
+  record is in the connector's folder, which the person's own programs can write, a preview's application among
+  them. Such an application already runs its own code in a preview, so a forged entry gives it nothing it lacks.
+  `version_send`, `version_propose` and `version_to_test` never trust it: they always audit afresh.
 - **What one version leaves for the next.** The data and the installed packages are writable by the application, so
   one version's code can leave something the next one reads, or a changed package the next one runs, inside the job,
   until the lockfile, the declaration or the Python changes, or a stop.
