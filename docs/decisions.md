@@ -351,7 +351,7 @@ the organization's template; the person comes back, the specialist clones it and
 | Step | Who | What |
 |---|---|---|
 | 1 Understand | The specialist, in conversation | Goal, users, how it is done today, what the first version includes, open questions. Nothing is written anywhere |
-| 2 Request | The connector prepares it, the person sends it | `project_request` builds a message with a fixed format: a suggested name, what it is for, who will use it, what was understood and the open questions. It returns an e-mail link to `support_email` and the same text to copy, and keeps a copy on the person's computer. Nothing is sent automatically |
+| 2 Request | The connector prepares it, the person sends it | `project_request` builds a message with a fixed format, in the organization's documentation language (`docs_language`: Spanish, Catalan or English, otherwise English): a suggested name, what it is for, who will use it, what was understood and the open questions. It returns an e-mail link to `support_email` and the same text to copy, and keeps a copy on the person's computer. Nothing is sent automatically |
 | 3 Create | IT | A repository from the organization's template, with `main` protected ([how](project-practices.md#creating-a-project-from-the-template)). IT decides the name |
 | 4 Carry on | The specialist, in the same task or a new one | `workspace_list` lists the pending request; once the person says the project exists, the specialist clones it, seeds the first proposal from the request, so Understand is not asked again, and marks the request done with `project_request_done`. It is kept, not deleted |
 
@@ -373,4 +373,6 @@ the organization's template; the person comes back, the specialist clones it and
 
 - **Consequence:** a request is a file in the connector's folder until it is done
   ([data on computers](data-on-computers.md#on-the-users-computer)); the same name while it is pending replaces it.
+- **Consequence:** the subject always starts `eunomai-business:`, whatever the language, so a mailbox rule can
+  recognise a request; the person's own words are never translated.
 - **Consequence:** without `support_email` the person copies the text and sends it to IT as they usually do.

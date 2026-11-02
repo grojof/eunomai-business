@@ -78,7 +78,7 @@ and no files written; then the request goes to IT, and the journey goes on once 
 | Moment | The user sees | Behind the scenes |
 |---|---|---|
 | Understand | The same questions and "what I understood" | Nothing written anywhere |
-| The request | A suggested name (IT decides), and an e-mail to IT ready to send, or the text to copy; nothing is sent until they send it | `project_request`: a fixed message, an e-mail link to `support_email`, and a copy in the connector's folder |
+| The request | A suggested name (IT decides), and an e-mail to IT ready to send, or the text to copy; nothing is sent until they send it | `project_request`: a fixed message in the organization's documentation language, an e-mail link to `support_email`, and a copy in the connector's folder |
 | Waiting for IT | At the start of any later task, "has IT created *name*?" | `workspace_list` lists the pending request |
 | The project exists | The summary they confirmed, and a question only if something changed | The project cloned, the first proposal written from the request and saved, the request marked done with `project_request_done` and kept |
 

@@ -297,7 +297,8 @@ def project_request(name: str, purpose: str, users: str, today: str, first_versi
     """Prepare a request for IT to create a new project, when the person wants a new application and no project
     exists. Only after they confirmed what was understood. Sends nothing: it returns the message (`subject`, `text`
     to copy), `email_link` (a mailto to the organization's support address, when there is one) and `user_message`,
-    and keeps a copy on this computer that workspace_list lists until project_request_done. `name` is a suggested
+    and keeps a copy on this computer that workspace_list lists until project_request_done. The fixed text is in the
+    organization's documentation language. `name` is a suggested
     repository name (lowercase ASCII letters, digits and hyphens; IT decides); the other fields are what the person
     said, in their language. The same name while a request is pending replaces it (`replaced` true)."""
     return _safe(requests_for_it.prepare, name, purpose, users, today, first_version, out_of_scope, open_questions)

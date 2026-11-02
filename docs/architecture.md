@@ -156,7 +156,7 @@ sequenceDiagram
 | `preview` | `app_preview`, off by default: the saved version in a temporary folder, audited, run through uv on 127.0.0.1, found again by any connector, with its whole process tree stopped on request and after 60 minutes ([barriers](barriers.md#the-preview-on-the-persons-computer)) | uv; a job object on Windows, a process group elsewhere |
 | `watcher` | What owns a preview: a detached process with the standard library alone, which starts its steps, holds its tree, enforces the limit and cleans up | A job object on Windows |
 | `support` | The stop: the user's message, IT's report, the e-mail link (RFC 6068, one function for every message to IT) | — |
-| `project_request` | A request for a new project: a fixed message for IT, its e-mail link, and a copy kept until the project is cloned ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)) | — |
+| `project_request` | A request for a new project: a fixed message for IT in the organization's documentation language, its e-mail link, and a copy kept until the project is cloned ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)) | — |
 | `settings` | The specialist's settings: languages, the organization's context and skills, where code may be written, and what a project declares, the preview included | — |
 | `deps` | `dependency_check`: which package version may be used; `dependency_audit`: every package a workspace pins | PyPI, npm and OSV public APIs; the source repositories' web addresses |
 | `guard` | The file guard: the PreToolUse hook, and the rules `version_save` enforces | — |

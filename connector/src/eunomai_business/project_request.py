@@ -12,7 +12,8 @@ import re
 import time
 import unicodedata
 from pathlib import Path
-from . import data_dir
+
+from . import data_dir, settings
 from .support import mail_link
 
 # A suggestion IT may change: lowercase letters, digits and hyphens, which every git hosting accepts as a repository
@@ -25,11 +26,41 @@ _QUESTION_LIMIT = 500
 _QUESTIONS = 30
 # Characters that change how a line reads without being seen: bidirectional overrides and isolates.
 _INVISIBLE = re.compile("[‪-‮⁦-⁩]")
-_SECTIONS = (("purpose", "What it is for"), ("users", "Who will use it"), ("today", "How it is done today"),
-             ("first_version", "What the first version includes"))
-WHAT_IT_DOES = ("Create the repository from the organization's template, with its main branch protected, give the "
-                "requester write access, and reply with its address (owner/name). The requester then tells the "
-                "assistant it exists, and the work goes on from this request.")
+_SECTIONS = ("purpose", "users", "today", "first_version")
+_SUBJECT = "eunomai-business: "  # fixed, so a mailbox rule can recognise a request in any language
+# The fixed text, in the organization's documentation language (docs_language); any other language reads English.
+# The person's own words are never translated.
+WORDS = {
+    "en": {"subject": "new project request: {name}", "title": "New project request",
+           "name": "Proposed name: {name} (a suggestion: IT decides the name)", "request": "Request: {request}",
+           "date": "Requested: {date}", "purpose": "What it is for", "users": "Who will use it",
+           "today": "How it is done today", "first_version": "What the first version includes",
+           "out_of_scope": "Out of scope", "nothing": "Nothing stated.", "open_questions": "Open questions",
+           "none": "None.", "it": "What IT does",
+           "it_text": "Create the repository from the organization's template, with its main branch protected, give "
+                      "the requester write access, and reply with its address (owner/name). The requester then tells "
+                      "the assistant it exists, and the work goes on from this request."},
+    "es": {"subject": "solicitud de proyecto nuevo: {name}", "title": "Solicitud de proyecto nuevo",
+           "name": "Nombre propuesto: {name} (una sugerencia: el nombre lo decide IT)", "request": "Solicitud: {request}",
+           "date": "Fecha: {date}", "purpose": "Para qué sirve", "users": "Quién lo usará",
+           "today": "Cómo se hace hoy", "first_version": "Qué incluye la primera versión",
+           "out_of_scope": "Fuera de alcance", "nothing": "No se ha indicado nada.", "open_questions": "Preguntas abiertas",
+           "none": "Ninguna.", "it": "Qué hace IT",
+           "it_text": "Crear el repositorio a partir de la plantilla de la organización, con la rama principal "
+                      "protegida, dar acceso de escritura a quien lo solicita y responder con su dirección "
+                      "(propietario/nombre). Quien lo solicita avisa entonces al asistente de que existe, y el trabajo "
+                      "sigue a partir de esta solicitud."},
+    "ca": {"subject": "sol·licitud de projecte nou: {name}", "title": "Sol·licitud de projecte nou",
+           "name": "Nom proposat: {name} (un suggeriment: el nom el decideix IT)", "request": "Sol·licitud: {request}",
+           "date": "Data: {date}", "purpose": "Per a què serveix", "users": "Qui l'utilitzarà",
+           "today": "Com es fa avui", "first_version": "Què inclou la primera versió",
+           "out_of_scope": "Fora de l'abast", "nothing": "No s'ha indicat res.", "open_questions": "Preguntes obertes",
+           "none": "Cap.", "it": "Què fa IT",
+           "it_text": "Crear el repositori a partir de la plantilla de l'organització, amb la branca principal "
+                      "protegida, donar accés d'escriptura a qui ho sol·licita i respondre amb la seva adreça "
+                      "(propietari/nom). Qui ho sol·licita avisa llavors l'assistent que existeix, i la feina continua "
+                      "a partir d'aquesta sol·licitud."},
+}
 
 
 def _folder() -> Path:
@@ -58,17 +89,23 @@ def _check_name(name) -> str:
     return name
 
 
+def language() -> str:
+    configured = str(settings.load()["docs_language"]).lower()
+    return configured if configured in WORDS else "en"
+
+
 def message(fields: dict) -> tuple[str, str]:
-    """(subject, text) of a request. The same fields always give the same message."""
-    subject = f"eunomai-business: new project request: {fields['name']}"
-    lines = ["New project request", "",
-             f"Proposed name: {fields['name']} (a suggestion: IT decides the name)",
-             f"Request: {fields['request']}", f"Requested: {fields['created'][:10]}"]
-    for key, heading in _SECTIONS:
-        lines += ["", heading, fields[key]]
-    lines += ["", "Out of scope", fields["out_of_scope"] or "Nothing stated."]
-    lines += ["", "Open questions", *([f"- {question}" for question in fields["open_questions"]] or ["None."])]
-    lines += ["", "What IT does", WHAT_IT_DOES]
+    """(subject, text) of a request, in its language. The same fields always give the same message."""
+    words = WORDS[fields["language"]]
+    subject = _SUBJECT + words["subject"].format(name=fields["name"])
+    lines = [words["title"], "", words["name"].format(name=fields["name"]),
+             words["request"].format(request=fields["request"]), words["date"].format(date=fields["created"][:10])]
+    for key in _SECTIONS:
+        lines += ["", words[key], fields[key]]
+    lines += ["", words["out_of_scope"], fields["out_of_scope"] or words["nothing"]]
+    lines += ["", words["open_questions"],
+              *([f"- {question}" for question in fields["open_questions"]] or [words["none"]])]
+    lines += ["", words["it"], words["it_text"]]
     return subject, "\n".join(lines) + "\n"
 
 
@@ -132,7 +169,8 @@ def prepare(name: str, purpose: str, users: str, today: str, first_version: str,
         request = next(candidate for candidate in (name, *(f"{name}-{n}" for n in range(2, 1000)))
                        if candidate not in taken)
         path, created = folder / f"{request}.json", _now()
-    record = {"request": request, "status": "pending", "name": name, **fields, "created": created}
+    record = {"request": request, "status": "pending", "name": name, **fields, "created": created,
+              "language": language()}
     if pending:
         record["updated"] = _now()
     subject, text = message(record)

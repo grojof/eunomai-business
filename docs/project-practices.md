@@ -16,9 +16,11 @@ Enterprise, GitLab).
 ## Creating a project from the template
 
 Business people never create repositories ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)).
-When someone wants a new application, IT receives a request by e-mail, with the subject
-`eunomai-business: new project request: <name>`: a suggested name, what it is for, who will use it, what was
-understood and the open questions. IT decides the name, creates the repository from the organization's template,
+When someone wants a new application, IT receives a request by e-mail, with a subject that starts
+`eunomai-business:` (in English, `eunomai-business: new project request: <name>`): a suggested name, what it is for,
+who will use it, what was understood and the open questions. Its fixed text is in the organization's
+documentation language (`docs_language`: Spanish, Catalan or English, otherwise English); the person's words are
+as they wrote them. IT decides the name, creates the repository from the organization's template,
 gives the requester write access and replies with its address (`owner/name`). The person tells the assistant, which
 carries on from the request.
 

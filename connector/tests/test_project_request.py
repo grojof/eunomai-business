@@ -7,6 +7,7 @@ task picks up from `workspace_list`. Nothing is sent by the connector.
 
 import json
 import shutil
+from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import pytest
@@ -210,3 +211,50 @@ def test_a_saved_copy_that_cannot_be_read_is_skipped_not_fatal():
     (data_dir() / "project-requests" / "broken.json").write_text("{not json", encoding="utf-8")
     listed = tools.workspace_list()["project_requests"]
     assert [entry["request"] for entry in listed] == ["alta-de-pedidos"]
+
+
+# --- in the organization's language ----------------------------------------------------------------------------
+
+LANGUAGES = {
+    "en": ("eunomai-business: new project request: alta-de-pedidos",
+           ["New project request", "Proposed name: alta-de-pedidos", "What it is for", "Who will use it",
+            "How it is done today", "What the first version includes", "Out of scope", "Open questions",
+            "What IT does"], "Nothing stated.", "None."),
+    "es": ("eunomai-business: solicitud de proyecto nuevo: alta-de-pedidos",
+           ["Solicitud de proyecto nuevo", "Nombre propuesto: alta-de-pedidos", "Para qué sirve", "Quién lo usará",
+            "Cómo se hace hoy", "Qué incluye la primera versión", "Fuera de alcance", "Preguntas abiertas",
+            "Qué hace IT"], "No se ha indicado nada.", "Ninguna."),
+    "ca": ("eunomai-business: sol·licitud de projecte nou: alta-de-pedidos",
+           ["Sol·licitud de projecte nou", "Nom proposat: alta-de-pedidos", "Per a què serveix", "Qui l'utilitzarà",
+            "Com es fa avui", "Què inclou la primera versió", "Fora de l'abast", "Preguntes obertes",
+            "Què fa IT"], "No s'ha indicat res.", "Cap."),
+}
+
+
+@pytest.mark.parametrize("language", sorted(LANGUAGES))
+def test_the_fixed_text_is_in_the_organizations_documentation_language(monkeypatch, language):
+    monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"docs_language": language}))
+    subject, headings, nothing, none = LANGUAGES[language]
+    answer = prepare(purpose="Registrar pedidos.")
+    assert answer["subject"] == subject and answer["subject"].startswith("eunomai-business: ")
+    positions = [answer["text"].index(heading) for heading in headings]
+    assert positions == sorted(positions)
+    assert f"\n{nothing}\n" in answer["text"] and f"\n{none}\n" in answer["text"]
+    assert "Registrar pedidos." in answer["text"], "the person's words stay as given"
+    _, fields = mail(answer["email_link"])
+    assert fields["subject"] == [subject] and fields["body"] == [answer["text"].replace("\n", "\r\n")]
+    saved = json.loads(Path(answer["saved"]).read_text(encoding="utf-8"))
+    assert saved["language"] == language
+
+
+def test_another_language_falls_back_to_english(monkeypatch):
+    monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"docs_language": "fr"}))
+    assert prepare()["subject"] == LANGUAGES["en"][0]
+
+
+def test_every_language_has_every_fixed_text():
+    from eunomai_business import project_request
+
+    keys = set(project_request.WORDS["en"])
+    assert set(project_request.WORDS) == {"en", "es", "ca"}
+    assert all(set(words) == keys for words in project_request.WORDS.values())
