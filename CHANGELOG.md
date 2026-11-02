@@ -4,7 +4,9 @@
 
 - **A change shows in about 4 s**: a preview keeps an `allowed` audit for an hour, for the same rules, exceptions and
   every file the audit could read; sends, proposals and the test environment always audit afresh. Whether the
-  folder has unsaved changes is asked while the rest goes on, and the watcher reacts sooner.
+  folder has unsaved changes is asked while the rest goes on, and the watcher reacts sooner. The home a preview or a
+  test run gives is shaped as a profile, which Edge needs to start: the base application's browser tests now pass
+  through `app_tests`, in the computer's Edge.
 - **`app_tests`: the project's tests on the person's computer**, behind a build key of its own and `[tests]` on the
   main branch: the preview's watcher, job, environment and audit, development packages too, for up to 20 minutes.
   The model gets counts and at most ten failures, marked as the application's text; the output stays on the

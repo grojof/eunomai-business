@@ -1414,6 +1414,19 @@ def test_this_run_has_a_temporary_folder_of_its_own():
     assert os.environ["TEMP"] == os.environ["TMP"] == os.environ["TMPDIR"] == str(own)
 
 
+def test_the_home_a_preview_gives_is_shaped_as_a_profile():
+    """Edge, started by the watcher, does not start under a profile whose folders are all the same one."""
+    current = preview._Preview("shaped-home", "0" * 40)
+    try:
+        environment = current.environment("uv")
+        home = Path(environment["USERPROFILE"])
+        assert Path(environment["APPDATA"]) == home / "AppData" / "Roaming" and Path(environment["APPDATA"]).is_dir()
+        assert Path(environment["LOCALAPPDATA"]) == home / "AppData" / "Local" and Path(environment["LOCALAPPDATA"]).is_dir()
+        assert home.is_relative_to(current.folder)
+    finally:
+        current.close()
+
+
 def test_an_export_can_leave_the_folders_state_for_later(signed_in, workspaces, tmp_path):
     name, _ = project(signed_in, declaration(Path("x")))
     assert set(gitops.export_saved(name, tmp_path / "copy", gitops.project_files(name)["tip"], None, False)) == {"head"}

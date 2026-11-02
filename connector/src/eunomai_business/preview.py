@@ -328,7 +328,7 @@ class _Preview:
         self.keep, self.log = self.kept_folder(), self.folder / "preview.log"
         self.data, self.environment_folder = self.keep / "data", self.keep / "environment"
         self.made_keep = not self.keep.exists()  # nothing to keep for a first preview that never showed anything
-        for folder in (self.app, self.home, self.temp, self.data):
+        for folder in (self.app, self.home / "AppData" / "Roaming", self.home / "AppData" / "Local", self.temp, self.data):
             folder.mkdir(parents=True, exist_ok=True)
         os.utime(self.keep)  # the sweep counts a kept folder's age from its latest preview
         self.data_reset, self.reinstalled = False, False
@@ -409,8 +409,10 @@ class _Preview:
         built.update({"PATH": os.pathsep.join(path), "NO_COLOR": "1", "UV_PROJECT_ENVIRONMENT": str(self.environment_folder),
                       "UV_CACHE_DIR": self.uv_cache, "UV_PYTHON_INSTALL_DIR": self.uv_pythons,
                       # the person's own folders stay out of what a library finds by itself
-                      "HOME": str(self.home), "USERPROFILE": str(self.home), "APPDATA": str(self.home),
-                      "LOCALAPPDATA": str(self.home), "TEMP": str(self.temp), "TMP": str(self.temp),
+                      # shaped as a profile: Edge, started by the watcher, does not start under one that is not
+                      "HOME": str(self.home), "USERPROFILE": str(self.home),
+                      "APPDATA": str(self.home / "AppData" / "Roaming"),
+                      "LOCALAPPDATA": str(self.home / "AppData" / "Local"), "TEMP": str(self.temp), "TMP": str(self.temp),
                       "TMPDIR": str(self.temp)})
         if installing:
             built.update({key: os.environ[key] for key in _PROXY if key in os.environ})
