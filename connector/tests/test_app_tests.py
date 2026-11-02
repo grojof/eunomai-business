@@ -32,7 +32,7 @@ if failures:
     print(f"========================= {failures} failed, 3 passed, 1 skipped in 0.42s =========================")
 else:
     print("========================= 3 passed, 1 skipped in 0.42s =========================")
-sys.exit(1 if failures else 0)
+sys.exit(int(os.environ.get("RUNNER_EXIT", "1" if failures else "0")))
 '''
 
 

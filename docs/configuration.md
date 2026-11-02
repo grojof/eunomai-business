@@ -111,7 +111,8 @@ up to 20,000 characters, so a copy edited in the folder does not count), `organi
 With `app_preview` on, and `[preview]` in a project's declaration
 ([how a project declares it](project-practices.md#seeing-the-application-on-a-persons-computer)), the specialist can
 show the real application in the person's browser. It keeps running until they say stop or 60 minutes pass from its
-latest version, even if they close the task or Claude Desktop. A new version keeps the address and the data, so the
+latest version, even if they close the task or Claude Desktop. Starting the same version again, fresh or after it
+stopped answering, keeps the time it had. A new version keeps the address and the data, so the
 person reloads the page; the data goes when they say stop or the hour ends.
 
 **The risk is yours to accept.** This runs code an AI wrote and nobody has reviewed yet, on the person's computer,

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **What answers at the address is the preview's own** (review of the live preview): a program that took the port
+  first was shown to the person as their application; the system's table must now say the listener is in the
+  preview's tree. Read-only files no longer survive a removal that said it was done, and a stop or a fresh start
+  that cannot clear says so. A summary of the tests leads with the exit code's verdict. A kept environment is checked
+  against the lockfile by uv, not only against a record the application can write. `uv` and `pipx` are installers
+  as modules too. The programs' list follows no link out of the environment. Starting the same version again keeps
+  its hour.
 - **A change shows in about 4 s**: a preview keeps an `allowed` audit for an hour, for the same rules, exceptions and
   every file the audit could read; sends, proposals and the test environment always audit afresh. Whether the
   folder has unsaved changes is asked while the rest goes on, and the watcher reacts sooner. The home a preview or a

@@ -104,7 +104,7 @@ _PROGRAM = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 _SCRIPTS = (".py", ".pyw", ".pyz")  # `uv run` reads a script's own metadata and lockfile; `python <file>` does not
 _MODULE = re.compile(r"[A-Za-z_][\w.]*\Z")
 PYTHONS = {"python", "python3"}
-_NOT_MODULES = {"pip", "ensurepip", "venv"}
+_NOT_MODULES = {"pip", "ensurepip", "venv", "uv", "pipx"}  # what changes what is installed
 _INSTALLERS = re.compile(r"(?:pip[\d.]*|uvx?)\Z")  # they change what is installed, whichever package brings them
 _SHELL_TEXT = re.compile(r"[;&|`<>\n\r]|\$\(")
 _PLACEHOLDER = re.compile(r"\{[^{}]*\}")
@@ -126,7 +126,7 @@ def _python_problem(arguments: list[str]) -> str | None:
     if first == "-m":
         module = arguments[1] if len(arguments) > 1 else ""
         if not _MODULE.match(module) or module.split(".")[0].lower() in _NOT_MODULES:
-            return "python -m needs a module of the application, not pip, ensurepip or venv"
+            return "python -m needs a module of the application, not pip, ensurepip, venv, uv or pipx"
         return None
     if not first or first.startswith(("-", "{")) or first.startswith(("/", "\\", "~")) or ":" in first \
             or ".." in re.split(r"[\\/]", first):

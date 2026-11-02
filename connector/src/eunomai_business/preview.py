@@ -124,13 +124,9 @@ def _state_file(workspace: str) -> Path:
 
 
 def _remove(folder: Path, wait: float = 10.0) -> bool:
-    """Files stay locked for a moment after a process ends on Windows."""
-    deadline = time.time() + wait
-    while True:
-        shutil.rmtree(folder, ignore_errors=True)
-        if not folder.exists() or time.time() > deadline:
-            return not folder.exists()
-        time.sleep(0.1)
+    """Files stay locked for a moment after a process ends on Windows, and a read-only one is not deleted there: True
+    only if the folder is gone."""
+    return watcher.remove_tree(str(folder), max(1, int(wait * 10)))
 
 
 def _is_live(folder: Path, token: str) -> bool:
@@ -320,7 +316,7 @@ def _uv_folder(uv: str, *arguments: str) -> str:
 
 class _Preview:
     def __init__(self, workspace: str, head: str, main: str | None = None, note: str = "", declaration: str = "0" * 16,
-                 port: int = 0):
+                 port: int = 0, deadline: float = 0.0):
         self.workspace, self.key, self.head, self.main, self.note = workspace, _key(workspace), head, main, note
         self.token, self.declaration, self.wanted_port = secrets.token_hex(16), declaration, port
         self.folder = Path(tempfile.mkdtemp(prefix=_PREFIX))
@@ -341,7 +337,7 @@ class _Preview:
         try:
             answer = self.ask({"folder": str(self.folder), "state": str(self.state_path()), "token": self.token,
                                "workspace": workspace, "head": head, "limit": TIME_LIMIT, "log": str(self.log),
-                               "declaration": declaration, "keep": str(self.keep)})
+                               "declaration": declaration, "keep": str(self.keep), "deadline": deadline})
         except _Gone:
             _remove(self.folder)
             raise NeedsIT("The application could not be prepared on your computer. Your work is safe; IT can look at it.",
@@ -556,6 +552,64 @@ def _lsof_beyond(text: str) -> bool:
                for line in text.splitlines()[1:] if len(line.split()) > 2)
 
 
+def _windows_listeners(lines: list[str], port: int) -> set[int]:
+    """From `netstat -ano`: the processes listening on that port, at any address."""
+    found = set()
+    for line in lines:
+        words = line.split()
+        if len(words) >= 5 and words[0].startswith("TCP") and words[2].endswith(":0") and words[-1].isdigit() \
+                and words[1].rpartition(":")[2] == str(port):
+            found.add(int(words[-1]))
+    return found
+
+
+def _linux_listening_inodes(tables: list[str], port: int) -> set[str]:
+    """From /proc/net/tcp and tcp6: the sockets listening on that port, by inode."""
+    found = set()
+    for table in tables:
+        for line in table.splitlines()[1:]:
+            fields = line.split()
+            if len(fields) > 9 and fields[3] == "0A" and int(fields[1].partition(":")[2] or "0", 16) == port:
+                found.add(fields[9])
+    return found
+
+
+def _netstat() -> list[str]:
+    netstat = f"{os.environ.get('SYSTEMROOT', 'C:/Windows')}/System32/netstat.exe"
+    return [line for protocol in ("TCP", "TCPv6") for line in subprocess.run(
+        [netstat, "-ano", "-p", protocol], capture_output=True, text=True, timeout=30, errors="replace",
+        **_HIDDEN).stdout.splitlines()]
+
+
+def _listener_is_the_trees(current: _Preview, port: int) -> bool:
+    """Whether what listens at the address belongs to the preview, so the person's reload reaches the application and
+    nothing that took the port first. The system says who holds it: never the answer that came back."""
+    tree = current.ask({"do": "processes"})
+    if sys.platform == "win32":
+        owners = _windows_listeners(_netstat(), port)
+        return bool(owners) and owners <= set(tree["ids"])
+    tables = [Path(f"/proc/net/{name}") for name in ("tcp", "tcp6")]
+    if tables[0].exists():
+        sockets = _linux_listening_inodes([table.read_text() for table in tables if table.exists()], port)
+        held = set()
+        for number in tree["ids"]:
+            with contextlib.suppress(OSError):
+                for descriptor in os.listdir(f"/proc/{number}/fd"):
+                    with contextlib.suppress(OSError):
+                        link = os.readlink(f"/proc/{number}/fd/{descriptor}")
+                        if link.startswith("socket:["):
+                            held.add(link[8:-1])
+        return bool(sockets) and sockets <= held
+    listing = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fp"], capture_output=True, text=True,
+                             timeout=30, **_HIDDEN).stdout
+    owners = {int(line[1:]) for line in listing.splitlines() if line.startswith("p") and line[1:].isdigit()}
+    groups = set(tree.get("groups") or [])
+    try:
+        return bool(owners) and all(os.getpgid(number) in groups for number in owners)
+    except OSError:
+        return False
+
+
 def _listens_beyond_this_computer(current: _Preview, port: int) -> bool:
     """A last look at what the application did with the address it was told to use, once, as it starts: the system's
     own table, since a firewall silently drops a connection to the computer's own address, so trying one proves
@@ -589,19 +643,26 @@ def _environment_fingerprint(lock: Path, python: tuple[str, ...], declaration: s
     return hashlib.sha256(lock.read_bytes() + b"\0" + " ".join(python).encode() + b"\0" + declaration.encode()).hexdigest()
 
 
-def _forget_kept(workspace: str) -> None:
-    _remove(_keep(workspace))
+def _forget_kept(workspace: str) -> bool:
+    """A workspace's kept data and environment, gone. True only if they are."""
+    removed = _remove(_keep(workspace))
     with contextlib.suppress(OSError):
         _kept_file(workspace).unlink(missing_ok=True)
+    return removed
 
 
 def _install(current: _Preview, uv: str) -> None:
-    """Skipped when the environment kept was installed for the same lockfile, declaration and Python. Anything else,
-    and the old one goes first, whole: what the application left in it never meets another lockfile."""
+    """Skipped when the record says the environment kept was made for the same lockfile, declaration and Python, and
+    uv finds it installs what this lockfile says (`uv sync --check`, offline, in the job). Anything else, and the old one
+    goes first, whole. The record and the environment are the application's to tamper with: that gives it nothing
+    beyond running its own code, which it does anyway, and nothing that sends relies on them."""
     wanted = _environment_fingerprint(current.app / "uv.lock", current.python, current.declaration)
     kept = _read_state(_kept_file(current.workspace)).get("environment")
     if kept == wanted and (current.environment_folder / "pyvenv.cfg").is_file():
-        return
+        check = current.ask({"do": "step", "limit": 60, **current.request(
+            uv, [_INSTALL[0], "--check", *_INSTALL[1:], *current.python], current.environment(uv, installing=True))})
+        if check.get("code") == 0:
+            return
     with contextlib.suppress(OSError):
         _kept_file(current.workspace).unlink(missing_ok=True)
     if current.environment_folder.exists() and not _remove(current.environment_folder):
@@ -645,9 +706,16 @@ def _port_free(port: int) -> bool:
 
 
 def _console_scripts(environment: Path) -> set[str]:
-    """The programs the installed packages declare, which is what the lock installed and nothing else on the computer."""
+    """The programs the installed packages declare, which is what the lock installed and nothing else on the computer:
+    read where they are, never through a link or junction to somewhere else."""
     found = set()
-    for points in environment.rglob("*.dist-info/entry_points.txt"):
+    places = []
+    for top, folders, files in os.walk(environment, followlinks=False):
+        here = Path(top)
+        folders[:] = [f for f in folders if not (here / f).is_symlink() and not (here / f).is_junction()]
+        if here.name.endswith(".dist-info") and "entry_points.txt" in files:
+            places.append(here / "entry_points.txt")
+    for points in places:
         section = ""
         for line in points.read_text(encoding="utf-8", errors="replace").splitlines():
             line = line.strip()
@@ -708,6 +776,10 @@ def _bring_up(current: _Preview, declared: dict) -> None:
         time.sleep(0.2)
     if _listens_beyond_this_computer(current, port):
         raise current.failed("run", "the application answers beyond this computer")
+    if not _listener_is_the_trees(current, port):
+        raise NeedsIT("The application could not be shown: another program on this computer answers at its address. "
+                      "Your work is safe; IT can look at it.", "the application's address is held by a program outside "
+                      "the preview", {"Workspace": current.workspace, "Version": current.head[:12], "Port": str(port)})
     current.port, current.url = port, _address(port)
     current.hand_over()
     if port != wanted:  # an open tab is the person's: reloading it shows the new version
@@ -966,7 +1038,7 @@ def start(workspace: str, fresh: bool = False) -> dict:
             current.close()
             current = None
         if current is None:
-            path, silent, wanted, port = _state_file(workspace), False, _fingerprint(declared), 0
+            path, silent, wanted, port, carried = _state_file(workspace), False, _fingerprint(declared), 0, 0.0
             if _watching(path):
                 state = _preview_state(path)
                 if state and state["head"] == head and state["declaration"] == wanted and not fresh:
@@ -977,16 +1049,21 @@ def start(workspace: str, fresh: bool = False) -> dict:
                             return _running(workspace, state)
                         silent = True
                 port = state.get("port", 0) if state.get("phase") == "ready" else 0
+                if state.get("phase") == "ready" and state["head"] == head and (fresh or silent):
+                    carried = min(state["deadline"], state["began"] + TIME_LIMIT)  # the same version: the same hour
                 # another version, a changed declaration, or a state that cannot be believed: its data stays
                 if not _end(path, keep=not fresh):
                     return _NOT_STOPPED(workspace)
             _sweep()
             note = _take_note(workspace)
-            if fresh:
-                _forget_kept(workspace)
+            if fresh and not _forget_kept(workspace):
+                raise NeedsIT("The data from before could not be cleared, so the application was not started again. "
+                              "Your work is safe; IT can look at it.", "a preview's kept data could not be removed",
+                              {"Workspace": workspace, "Folder": str(_keep(workspace))})
             try:
                 current = _previews[key] = _Preview(workspace, head, files.get("tip"),
-                                                    "fresh" if fresh else "silent" if silent else note, wanted, port)
+                                                    "fresh" if fresh else "silent" if silent else note, wanted, port,
+                                                    carried)
             except _Taken:
                 return _starting(workspace)
             threading.Thread(target=_work, args=(current, declared), daemon=True, name=f"preview {key}").start()
@@ -1013,11 +1090,13 @@ def stop(workspace: str) -> dict:
             ended = True
         else:
             ended = there and _clear_if_free(path)
-        _forget_kept(workspace)  # its data and environment go with it
+        cleared = _forget_kept(workspace)  # its data and environment go with it
     if state.get("port") and _answers(state["port"]):  # what got out of the tree, or a watcher that was ended
         return _NOT_STOPPED(workspace)
     if there and not state and not watched:
         return _NOT_STOPPED(workspace, "It could not be confirmed that the application has stopped. IT can look at it.")
+    left = "" if cleared else " Some of its data could not be removed from this computer; IT can look at it."
     if ended or current is not None:
-        return {"workspace": workspace, "status": "stopped", "user_message": _STOPPED}
-    return {"workspace": workspace, "status": "not_running", "user_message": _NOT_RUNNING}
+        return {"workspace": workspace, "status": "stopped", "cleared": cleared,
+                "user_message": (_STOPPED if cleared else "The application has stopped on your computer.") + left}
+    return {"workspace": workspace, "status": "not_running", "cleared": cleared, "user_message": _NOT_RUNNING + left}

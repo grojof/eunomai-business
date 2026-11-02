@@ -109,9 +109,10 @@ def _prepare(current: _Run, declared: dict) -> dict:
         raise current.failed("tests: they could not start")
     read = summary(printed)
     passed = answer.get("code") == 0
-    counts = ", ".join(f"{number} {word}" for word, number in read["counts"].items()) or "no summary could be read"
-    words = f"The tests ran on your computer: {counts}." if read["counts"] else \
-        f"The tests ran on your computer and {'passed' if passed else 'did not pass'}; {counts}."
+    counts = ", ".join(f"{number} {word}" for word, number in read["counts"].items())
+    verdict = "The tests passed on your computer." if passed else \
+        f"The tests did not pass on your computer (exit code {answer.get('code')})."
+    words = f"{verdict} The output reported: {counts}." if counts else f"{verdict} No summary could be read from their output."
     return {"workspace": current.workspace, "status": "done", "passed": passed, "version": current.head[:12],
             "counts": read["counts"], "failures": read["failures"], "failures_are": _FROM_THE_APPLICATION,
             "log": str(log), "user_message": words}

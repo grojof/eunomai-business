@@ -25,6 +25,7 @@ import os
 import queue
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -161,6 +162,28 @@ def end_process(pid: int, created: int, image: str) -> bool:
     return True
 
 
+def _writable_again(function, path, error) -> None:
+    """A read-only file, which Windows will not delete, or a folder that will not let its files go: made writable, and
+    tried once more."""
+    with contextlib.suppress(OSError):
+        os.chmod(path, stat.S_IREAD | stat.S_IWRITE | stat.S_IEXEC)
+        if os.path.dirname(path):
+            os.chmod(os.path.dirname(path), stat.S_IRWXU)
+        function(path)
+
+
+def remove_tree(path: str, tries: int = 1200) -> bool:
+    """A whole folder, read-only parts included, retried a tenth of a second at a time while files are still held.
+    True only if it is gone."""
+    for _ in range(tries):
+        with contextlib.suppress(OSError):
+            shutil.rmtree(path, onexc=_writable_again)
+        if not os.path.exists(path):
+            return True
+        time.sleep(0.1)
+    return not os.path.exists(path)
+
+
 def replace_file(temporary: str, target: str) -> None:
     """On Windows a file someone is reading cannot be replaced, for as long as they read it."""
     try:
@@ -235,8 +258,17 @@ class Tree:
         return sum(self._lives(group) for group in self.groups)
 
     def processes(self) -> list:
+        """The processes in the tree: the job's, or those of its process groups where /proc lists them."""
         if not WINDOWS:
-            return []
+            found = []
+            for entry in os.listdir("/proc") if os.path.isdir("/proc") else ():
+                try:
+                    with open(f"/proc/{entry}/stat", encoding="utf-8", errors="replace") as file:
+                        if entry.isdigit() and int(file.read().rpartition(")")[2].split()[2]) in self.groups:
+                            found.append(int(entry))
+                except (OSError, ValueError, IndexError):
+                    continue
+            return found
         found = ProcessList()
         _kernel32.QueryInformationJobObject(self.handle, _PROCESS_LIST, ctypes.byref(found), ctypes.sizeof(found), None)
         return list(found.ids[:found.listed])
@@ -271,7 +303,7 @@ class Watcher:
     def __init__(self, config: dict):
         self.folder, self.path, self.token = config["folder"], config["state"], config["token"]
         self.workspace, self.head, self.limit = config["workspace"], config["head"], config["limit"]
-        self.declaration, self.keep = config["declaration"], config["keep"]
+        self.declaration, self.keep, self.carried = config["declaration"], config["keep"], config.get("deadline", 0)
         self.tree, self.application, self.log = Tree(), None, config["log"]
         self.phase, self.port, self.began, self.deadline, self.steady_deadline = "preparing", 0, 0.0, 0.0, 0.0
         self.abandoned, self.handed_over, self.ending = threading.Event(), threading.Event(), threading.Event()
@@ -351,7 +383,9 @@ class Watcher:
 
     def do_run(self, request: dict) -> dict:
         self.application = self.start(request)
-        self.began, self.deadline, self.steady_deadline = time.time(), time.time() + self.limit, time.monotonic() + self.limit
+        # the same version started again keeps the hour it had
+        left = min(self.limit, self.carried - time.time()) if self.carried else self.limit
+        self.began, self.deadline, self.steady_deadline = time.time(), time.time() + left, time.monotonic() + left
         self.remember()
         return {"began": self.began}
 
@@ -359,7 +393,7 @@ class Watcher:
         return {"ended": self.application.poll() is not None}
 
     def do_processes(self, request: dict) -> dict:
-        return {"ids": self.tree.processes()}
+        return {"ids": self.tree.processes(), "groups": sorted(self.tree.groups)}
 
     def do_ready(self, request: dict) -> dict:
         self.phase, self.port = "ready", int(request["port"])
@@ -405,17 +439,9 @@ class Watcher:
                 json.dump({"reason": reason, "head": self.head, "at": time.time()}, file)
             with contextlib.suppress(OSError):
                 replace_file(temporary, self.ended_file)
-        for _ in range(REMOVE_TRIES):
-            shutil.rmtree(self.folder, ignore_errors=True)
-            if not os.path.exists(self.folder):
-                break
-            time.sleep(0.1)
+        remove_tree(self.folder, REMOVE_TRIES)
         if reason in ("asked", "time_limit", "lost"):  # a new version, a turn cut short or a crash keep the data
-            for _ in range(REMOVE_TRIES):
-                shutil.rmtree(self.keep, ignore_errors=True)
-                if not os.path.exists(self.keep):
-                    break
-                time.sleep(0.1)
+            remove_tree(self.keep, REMOVE_TRIES)
             with contextlib.suppress(OSError):
                 os.remove(self.kept_file)
         if not os.path.exists(self.folder):  # or the state stays, for the next connector to finish the job
