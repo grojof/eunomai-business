@@ -129,9 +129,9 @@ not stop code written to do harm. An organization that turns this on accepts tha
   ([guided flows](guided-flows.md)).
 - **To validate:** on a business user's computer, in Cowork ([H22](validation/hypotheses.md)).
 - **Set aside for now:** Claude Managed Agents with self-hosted sandboxes, which runs the tools on the
-  organization's own servers. It needs an API key and is billed apart from the subscription (the pages state no
-  price), has no user interface, so one would have to be built, is in beta and is not eligible for zero data
-  retention ([sources](sources.md#plugins-connectors-and-extensions)). To look at again if an organization's
+  organization's own servers. It uses the API with an API key, so its use would be paid through the API, apart
+  from the subscription (the pages read state no price); it has no user interface, so one would have to be built;
+  it is in beta and not eligible for zero data retention ([sources](sources.md#plugins-connectors-and-extensions)). To look at again if an organization's
   policies block what Cowork needs, or a preview on the person's computer is not acceptable.
 
 ## 8 · The project's context belongs to IT
