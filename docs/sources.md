@@ -47,6 +47,7 @@ date is when they were checked. When a source and a measurement disagree, the me
 | Every person who installs a plugin receives its files: no secrets in `.mcp.json` | [Plugin structure and testing](https://claude.com/docs/plugins/build) | 2026-10-25 | Decision 2 (public clients, no secrets) |
 | Plugins "can execute arbitrary code on your machine with your user privileges"; hooks and MCP servers run outside the sandbox | [Plugin security](https://code.claude.com/docs/en/plugins/security) | 2026-10-25 | [Barriers](barriers.md) |
 | Outbound-only MCP tunnels to private servers: research preview, Enterprise on request | [MCP tunnels](https://claude.com/docs/connectors/mcp-tunnels/overview) | 2026-10-25 | Watch list (a future remote path) |
+| Claude Managed Agents, self-hosted sandboxes: tools run on "infrastructure you control, while Anthropic keeps running the agent"; prerequisites include "A Claude API key" and a Linux or macOS worker; beta header `managed-agents-2026-04-01`; zero data retention "Not eligible" ("transcripts persist until you delete them"); sessions are created through the API, CLI or SDKs; the page states no price | [Self-hosted sandboxes](https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes) | 2026-11-02 | [Decision 7](decisions.md#7--nothing-runs-on-the-users-computer-except-a-preview-it-turns-on) (set aside) |
 
 ### Hooks
 
