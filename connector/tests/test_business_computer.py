@@ -18,6 +18,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from conftest import stop_previews
 from test_preview import APP, LOCK, PYPROJECT, declaration, show
 
 from eunomai_business import __file__ as package_file
@@ -61,7 +62,7 @@ ALLOWED = {"verdict": "allowed", "files": [], "packages": 1, "blocked": [], "not
 def nothing_left_behind():
     gitops._audits.clear()
     yield
-    preview.stop_all()
+    stop_previews()
 
 
 @pytest.fixture
@@ -146,8 +147,7 @@ def test_netstat_is_named_by_its_whole_path(monkeypatch):
                         or subprocess.CompletedProcess(arguments, 0, "", ""))
 
     class Current:
-        class tree:
-            processes = staticmethod(lambda: {1})
+        ask = staticmethod(lambda request: {"ids": [1]})
 
     assert preview._listens_beyond_this_computer(Current, 1234) is False
     assert seen == [r"D:\Windows/System32/netstat.exe"] * 2

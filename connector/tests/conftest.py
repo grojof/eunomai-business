@@ -6,6 +6,7 @@ Gitea API calls the connector makes. Nothing leaves this computer.
 
 import atexit
 import base64
+import contextlib
 import json
 import os
 import shutil
@@ -63,6 +64,74 @@ from dulwich.objects import Blob, Commit, Tree  # noqa: E402
 from dulwich.repo import Repo  # noqa: E402
 from dulwich.server import DictBackend  # noqa: E402
 from dulwich.web import make_wsgi_chain  # noqa: E402
+
+
+def alive(pid: int) -> bool:
+    """Whether a process is still running. A zombie is not: it only waits for its parent to read how it ended."""
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+        kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel32.OpenProcess(0x00100000, False, pid)  # to wait on it
+        if not handle:
+            return False
+        try:
+            return kernel32.WaitForSingleObject(handle, 0) == 0x102  # still running
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rpartition(")")[2].split()[0] != "Z"
+    except ProcessLookupError:  # it ended between the two looks
+        return False
+    except FileNotFoundError:  # this system has no such folder, or it ended between the two looks
+        return Path("/proc/self/stat").exists() is False
+
+
+def stop_previews() -> None:
+    """Everything previews a test left running, whatever the test did: a preview outlives what started it, a test run
+    included, and a state file that goes makes its watcher end what it holds."""
+    from eunomai_business import data_dir, preview
+
+    for current in list(preview._previews.values()):
+        with contextlib.suppress(Exception):
+            current.close()
+    preview._previews.clear()
+    preview._unread.clear()
+    folder = data_dir() / "previews"
+    for state in [*folder.glob("*.json")] if folder.is_dir() else ():
+        with contextlib.suppress(Exception):
+            if preview._watching(state):
+                preview._end(state)
+    if folder.is_dir():
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+_PREVIEWS_BEFORE = set(Path(tempfile.gettempdir()).glob("eunomai-preview-*"))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def nothing_of_a_run_stays():
+    """A run that leaves a preview running or a folder in the temporary folder fails, and is cleaned up all the same."""
+    yield
+    stop_previews()
+    new = lambda: set(Path(tempfile.gettempdir()).glob("eunomai-preview-*")) - _PREVIEWS_BEFORE  # noqa: E731
+    deadline = time.time() + 30
+    while new() and time.time() < deadline:
+        time.sleep(0.2)
+    left = new()
+    for folder in left:
+        shutil.rmtree(folder, ignore_errors=True)
+    assert not left, f"a test left previews behind: {sorted(p.name for p in left)}"
 
 
 def free_port() -> int:

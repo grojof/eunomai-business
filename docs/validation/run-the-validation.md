@@ -120,9 +120,12 @@ pull request, check the files, the accents and the author, and merge it.
 8. **The application on the person's computer** (H22), on a business user's computer, with a build with `app_preview`
    on and a clone of the base application that declares `[preview]`. Ask to see it. Note: the specialist says what will
    happen and waits; how long the first time takes, and whether the task stays responsive; the browser opens it, as
-   last saved, on 127.0.0.1. Then ask to stop it, and check in Task Manager that nothing of it is left and that
-   `%TEMP%\eunomai-preview-*` is gone. Repeat by closing the task or Claude Desktop instead. With IT's agreement, try it
-   under the organization's application control.
+   last saved, on 127.0.0.1. Note whether the answer has `keeps_running` true. Send another message and check that
+   the application still answers; ask to see it again and check that it answers with the same address and the time
+   left, and no restart. Ask to stop it in a later turn, and check in Task Manager that nothing of it is left and that
+   `%TEMP%\eunomai-preview-*` is gone. Repeat by closing the task, then Claude Desktop, with it running: it must still
+   answer, and a new task must find it and stop it. Leave one to reach 60 minutes with Claude Desktop closed. With IT's
+   agreement, try it under the organization's application control.
 
 ## 10 · Write down the results
 
