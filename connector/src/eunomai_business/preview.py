@@ -621,7 +621,12 @@ def _setup(current: _Preview, uv: str, declared: dict, environment: dict) -> Non
 
 
 def _port_free(port: int) -> bool:
+    """Whether the application can listen there again. Elsewhere than on Windows the connections the old one closed
+    linger a while and refuse a bare bind, which a server's own `SO_REUSEADDR` passes; on Windows that option would
+    take a port another program holds, so it is never set there."""
     with socket.socket() as probe:
+        if sys.platform != "win32":
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             probe.bind(("127.0.0.1", port))
         except OSError:
