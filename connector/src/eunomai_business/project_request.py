@@ -12,9 +12,8 @@ import re
 import time
 import unicodedata
 from pathlib import Path
-from urllib.parse import quote
-
 from . import data_dir
+from .support import mail_link
 
 # A suggestion IT may change: lowercase letters, digits and hyphens, which every git hosting accepts as a repository
 # name and every file system as a file name. Windows' reserved device names are refused, as for workspaces.
@@ -71,12 +70,6 @@ def message(fields: dict) -> tuple[str, str]:
     lines += ["", "Open questions", *([f"- {question}" for question in fields["open_questions"]] or ["None."])]
     lines += ["", "What IT does", WHAT_IT_DOES]
     return subject, "\n".join(lines) + "\n"
-
-
-def mail_link(address: str, subject: str, text: str) -> str:
-    """A mailto link (RFC 6068): every reserved character percent-encoded, line breaks as %0D%0A."""
-    return (f"mailto:{quote(address, safe='@')}?subject={quote(subject, safe='')}"
-            f"&body={quote(text.replace(chr(10), chr(13) + chr(10)), safe='')}")
 
 
 def _read(path: Path) -> dict | None:

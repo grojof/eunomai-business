@@ -12,6 +12,8 @@
   say how IT generates one from a Gitea template with `protected_branch`, and what Gitea's docs leave open: the
   caller's permission, and any default protection for new repositories (H24). The connector creating repositories
   itself was set aside for that reason.
+- **E-mail links to IT follow RFC 6068:** a stop's report and a project request are built by one function, with
+  line breaks as `%0D%0A`; a stop's subject is cleaned like its body.
 - **A preview belongs to its watcher** (first real test in Cowork): the application died seconds after each turn, as
   Cowork starts a process per turn and the connector lives one. A detached process now owns a preview: it starts every
   step, keeps the tree, enforces the 60 minutes, and survives a tree kill, a host's job that allows leaving, and a
