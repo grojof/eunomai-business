@@ -3,12 +3,14 @@
 import shutil
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from dulwich.object_store import tree_lookup_path
 from dulwich.repo import Repo
 
 from eunomai_business import gitops
+from eunomai_business import server as tools
 from eunomai_business.support import NeedsIT
 
 
@@ -243,3 +245,54 @@ def test_one_operation_at_a_time_per_workspace(signed_in, workspaces, monkeypatc
     finally:
         release.set()
         holder.join()
+
+
+# --- owner/repo ---------------------------------------------------------------------------------------------------
+
+def test_owner_and_repository_resolve_against_the_signed_in_server(signed_in, workspaces):
+    """What a person says, or what a page shows: no host to guess."""
+    name = f"short-{uuid.uuid4().hex[:8]}"
+    signed_in.initialize(name)
+    signed_in.server_commit(name, "main", {"a.txt": b"x\n"})
+    answer = gitops.clone(f"me/{name}")
+    assert answer["workspace"] == name and answer["origin"] == f"{signed_in.url}/me/{name}.git"
+    assert (Path(answer["path"]) / "a.txt").read_bytes() == b"x\n"
+
+
+def test_the_git_suffix_and_an_address_keep_working(signed_in, workspaces):
+    name = f"short-{uuid.uuid4().hex[:8]}"
+    signed_in.initialize(name)
+    assert gitops.clone(f"me/{name}.git", "with-suffix")["origin"] == f"{signed_in.url}/me/{name}.git"
+    assert gitops.clone(f"{signed_in.url}/me/{name}.git", "whole")["origin"] == f"{signed_in.url}/me/{name}.git"
+
+
+def test_a_server_below_a_folder_keeps_the_folder(signed_in, workspaces):
+    current = {"cfg": {"userinfo_url": "https://git.example.test/forge/api/v1/user"}}
+    assert gitops._repository_address("team/app", current) == "https://git.example.test/forge/team/app.git"
+
+
+@pytest.mark.parametrize("given", ["app", "a/b/c", "git.example.test/a/b", "../a/b", "a/..", "a b/c", "git@host:a/b",
+                                   "ssh://git@host/a/b", ""])
+def test_anything_else_is_a_clear_answer_that_names_the_only_server(signed_in, workspaces, given):
+    server = urlsplit(signed_in.url).netloc
+    with pytest.raises((ValueError, PermissionError)) as caught:
+        gitops.clone(given)
+    assert server in str(caught.value) and "no other" in str(caught.value), caught.value
+
+
+def test_another_host_is_refused_and_says_there_is_no_other(signed_in, workspaces):
+    with pytest.raises(PermissionError, match="no other") as caught:
+        gitops.clone("https://github.com/me/app.git")
+    assert urlsplit(signed_in.url).netloc in str(caught.value)
+
+
+def test_a_repository_the_server_does_not_have_says_so_and_names_it(signed_in, workspaces):
+    with pytest.raises(FileNotFoundError, match="me/not-there") as caught:
+        gitops.clone("me/not-there")
+    assert urlsplit(signed_in.url).netloc in str(caught.value) and "no other" in str(caught.value)
+    assert not (workspaces / "not-there").exists()
+
+
+def test_the_tool_says_what_it_takes():
+    text = tools.workspace_clone.__doc__
+    assert "owner/repo" in text and "never" in text.lower() and "another" in text

@@ -8,12 +8,17 @@ Two keys, both needed: `app_preview` in the build and `[preview]` in the project
 branch on the server. It runs what was saved, from a copy outside the workspace, only if the audit allows that copy
 and it has a `uv.lock`. Every step runs through uv with `--frozen`, never through a shell, in an environment built
 from a short list. The application listens on 127.0.0.1 only, and it stops, its whole process tree with it, when asked
-to, when the connector ends, and after a time limit. The temporary folder goes with it.
+to, when a newer version replaces it, and after a time limit. The temporary folder goes with it.
+
+The connector lives one turn in Cowork, so a preview belongs to a detached process, `watcher.py`, which starts every
+step of it and outlives the connector, the task and the host. This module prepares a preview through it and, from
+then on, finds it again by what it leaves in the connector's folder.
 """
 
-import atexit
+import contextlib
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -28,7 +33,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import data_dir, deps, gitops, settings, support
+from . import data_dir, deps, gitops, settings, support, watcher
 from .support import NeedsIT
 
 TIME_LIMIT = 60 * 60  # seconds a preview runs, once it answers
@@ -37,6 +42,12 @@ _READY_WAIT = 120.0  # seconds the application has to answer
 _STEP_LIMIT = 600.0  # seconds for the installation and for each setup step
 _PREFIX = "eunomai-preview-"
 _LAST_LINES = 15
+_END_WAIT = 30.0  # seconds a connector waits for a watcher that was asked to end
+_STALE = 2 * 60 * 60  # seconds after which a preview's folder no state file names is nobody's
+_HEX = re.compile(r"[0-9a-f]+")
+_PHASES = ("preparing", "ready", "ending")
+_STARTING = ("The application is being prepared; the first time can take a couple of minutes. If this reply ends before "
+             "it is ready, the preparation stops and starts over.")
 _PYTHON_VERSION = re.compile(r"3\.\d+(\.\d+)?")
 _LOOPBACK = {"0100007F", "00000000000000000000000001000000", "0000000000000000FFFF00000100007F"}
 
@@ -57,208 +68,42 @@ _CONNECTION = re.compile(r"tunnel error|tcp connect error|dns error|timed out|pe
 _RUN = ("run", "--frozen", "--no-sync", "--no-dev", "--no-build", "--no-config", "--managed-python")
 _HIDDEN = {"creationflags": 0x08000000} if sys.platform == "win32" else {}  # no console window flashes on the screen
 
-# It outlives a connector that is killed, and answers another connector that asks for the workspace: when its input
-# ends without "done", or a stop file appears, it ends the job or every group, removes the folder, and removes the state
-# file if it is still its own. It holds a handle of the job, so that ending it never depends on the job's name.
-_WATCHER = """
-import json, os, shutil, signal, sys, threading, time
-folder, state, stop, token, job = sys.argv[1:6]
-groups, finished, abandoned = set(), threading.Event(), threading.Event()
+
+class _Gone(Exception):
+    """The watcher ended while this connector was preparing with it: someone stopped the preview."""
 
 
-def listen():
-    for line in sys.stdin:
-        line = line.strip()
-        if line == "done":
-            finished.set()
-            return
-        if line.isdigit():
-            groups.add(int(line))
-    abandoned.set()
+class _Taken(Exception):
+    """Another connector's watcher has this workspace."""
 
 
-threading.Thread(target=listen, daemon=True).start()
-while not finished.is_set() and not abandoned.is_set() and not os.path.exists(stop):
-    time.sleep(0.2)
-if finished.is_set():
-    sys.exit(0)
-if int(job):
-    import ctypes
-    ctypes.windll.kernel32.TerminateJobObject(ctypes.c_void_p(int(job)), 1)
-for group in groups:
-    try:
-        os.killpg(group, signal.SIGKILL)
-    except OSError:
-        pass
-for _ in range(240):
-    shutil.rmtree(folder, ignore_errors=True)
-    if not os.path.exists(folder):
-        break
-    time.sleep(0.5)
-try:
-    with open(state, encoding="utf-8") as file:
-        mine = json.load(file).get("token") == token
-    if mine:
-        os.remove(state)
-except (OSError, ValueError, AttributeError):
-    pass
-"""
-
-if sys.platform == "win32":
-    import ctypes
-    from ctypes import wintypes
-
-    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    _ntdll = ctypes.WinDLL("ntdll")
-    _kernel32.CreateJobObjectW.restype = wintypes.HANDLE
-    _kernel32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
-    _kernel32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD]
-    _kernel32.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD,
-                                                    wintypes.LPVOID]
-    _kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
-    _kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
-    _kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-    _kernel32.OpenProcess.restype = wintypes.HANDLE
-    _kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-    _kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-    _ntdll.NtResumeProcess.argtypes = [wintypes.HANDLE]
-    _KILL_ON_CLOSE, _EXTENDED_LIMITS, _ACCOUNTING, _PROCESS_LIST = 0x2000, 9, 1, 3
-    _CREATE_SUSPENDED, _NO_WINDOW = 0x00000004, 0x08000000
-    _SYNCHRONIZE, _WAIT_TIMEOUT = 0x00100000, 0x102
-
-    class _BasicLimits(ctypes.Structure):
-        _fields_ = [("process_time", ctypes.c_int64), ("job_time", ctypes.c_int64), ("flags", wintypes.DWORD),
-                    ("minimum_set", ctypes.c_size_t), ("maximum_set", ctypes.c_size_t),
-                    ("processes", wintypes.DWORD), ("affinity", ctypes.c_size_t), ("priority", wintypes.DWORD),
-                    ("scheduling", wintypes.DWORD)]
-
-    class _Counters(ctypes.Structure):
-        _fields_ = [(name, ctypes.c_uint64) for name in ("reads", "writes", "others", "read", "written", "other")]
-
-    class _ExtendedLimits(ctypes.Structure):
-        _fields_ = [("basic", _BasicLimits), ("counters", _Counters), ("process_memory", ctypes.c_size_t),
-                    ("job_memory", ctypes.c_size_t), ("peak_process", ctypes.c_size_t), ("peak_job", ctypes.c_size_t)]
-
-    class _Accounting(ctypes.Structure):
-        _fields_ = [("user", ctypes.c_int64), ("kernel", ctypes.c_int64), ("period_user", ctypes.c_int64),
-                    ("period_kernel", ctypes.c_int64), ("faults", wintypes.DWORD), ("total", wintypes.DWORD),
-                    ("active", wintypes.DWORD), ("terminated", wintypes.DWORD)]
-
-    class _ProcessList(ctypes.Structure):
-        _fields_ = [("assigned", wintypes.DWORD), ("listed", wintypes.DWORD), ("ids", ctypes.c_size_t * 512)]
-
-
-def _alive(pid: int) -> bool:
-    """Whether a process is still running."""
-    if sys.platform == "win32":
-        handle = _kernel32.OpenProcess(_SYNCHRONIZE, False, pid)
-        if not handle:
-            return False
-        try:
-            return _kernel32.WaitForSingleObject(handle, 0) == _WAIT_TIMEOUT
-        finally:
-            _kernel32.CloseHandle(handle)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
+def _group_is_this_previews(group: int, folder: Path) -> bool:
+    """A number in a state file, long after, may be somebody else's: only a group with a process working in the
+    preview's folder is ended. Where there is no /proc, the token in the folder is all there is to go by."""
+    table = Path("/proc")
+    if not (table / "self").exists():
         return True
-    return True
+    for entry in table.iterdir():
+        try:
+            if entry.name.isdigit() and int((entry / "stat").read_text().rpartition(")")[2].split()[2]) == group \
+                    and Path(os.readlink(entry / "cwd")).is_relative_to(folder):
+                return True
+        except (OSError, ValueError, IndexError):
+            continue
+    return False
 
 
-def _end_groups(groups: list[int]) -> None:
+def _end_groups(groups: list[int], folder: Path) -> bool:
+    """Whether anything had to be ended. On Windows the tree went with the job, when the last handle closed."""
+    ended = False
     for group in groups if sys.platform != "win32" else ():
         try:
-            os.killpg(group, 9)
+            if _group_is_this_previews(group, folder):
+                os.killpg(group, 9)
+                ended = True
         except OSError:
             pass
-
-
-class _Tree:
-    """Everything a preview starts, stopped together and unable to outlive the connector. On Windows a job object
-    with no name, so nothing in it can open it and keep it alive: processes start suspended, so none has a child before
-    it is in the job, cannot leave it, and die when its last handle closes, however the connector ends. Elsewhere a
-    process group per step, every one of them kept, which the watcher stops; a program that starts a session of its
-    own leaves it, a limit Windows does not have."""
-
-    def __init__(self):
-        self.groups, self.handle, self._ended = set(), None, False
-        self._lock = threading.Lock()
-        if sys.platform == "win32":
-            self.handle = _kernel32.CreateJobObjectW(None, None)
-            if not self.handle:
-                raise ctypes.WinError(ctypes.get_last_error())
-            limits = _ExtendedLimits()
-            limits.basic.flags = _KILL_ON_CLOSE
-            if not _kernel32.SetInformationJobObject(self.handle, _EXTENDED_LIMITS, ctypes.byref(limits),
-                                                     ctypes.sizeof(limits)):
-                raise ctypes.WinError(ctypes.get_last_error())
-
-    def start(self, arguments: list[str], folder: Path, environment: dict, log) -> subprocess.Popen:
-        options = {"cwd": folder, "env": environment, "stdin": subprocess.DEVNULL, "stdout": log,
-                   "stderr": subprocess.STDOUT, "close_fds": True}
-        with self._lock:
-            if self._ended:
-                raise PermissionError("the preview was stopped")
-            if sys.platform != "win32":
-                process = subprocess.Popen(arguments, start_new_session=True, **options)
-                self.groups = {group for group in self.groups if self._group_lives(group)} | {process.pid}
-                return process
-            process = subprocess.Popen(arguments, creationflags=_CREATE_SUSPENDED | _NO_WINDOW, **options)
-            if not _kernel32.AssignProcessToJobObject(self.handle, int(process._handle)):
-                error = ctypes.WinError(ctypes.get_last_error())
-                process.kill()
-                raise error
-            _ntdll.NtResumeProcess(int(process._handle))
-            return process
-
-    def running(self) -> int:
-        """Processes still in the tree."""
-        if sys.platform == "win32":
-            if self.handle is None:
-                return 0
-            info = _Accounting()
-            _kernel32.QueryInformationJobObject(self.handle, _ACCOUNTING, ctypes.byref(info), ctypes.sizeof(info), None)
-            return info.active
-        return sum(self._group_lives(group) for group in self.groups)
-
-    @staticmethod
-    def _group_lives(group: int) -> bool:
-        try:
-            os.killpg(group, 0)
-        except ProcessLookupError:
-            return False
-        except PermissionError:
-            pass
-        return True
-
-    def processes(self) -> set[int]:
-        """The processes in the tree, where the system can tell."""
-        if sys.platform != "win32" or self.handle is None:
-            return set()
-        found = _ProcessList()
-        _kernel32.QueryInformationJobObject(self.handle, _PROCESS_LIST, ctypes.byref(found), ctypes.sizeof(found), None)
-        return set(found.ids[:found.listed])
-
-    def kill(self) -> None:
-        with self._lock:
-            self._ended = True
-            if sys.platform == "win32":
-                if self.handle is not None:
-                    _kernel32.TerminateJobObject(self.handle, 1)
-            else:
-                _end_groups(sorted(self.groups))
-
-    def close(self) -> None:
-        deadline = time.time() + 10
-        while self.running() and time.time() < deadline:
-            time.sleep(0.05)
-        if sys.platform == "win32":
-            with self._lock:
-                if self.handle is not None:
-                    _kernel32.CloseHandle(self.handle)
-                    self.handle = None
+    return ended
 
 
 def _key(workspace: str) -> str:
@@ -290,57 +135,141 @@ def _is_live(folder: Path, token: str) -> bool:
         return False
 
 
-def _clear(state_path: Path) -> None:
+def _watching(state_path: Path) -> bool:
+    """Whether the watcher of a state file lives: the lock it holds. A process number can come back as another
+    program, and the connector that started it is gone by design."""
+    try:
+        with open(state_path.with_suffix(".alive"), "r+b") as file:
+            if not watcher.lock(file):
+                return True
+            watcher.unlock(file)
+    except OSError:
+        pass
+    return False
+
+
+def _read_state(state_path: Path) -> dict:
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return state if isinstance(state, dict) else {}
+
+
+def _whole_number(value: object, lowest: int, highest: int | None = None) -> bool:
+    return type(value) is int and value >= lowest and (highest is None or value <= highest)
+
+
+def _preview_state(path: Path) -> dict:
+    """The one reader of a state file. The application runs as the person and can write it, so every field is checked
+    by type and range, and anything else makes it a broken state: nothing, for whoever asks."""
+    state = _read_state(path)
+    try:
+        began, deadline, port = state["began"], state["deadline"], state["port"]
+        good = (isinstance(state["workspace"], str) and _state_file(state["workspace"]) == path
+                and isinstance(state["folder"], str) and Path(state["folder"]).name.startswith(_PREFIX)
+                and all(isinstance(state[key], str) and _HEX.fullmatch(state[key]) and len(state[key]) in lengths
+                        for key, lengths in (("token", (32,)), ("head", (40, 64)), ("declaration", (16,))))
+                and state["phase"] in _PHASES and type(state["keeps_running"]) is bool
+                and all(type(value) in (int, float) and 0 <= value for value in (began, deadline))
+                and began <= time.time() + 60
+                and (_whole_number(port, 1024, 65535) or (port == 0 and state["phase"] != "ready"))
+                and isinstance(state["groups"], list) and all(_whole_number(group, 2) for group in state["groups"])
+                and _whole_number(state["watcher"], 2) and isinstance(state["image"], str)
+                and (state["created"] is None or _whole_number(state["created"], 1)))
+    except (KeyError, TypeError, ValueError):
+        return {}
+    return state if good else {}
+
+
+def _clear(state_path: Path) -> bool:
+    """What a dead watcher left: whatever of its tree still runs, its folder, and its files. True if something ran."""
+    state, ended = _read_state(state_path), False
+    try:
         folder, token = Path(str(state["folder"])), str(state.get("token") or "")
         groups = [int(group) for group in state.get("groups") or []]
-    except (OSError, ValueError, TypeError, AttributeError, KeyError):
-        state_path.unlink(missing_ok=True)
-        return
+    except (TypeError, ValueError, KeyError):
+        folder, token, groups = Path(), "", []
     if folder.name.startswith(_PREFIX):  # only ever a preview's own folder
         if _is_live(folder, token):
-            _end_groups(groups)
+            ended = _end_groups(groups, folder)
         _remove(folder)
-    state_path.unlink(missing_ok=True)
+    for path in (state_path, state_path.with_suffix(".alive"), state_path.with_suffix(".stop")):
+        with contextlib.suppress(OSError):
+            path.unlink(missing_ok=True)
+    return ended
 
 
-def _clear_left_over(workspace: str) -> bool:
-    """A preview of this workspace another connector holds, one per workspace across tasks: its watcher is asked to end
-    it. Without a watcher, what the state file says is all there is, and on Windows that is nothing: only its connector
-    holds the job then. False when it may still be running."""
-    path = _state_file(workspace)
-    if _key(workspace) in _previews or not path.exists():
-        return True
+def _clear_if_free(state_path: Path) -> bool:
+    """`_clear`, only while holding the lock: between looking and clearing, a new watcher may have the workspace."""
+    alive = state_path.with_suffix(".alive")
     try:
-        state = json.loads(path.read_text(encoding="utf-8"))
-        watcher, owner = int(state.get("watcher") or 0), int(state.get("owner") or 0)
-    except (OSError, ValueError, TypeError, AttributeError):
-        watcher, owner = 0, 0
-    if watcher and _alive(watcher):
-        stop_file = path.with_suffix(".stop")
-        stop_file.touch()
-        deadline = time.time() + 20
-        while path.exists() and time.time() < deadline:
-            time.sleep(0.1)
-        stop_file.unlink(missing_ok=True)
-    if path.exists() and sys.platform == "win32" and owner and _alive(owner):
+        with open(alive, "a+b") as file:
+            if not watcher.lock(file):
+                return False
+            ended = _clear(state_path)
+            watcher.unlock(file)
+    except OSError:
         return False
-    if path.exists():
-        _clear(path)
-    return True
+    with contextlib.suppress(OSError):
+        alive.unlink(missing_ok=True)
+    return ended
+
+
+def _wait_for_watcher(path: Path, seconds: float) -> bool:
+    deadline = time.time() + seconds
+    while _watching(path) and time.time() < deadline:
+        time.sleep(0.05)
+    return not _watching(path)
+
+
+def _end_watcher(state: dict) -> bool:
+    """A watcher that does not answer, suspended or with its stop file taken away: the process the state names, if it
+    is the program and the start time said there, and the program it should be."""
+    own = watcher.normalized(getattr(sys, "_base_executable", sys.executable))
+    return bool(state) and state["image"] == own and watcher.end_process(state["watcher"], state["created"], own)
+
+
+def _end(path: Path) -> bool:
+    """End a preview from any connector, which asks its watcher first. True only when it ended, and its folder went."""
+    state = _preview_state(path)
+    folder = state.get("folder")
+    with contextlib.suppress(OSError):
+        path.with_suffix(".stop").touch()
+    if not _wait_for_watcher(path, _END_WAIT) and not (_end_watcher(state) and _wait_for_watcher(path, _END_WAIT)):
+        return False
+    with contextlib.suppress(OSError):
+        path.with_suffix(".stop").unlink(missing_ok=True)
+        if sys.platform == "win32":  # it could not remove a file this connector was looking at
+            path.with_suffix(".alive").unlink(missing_ok=True)
+    if path.exists():  # it could not remove the folder, or it was ended: this connector does
+        _clear_if_free(path)
+    return not path.exists() and not (isinstance(folder, str) and Path(folder).exists())
+
+
+def _take_note(workspace: str) -> str:
+    """Why a preview ended by itself, once."""
+    path = _state_file(workspace).with_suffix(".ended")
+    reason = _read_state(path).get("reason", "")
+    path.unlink(missing_ok=True)
+    return reason if isinstance(reason, str) else ""
 
 
 def _sweep() -> None:
-    """What connectors that died left behind, should their watcher have died too."""
+    """What dead watchers left. A preview whose connector is gone is healthy: only its watcher's life counts."""
     folder = data_dir() / "previews"
+    named = set()
     for state_path in folder.glob("*.json") if folder.is_dir() else ():
-        try:
-            owner = int(json.loads(state_path.read_text(encoding="utf-8")).get("owner") or 0)
-        except (OSError, ValueError, TypeError, AttributeError):
-            owner = 0
-        if not owner or not _alive(owner):
-            _clear(state_path)
+        if _watching(state_path):
+            named.add(_read_state(state_path).get("folder"))
+        else:
+            _clear_if_free(state_path)
+    for note in folder.glob("*.ended") if folder.is_dir() else ():
+        if time.time() - note.stat().st_mtime > _STALE:
+            note.unlink(missing_ok=True)
+    for left in Path(tempfile.gettempdir()).glob(f"{_PREFIX}*"):  # started by a connector that died at that moment
+        if str(left) not in named and time.time() - left.stat().st_mtime > _STALE:
+            _remove(left, wait=0.0)
 
 
 def _download_problem(log: str) -> tuple[str, str] | None:
@@ -377,8 +306,8 @@ def _uv_folder(uv: str, *arguments: str) -> str:
 
 
 class _Preview:
-    def __init__(self, workspace: str, head: str, main: str | None = None):
-        self.workspace, self.key, self.head, self.main = workspace, _key(workspace), head, main
+    def __init__(self, workspace: str, head: str, main: str | None = None, note: str = "", declaration: str = "0" * 16):
+        self.workspace, self.key, self.head, self.main, self.note = workspace, _key(workspace), head, main, note
         self.token = secrets.token_hex(16)
         self.folder = Path(tempfile.mkdtemp(prefix=_PREFIX))
         self.app, self.home, self.temp = self.folder / "app", self.folder / "home", self.folder / "temp"
@@ -386,53 +315,65 @@ class _Preview:
         for folder in (self.app, self.home, self.temp):
             folder.mkdir()
         (self.folder / "live").write_text(self.token, encoding="utf-8")
-        self.tree = _Tree()
-        self.process, self.url, self.outcome, self.delivered, self.closed = None, "", None, False, False
-        self.uv_cache, self.uv_pythons, self.began, self.python = "", "", time.time(), ()
+        self.url, self.port, self.outcome, self.closed, self.handed_over = "", 0, None, False, False
+        self.uv_cache, self.uv_pythons, self.python, self.keeps_running = "", "", (), False
         self.settled, self.ended = threading.Event(), threading.Event()
-        self._closing = threading.Lock()
-        self.watcher = self._start_watcher()
-        self._remember()
+        self._closing, self._asking = threading.Lock(), threading.Lock()
+        self.pipe = self._start_watcher()
+        try:
+            answer = self.ask({"folder": str(self.folder), "state": str(_state_file(workspace)), "token": self.token,
+                               "workspace": workspace, "head": head, "limit": TIME_LIMIT, "log": str(self.log),
+                               "declaration": declaration})
+        except _Gone:
+            _remove(self.folder)
+            raise NeedsIT("The application could not be prepared on your computer. Your work is safe; IT can look at it.",
+                          "the process that looks after a preview ended as it started", {"Workspace": workspace}) from None
+        if "watching" not in answer:
+            self.pipe.stdin.close()
+            _remove(self.folder)
+            raise _Taken()
+        self.keeps_running = answer["keeps_running"]
 
     def _start_watcher(self) -> subprocess.Popen:
-        """The real interpreter, not a virtual environment's launcher, which would stand between it and what it holds."""
-        state, job, options = _state_file(self.workspace), int(self.tree.handle or 0), {}
+        """Out of any job that lets it go, by the real interpreter, not a virtual environment's launcher. Its first
+        process ends at once, so what stays has no parent to be found by; a job that refuses is respected: the preview
+        works, ends with the host, and the person is told."""
+        state = _state_file(self.workspace)
         state.parent.mkdir(parents=True, exist_ok=True)
-        state.with_suffix(".stop").unlink(missing_ok=True)  # left by a connector that died waiting
-        if job:
-            os.set_handle_inheritable(job, True)
-            options["startupinfo"] = subprocess.STARTUPINFO(lpAttributeList={"handle_list": [job]})
-        try:
-            return subprocess.Popen(
-                [getattr(sys, "_base_executable", sys.executable), "-I", "-S", "-c", _WATCHER, str(self.folder), str(state),
-                 str(state.with_suffix(".stop")), self.token, str(job)], stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=tempfile.gettempdir(), text=True,
-                env={key: os.environ[key] for key in ("SYSTEMROOT", "PATH") if key in os.environ},
-                **options, **(_HIDDEN or {"start_new_session": True}))
-        finally:
-            if job:
-                os.set_handle_inheritable(job, False)
+        options = {"stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL,
+                   "cwd": tempfile.gettempdir(),
+                   "env": {key: os.environ[key] for key in ("SYSTEMROOT", "PATH") if key in os.environ}}
+        command = [getattr(sys, "_base_executable", sys.executable), "-I", "-S", watcher.__file__, "launch"]
+        if sys.platform != "win32":
+            pipe = subprocess.Popen(command, start_new_session=True, **options)
+        else:
+            try:
+                pipe = subprocess.Popen(command, creationflags=watcher.DETACHED | watcher.BREAKAWAY, **options)
+            except PermissionError:
+                pipe = subprocess.Popen(command, creationflags=watcher.DETACHED, **options)
+        pipe.wait(timeout=30)
+        return pipe
 
-    def _remember(self) -> None:
-        state = {"workspace": self.workspace, "folder": str(self.folder), "owner": os.getpid(), "token": self.token,
-                 "groups": sorted(self.tree.groups), "watcher": self.watcher.pid}
-        path = _state_file(self.workspace)
-        temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-        temporary.write_text(json.dumps(state), encoding="utf-8")
-        os.replace(temporary, path)  # another connector's sweep never reads half of it
+    def ask(self, request: dict) -> dict:
+        """One question to the watcher, and its answer. No answer means it ended."""
+        with self._asking:
+            try:
+                self.pipe.stdin.write((json.dumps(request) + "\n").encode())
+                self.pipe.stdin.flush()
+                line = self.pipe.stdout.readline()
+            except (OSError, ValueError):
+                line = b""
+        if not line:
+            raise _Gone()
+        return json.loads(line)
 
-    def _tell_watcher(self, line: str) -> None:
-        try:
-            self.watcher.stdin.write(line + "\n")
-            self.watcher.stdin.flush()
-        except (OSError, ValueError):
-            pass
-
-    def started(self) -> None:
-        """A step began: where there are process groups, each has its own, for the watcher and other connectors."""
-        for group in self.tree.groups:
-            self._tell_watcher(str(group))
-        self._remember()
+    def hand_over(self) -> None:
+        """The application answers: from here on the preview is the watcher's, and nothing ties it to this process."""
+        if "error" in self.ask({"do": "ready", "port": self.port}):
+            raise self.failed("run", "the process that looks after a preview could not take it over")
+        self.handed_over = True
+        self.pipe.stdin.close()
+        self.pipe.stdout.close()
 
     def environment(self, uv: str, extra: dict | None = None, installing: bool = False) -> dict:
         """What uv and the system need. What runs finds only the project's own programs on its PATH."""
@@ -488,16 +429,16 @@ class _Preview:
     def last_lines(self) -> str:
         return "\n".join(self.log_tail().splitlines()[-_LAST_LINES:])[-480:]
 
+    def request(self, uv: str, arguments: list[str], environment: dict) -> dict:
+        return {"arguments": [uv, *arguments], "cwd": str(self.app), "env": environment, "log": str(self.log)}
+
     def step(self, uv: str, arguments: list[str], environment: dict, name: str) -> None:
-        with open(self.log, "ab") as log:
-            process = self.tree.start([uv, *arguments], self.app, environment, log)
-        self.started()
-        try:
-            code = process.wait(timeout=_STEP_LIMIT)
-        except subprocess.TimeoutExpired:
-            self.tree.kill()
-            raise self.failed(name, "a preview step ran out of time") from None
-        if code:
+        answer = self.ask({"do": "step", "limit": _STEP_LIMIT, **self.request(uv, arguments, environment)})
+        if answer.get("ended"):
+            raise _Gone()
+        if answer.get("timed_out"):
+            raise self.failed(name, "a preview step ran out of time")
+        if answer.get("code") or "error" in answer:
             raise self.not_installed() if name == "installing" else self.failed(name)
 
     def close(self) -> bool:
@@ -506,32 +447,35 @@ class _Preview:
             if self.closed:
                 return not self.folder.exists()
             self.closed = True
-        self.tree.kill()
-        self.tree.close()
+        path = _state_file(self.workspace)
+        if self.handed_over:
+            if _read_state(path).get("token") == self.token and _watching(path):
+                _end(path)
+        else:
+            try:
+                self.pipe.stdin.close()  # a preparation ends with what asked for it
+            except OSError:
+                pass
+            deadline = time.time() + _END_WAIT
+            while _watching(path) and _read_state(path).get("token") == self.token and time.time() < deadline:
+                time.sleep(0.05)
+            if _watching(path) and _read_state(path).get("token") == self.token:
+                _end(path)
         removed = _remove(self.folder)
-        self._forget()
-        self._tell_watcher("done")
-        try:
-            self.watcher.stdin.close()
-            self.watcher.wait(timeout=5)
-        except (OSError, subprocess.TimeoutExpired):
-            pass
+        if _previews.get(self.key) is self:
+            del _previews[self.key]
         self.ended.set()
         return removed
 
-    def _forget(self) -> None:
-        if _previews.get(self.key) is self:
-            del _previews[self.key]
-        try:  # another connector may have taken the workspace over
-            if json.loads(_state_file(self.workspace).read_text(encoding="utf-8")).get("token") == self.token:
-                _state_file(self.workspace).unlink(missing_ok=True)
-        except (OSError, ValueError, AttributeError):
-            pass
-
 
 _lock = threading.Lock()
-_previews: dict[str, _Preview] = {}
+_previews: dict[str, _Preview] = {}  # the ones this connector is preparing, until the answer has been given
 _unread: dict[str, _Preview] = {}  # one that ended without becoming ready, until a call has told why
+_fresh: dict[str, tuple[str, str]] = {}  # started here and not told yet as ready: its token and why it was started again
+
+
+def _address(port: int) -> str:
+    return f"http://127.0.0.1:{port}/"
 
 
 def _free_port() -> int:
@@ -590,7 +534,7 @@ def _listens_beyond_this_computer(current: _Preview, port: int) -> bool:
         lines = [line for protocol in ("TCP", "TCPv6") for line in subprocess.run(
             [netstat, "-ano", "-p", protocol], capture_output=True, text=True, timeout=30, errors="replace",
             **_HIDDEN).stdout.splitlines()]
-        return _windows_beyond(lines, port, current.tree.processes())
+        return _windows_beyond(lines, port, set(current.ask({"do": "processes"})["ids"]))
     tables = [Path(f"/proc/net/{name}") for name in ("tcp", "tcp6")]
     if tables[0].exists():
         return _linux_beyond([table.read_text() for table in tables if table.exists()], port)
@@ -649,21 +593,34 @@ def _bring_up(current: _Preview, declared: dict) -> None:
         current.step(uv, [*_RUN, *current.python, *entry], environment, f"setup: {' '.join(entry)}")
     port = _free_port()
     arguments = [word.replace("{port}", str(port)) for word in declared["run"]]
-    current.began = time.time()
-    with open(current.log, "ab") as log:
-        current.process = current.tree.start([uv, *_RUN, *current.python, *arguments], current.app, environment, log)
-    current.started()
-    deadline = current.began + min(_READY_WAIT, TIME_LIMIT)
+    began = time.time()
+    answer = current.ask({"do": "run", **current.request(uv, [*_RUN, *current.python, *arguments], environment)})
+    if "error" in answer:
+        raise current.failed("run: the application could not start")
+    deadline = began + min(_READY_WAIT, TIME_LIMIT)
     while not _answers(port):
-        if current.process.poll() is not None or current.closed:
+        if current.ask({"do": "poll"})["ended"] or current.closed:
             raise current.failed("run: the application ended before it answered")
         if time.time() > deadline:
             raise current.failed("run: the application did not answer in time")
         time.sleep(0.2)
     if _listens_beyond_this_computer(current, port):
         raise current.failed("run", "the application answers beyond this computer")
-    current.url = f"http://127.0.0.1:{port}/"
+    current.port, current.url = port, _address(port)
+    current.hand_over()
     webbrowser.open(current.url)
+
+
+def _fingerprint(declared: dict) -> str:
+    """What was declared when a preview started: a changed `[preview]` starts it again."""
+    return hashlib.sha256(json.dumps(declared, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def _how_long(minutes: int, keeps_running: bool) -> str:
+    if keeps_running:
+        return (f"It keeps running until you say stop, or for {minutes} more minutes at most, even if you close "
+                "Claude.")
+    return f"It stops when this task ends, or in {minutes} minutes."
 
 
 def _prepare(current: _Preview, declared: dict) -> dict:
@@ -682,46 +639,97 @@ def _prepare(current: _Preview, declared: dict) -> dict:
                 "user_message": "This version cannot be shown on your computer yet: the list of exactly what it uses "
                                 "has not been made. Your work is safe on this computer."}
     _bring_up(current, declared)
-    minutes = round(TIME_LIMIT / 60)
+    minutes = math.ceil(TIME_LIMIT / 60)
     return {"workspace": current.workspace, "status": "ready", "url": current.url, "version": current.head[:12],
             "branch": saved["branch"], "unsaved_changes": saved["unsaved_changes"], "minutes": minutes,
+            "keeps_running": current.keeps_running, "already_running": False,
             "user_message": f"The application is open in your browser, at {current.url}. It shows what was last saved, "
-                            f"only on this computer, and it stops by itself in {minutes} minutes."}
+                            f"only on this computer. {_how_long(minutes, current.keeps_running)}"}
+
+
+def _prepared(current: _Preview, declared: dict) -> dict:
+    try:
+        return _prepare(current, declared)
+    except _Gone:
+        return {"workspace": current.workspace, "status": "not_running",
+                "user_message": "The application was stopped before it was ready."}
 
 
 def _work(current: _Preview, declared: dict) -> None:
-    current.outcome = support.safe(_prepare, current, declared)
-    ready = current.outcome.get("status") == "ready"
-    if not ready:
+    current.outcome = support.safe(_prepared, current, declared)
+    if current.outcome.get("status") == "ready":
+        _fresh[current.key] = (current.token, current.note)  # from here on it is the watcher's, and the state speaks
+        if _previews.get(current.key) is current:
+            del _previews[current.key]
+    else:
         if not current.closed:  # a preview stopped or replaced has nothing left to tell
             _unread[current.key] = current
         current.close()
+        _remove(current.folder, wait=2.0)  # a step still writing when it was stopped
     current.settled.set()
-    if ready:
-        try:  # counted from when it started: being slow to answer earns no extra time
-            current.process.wait(timeout=max(0.0, current.began + TIME_LIMIT - time.time()))
-        except subprocess.TimeoutExpired:
-            pass
-        current.close()
-    _remove(current.folder, wait=2.0)  # a step still writing when it was stopped
+
+
+_ENDED_BY_ITSELF = {"application": "It had stopped by itself, so it is being started again.",
+                    "time_limit": "It had reached its time limit, so it is being started again.",
+                    "silent": "It had stopped answering, so it is being started again."}
+
+
+def _with_note(answer: dict, note: str) -> dict:
+    words = _ENDED_BY_ITSELF.get(note)
+    if not words or answer.get("status") not in ("ready", "starting"):
+        return answer
+    return {**answer, "ended_before": note, "user_message": f"{words} {answer['user_message']}"}
 
 
 def _answer(current: _Preview) -> dict:
     if not current.settled.is_set():
-        return {"workspace": current.workspace, "status": "starting",
-                "user_message": "The application is being prepared; the first time can take a couple of minutes."}
-    if current.outcome.get("status") == "ready" and current.delivered:
-        webbrowser.open(current.url)
-    current.delivered = True
+        return _with_note(_starting(current.workspace), current.note)
     if _unread.get(current.key) is current:
         del _unread[current.key]
-    return current.outcome
+    if current.outcome.get("status") == "ready":
+        _fresh.pop(current.key, None)
+    return _with_note(current.outcome, current.note)
 
 
-def _NOT_STOPPED(workspace: str) -> dict:
-    return {"workspace": workspace, "status": "not_stopped",
-            "user_message": "Another task started the application and it could not be stopped from here. It stops when "
-                            "that task ends, and within the hour in any case."}
+def _running(workspace: str, state: dict) -> dict:
+    """The preview that is there, from any connector: its address and the time it has left, and no second copy. The
+    time never exceeds the limit, whatever the state says, and what it says of a version is not told as fact."""
+    limit = math.ceil(TIME_LIMIT / 60)
+    left = min(state["deadline"], state["began"] + TIME_LIMIT) - time.time()
+    minutes, keeps_running, url = min(limit, max(1, math.ceil(left / 60))), state["keeps_running"], _address(state["port"])
+    token, note = _fresh.get(_key(workspace), ("", ""))
+    first = token == state["token"]  # started by this connector, and the person was only told `starting`
+    if first:
+        del _fresh[_key(workspace)]
+    else:
+        webbrowser.open(url)
+    saved = gitops.saved_summary(workspace)
+    words = (f"The application is open in your browser, at {url}." if first else
+             f"The application started earlier is still running, at {url}, and is open in your browser.")
+    return _with_note({"workspace": workspace, "status": "ready", "url": url, "version": state["head"][:12],
+                       "branch": saved["branch"], "unsaved_changes": saved["unsaved_changes"], "minutes": minutes,
+                       "keeps_running": keeps_running, "already_running": not first,
+                       "user_message": f"{words} {_how_long(minutes, keeps_running)}"}, note if first else "")
+
+
+def _NOT_STOPPED(workspace: str, words: str = "The application could not be stopped from here and may still be "
+                                             "running. IT can look at it.") -> dict:
+    report = support.report(NeedsIT(words, "a preview could not be stopped, or its end confirmed",
+                                    {"Workspace": workspace}))
+    return {**report, "workspace": workspace, "status": "not_stopped"}
+
+
+def _starting(workspace: str) -> dict:
+    return {"workspace": workspace, "status": "starting", "user_message": _STARTING}
+
+
+def _still_answers(port: int) -> bool:
+    """A busy application may take a moment: only one that stays silent is taken for gone."""
+    for attempt in range(3):
+        if _answers(port):
+            return True
+        time.sleep(attempt)
+    return False
 
 
 def start(workspace: str) -> dict:
@@ -751,35 +759,52 @@ def start(workspace: str) -> dict:
             current.close()
             current = None
         if current is None:
-            if not _clear_left_over(workspace):
-                return _NOT_STOPPED(workspace)
+            path, silent, wanted = _state_file(workspace), False, _fingerprint(declared)
+            if _watching(path):
+                state = _preview_state(path)
+                if state and state["head"] == head and state["declaration"] == wanted:
+                    if state["phase"] == "preparing":
+                        return _starting(workspace)
+                    if state["phase"] == "ready":
+                        if _still_answers(state["port"]):
+                            return _running(workspace, state)
+                        silent = True
+                if not _end(path):  # another version, a changed declaration, or a state that cannot be believed
+                    return _NOT_STOPPED(workspace)
             _sweep()
-            current = _previews[key] = _Preview(workspace, head, files.get("tip"))
+            note = _take_note(workspace)
+            try:
+                current = _previews[key] = _Preview(workspace, head, files.get("tip"), "silent" if silent else note, wanted)
+            except _Taken:
+                return _starting(workspace)
             threading.Thread(target=_work, args=(current, declared), daemon=True).start()
     current.settled.wait(_ANSWER_WAIT)
     return _answer(current)
 
 
+_NOT_RUNNING = "The application is not running on your computer."
+_STOPPED = "The application has stopped on your computer, and its temporary copy is gone."
+
+
 def stop(workspace: str) -> dict:
-    """Stop the preview of a workspace, whichever connector holds it."""
+    """Stop the preview of a workspace, whichever connector started it. `stopped` only if something was running and
+    now is not."""
+    path = _state_file(workspace)
     with _lock:
         current = _previews.get(_key(workspace))
-        running = current is not None or _state_file(workspace).exists()
-        cleared = _clear_left_over(workspace)
-    if not cleared:
+        if current is not None:
+            current.close()
+        state, watched, there = _preview_state(path), _watching(path), path.exists()
+        if watched:
+            if not _end(path):
+                return _NOT_STOPPED(workspace)
+            ended = True
+        else:
+            ended = there and _clear_if_free(path)
+    if state.get("port") and _answers(state["port"]):  # what got out of the tree, or a watcher that was ended
         return _NOT_STOPPED(workspace)
-    if not running:
-        return {"workspace": workspace, "status": "not_running",
-                "user_message": "The application is not running on your computer."}
-    if current is not None:
-        current.close()
-    return {"workspace": workspace, "status": "stopped",
-            "user_message": "The application has stopped on your computer, and its temporary copy is gone."}
-
-
-def stop_all() -> None:
-    for current in list(_previews.values()):
-        current.close()
-
-
-atexit.register(stop_all)
+    if there and not state and not watched:
+        return _NOT_STOPPED(workspace, "It could not be confirmed that the application has stopped. IT can look at it.")
+    if ended or current is not None:
+        return {"workspace": workspace, "status": "stopped", "user_message": _STOPPED}
+    return {"workspace": workspace, "status": "not_running", "user_message": _NOT_RUNNING}

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **A preview belongs to its watcher** (first real test in Cowork): the application died seconds after each turn, as
+  Cowork starts a process per turn and the connector lives one. A detached process now owns a preview: it starts every
+  step, keeps the tree, enforces the 60 minutes, and survives a tree kill, a host's job that allows leaving, and a
+  group kill. **So a preview now outlasts the task and Claude Desktop, for up to 60 minutes**, and the specialist says
+  so. Any connector finds a running preview, with the time left and no restart, and stops it; another saved version
+  replaces it; one that died by itself is told and started again; `stopped` is said only when it stopped. Liveness is
+  a lock the watcher holds, so a process number that came back is not trusted. A host job that refuses is respected
+  and told.
+- **Nothing in a preview's state is believed** (independent review): the application runs as the person and can rewrite
+  it, so a planted address reached `webbrowser.open`, which on Windows runs a file. Every field now goes through one
+  reader, an address is built from a checked port, and a state that fails ends that preview. A watcher that does not
+  answer is ended, once its program and start time match. The claim that nothing outlives the watcher is withdrawn: the
+  job and the limit stop an application that misbehaves, not one built to stay. A ready preview nobody was told of,
+  one that stopped answering, one that is ending, a changed declaration and a state file that cannot be written are
+  each told for what they are. A turn that ends on `starting` ends the preparation, and the person is told.
+- **`workspace_clone` takes `owner/repo`**, on the signed-in server: a task that was given one failed, then guessed
+  github.com. Anything else says the only server there is, and to try no other.
 - **A business user's computer** (add-on to the fourth review): the connector's start, a preview of the base application
   and the whole path against a fake server now run on uv and Windows' own folders, with no git and no Python, and a
   repository test keeps it so. When a download cannot get through the person reads one plain sentence and the report

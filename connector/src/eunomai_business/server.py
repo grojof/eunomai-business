@@ -52,8 +52,10 @@ def sign_out(provider: str) -> dict:
 
 @mcp.tool()
 def workspace_clone(repo_url: str, workspace: str = "") -> dict:
-    """Clone a repository of the signed-in git server as a workspace in the user's workspaces folder.
-    Returns the folder path on this computer, for Cowork to give the task access to it."""
+    """Clone a repository of the signed-in git server as a workspace in the user's workspaces folder. `repo_url` is
+    owner/repo, or the repository's whole address on that server. That server is the only one: when this fails, never
+    try another host and never guess one; ask the person. Returns the folder path on this computer, for Cowork to give
+    the task access to it."""
     return _safe(gitops.clone, repo_url, workspace)
 
 
@@ -247,16 +249,22 @@ def app_preview(workspace: str) -> dict:
     nobody has reviewed yet, on their computer, with their rights: tell them first, in one plain sentence, and call
     this only after they agree in the conversation. Works where IT turned it on and the project declares it; refused
     unless the audit allows the saved version. `status`: "ready" (with `url`), "starting" (call again with the same
-    workspace to follow it), or a refusal to show with `user_message`: "not_turned_on", "not_declared", "no_lockfile",
-    "audit_refused", "audit_unavailable", "needs_it". It stops by itself after 60 minutes and with the connector; a
-    newer saved version replaces the one running. `unsaved_changes` true means what is on screen lacks them."""
+    workspace, in the same turn: a turn that ends on it ends the preparation), or a refusal to show with `user_message`: "not_turned_on", "not_declared", "no_lockfile",
+    "audit_refused", "audit_unavailable", "needs_it". Once running it stays, whatever happens to this task or to the
+    host, until `app_preview_stop` or the 60 minutes pass: say so in the person's words, and `minutes` is what is left.
+    Calling this for the same saved version and declaration answers the one running (`already_running` true);
+    anything else, or one that no longer answers, replaces it. `keeps_running` false means the host holds it, and it
+    ends with the task. `ended_before` says why it was started again. `unsaved_changes` true means what is on screen
+    lacks them."""
     return _safe(preview.start, workspace)
 
 
 @mcp.tool()
 def app_preview_stop(workspace: str) -> dict:
-    """Stop the application running on the person's computer: every process it started, and its temporary copy.
-    `status` "not_stopped" means another task holds it and it may still be running: say so with `user_message`."""
+    """Stop the application running on the person's computer, whichever task started it: every process it started,
+    and its temporary copy. `status` "stopped" only if it was running and no longer is; "not_running" if there was
+    nothing to stop; "not_stopped" if it may still be running or that cannot be known: show `user_message`, and its
+    `email_link` if there is one."""
     return _safe(preview.stop, workspace)
 
 

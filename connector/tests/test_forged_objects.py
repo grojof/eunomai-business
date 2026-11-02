@@ -14,6 +14,7 @@ import pytest
 from dulwich.object_store import commit_tree_changes
 from dulwich.objects import Blob, Commit, sorted_tree_items
 
+from conftest import stop_previews
 from eunomai_business import deps, gitops, preview, server as tools
 
 CODE = b"[development]\ncode = true\n"
@@ -30,7 +31,7 @@ def fresh(monkeypatch):
     gitops._audits.clear()
     monkeypatch.setattr(preview.webbrowser, "open", lambda url: True)
     yield
-    preview.stop_all()
+    stop_previews()
 
 
 def project(server, declaration=CODE, extra=None):

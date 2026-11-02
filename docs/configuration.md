@@ -109,7 +109,8 @@ up to 20,000 characters, so a copy edited in the folder does not count), `organi
 
 With `app_preview` on, and `[preview]` in a project's declaration
 ([how a project declares it](project-practices.md#seeing-the-application-on-a-persons-computer)), the specialist can
-show the real application in the person's browser, for up to 60 minutes.
+show the real application in the person's browser. It keeps running until they say stop or 60 minutes pass, even if
+they close the task or Claude Desktop.
 
 **The risk is yours to accept.** This runs code an AI wrote and nobody has reviewed yet, on the person's computer,
 with their rights, outside any sandbox. It can read what they can read, reach what they can reach and act as them on
@@ -121,6 +122,7 @@ people who will use it, and what they can reach, make that acceptable.
 |---|---|
 | A [test environment](project-practices.md#a-test-environment-without-waiting-for-it) | If a project has one, try versions there: it needs none of this on people's computers |
 | A limited account for the people who use it | What the code can do is what they can do |
+| Knowing it outlasts the task | Closing Claude Desktop does not stop it: for up to 60 minutes the application runs on, with the person's rights. The specialist says so every time |
 | A separate build for them, if only some should have it | The setting applies to everyone who installs the build; on Enterprise a plugin can be limited to a group |
 | Application control | It runs Python from a temporary folder, `%TEMP%\eunomai-preview-*`. A policy that blocks programs there stops it, which is a good reason to allow it for a group, not for everyone |
 | Network | The first preview of a project downloads its packages, and its Python unless it was deployed: allow the [addresses](#installing-uv-in-an-organization) through the proxy, like the connector's |
