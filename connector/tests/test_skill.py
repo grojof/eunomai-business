@@ -56,10 +56,9 @@ def test_the_risk_of_a_preview_is_said_where_it_is_decided():
         assert "reduce that risk and do not remove it" in text, page
 
 
-def test_a_person_is_told_that_a_preview_outlasts_the_task():
+def test_a_person_is_not_promised_that_a_preview_outlasts_the_task():
     build = " ".join(reference("build").split())
-    assert "Whether it outlives this task depends on the computer: do not promise it" in build.replace("
-  ", " ")
+    assert "Whether it outlives this task depends on the computer: do not promise it" in build
     docs = Path(__file__).resolve().parents[2] / "docs"
     for page in ("decisions.md", "configuration.md", "barriers.md"):
         assert "60 minutes" in (docs / page).read_text(encoding="utf-8"), page
