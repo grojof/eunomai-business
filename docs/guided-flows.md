@@ -1,7 +1,7 @@
 ---
 type: explanation
 title: Guided flows
-description: "How the specialist takes a business user from a vague idea to a pull request ready for review: how it talks, the stages, what it writes to the repository, and what the reviewer receives."
+description: "How the specialist takes a business user from a vague idea to a pull request ready for review, or to a request for IT when there is no project yet: how it talks, the stages, what it writes to the repository, and what the reviewer receives."
 tags: [guided-flows, specifications, architecture]
 audience: [it, developers]
 related: [architecture.md, decisions.md]
@@ -69,6 +69,22 @@ was done.
 | The same screens as screenshots, or nothing until review, said plainly | The project allows code and has neither | The sandbox may not take pictures ([H14](validation/hypotheses.md)) |
 | A clickable HTML prototype | The project does not allow code | It is the only thing that can be made, and IT builds from it |
 
+## Before there is a project
+
+A business person never creates a repository ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)).
+When someone wants a new application and no project exists, Understand happens in conversation, with no repository
+and no files written; then the request goes to IT, and the journey goes on once IT has created the project.
+
+| Moment | The user sees | Behind the scenes |
+|---|---|---|
+| Understand | The same questions and "what I understood" | Nothing written anywhere |
+| The request | A suggested name (IT decides), and an e-mail to IT ready to send, or the text to copy; nothing is sent until they send it | `project_request`: a fixed message, an e-mail link to `support_email`, and a copy in the connector's folder |
+| Waiting for IT | At the start of any later task, "has IT created *name*?" | `workspace_list` lists the pending request |
+| The project exists | The summary they confirmed, and a question only if something changed | The project cloned, the first proposal written from the request and saved, the request marked done with `project_request_done` and kept |
+
+The specialist never offers to create a repository and never asks the person to do anything technical with IT
+beyond sending the prepared request. How IT creates it: [project practices](project-practices.md#creating-a-project-from-the-template).
+
 ## What the reviewer receives
 
 Every pull request opens with the same short summary: the goal, what was built mapped to the requirements, the
@@ -91,7 +107,7 @@ any of them straight back to the user. The template is in
 
 | Skill | Used when | Does |
 |---|---|---|
-| `specialist` | Any request to build or change something in a workspace, however vague | Runs the journey, keeps track of the stage, applies the conversation rules |
+| `specialist` | Any request to build or change something in a workspace, however vague, or a new application with no project yet | Runs the journey, keeps track of the stage, applies the conversation rules |
 | One reference per stage | Loaded by `specialist` when a stage starts | The method for that stage, kept out of the conversation until needed |
 | `review-skills` | IT reviews a skill or plugin users will have alongside eunomai-business | Security review and conflicts with these rules, with a verdict and exact changes |
 

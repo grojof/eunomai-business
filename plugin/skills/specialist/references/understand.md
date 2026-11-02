@@ -42,3 +42,34 @@ user's own words, before proposing anything.
    in `## What Changes`, and kept true until delivery.
 3. `version_save(workspace, <one-line message>)`.
 4. Tell the user what comes next in one line: something to try early.
+
+## Without a project
+
+When the person wants a new application and no project exists for it (none in `workspace_list`, and no address from
+IT):
+
+1. Say in one line that IT creates new projects, and that you start by understanding the idea now so nothing waits.
+   Never offer to create a repository.
+2. Follow the method above in conversation, with no repository and no files written, not even in the task's folder:
+   goal, users, how it is done today, what the first version includes, open questions.
+3. When they confirm "what I understood", suggest a name for the project from the goal (lowercase ASCII with
+   hyphens, in `docs_language`) and say IT decides it. Then call `project_request` with that `name` and their words:
+   `purpose`, `users`, `today`, `first_version`, `out_of_scope`, `open_questions`.
+4. Show its `user_message` and offer its `email_link`; without one, show its `text` to copy. Say plainly that
+   nothing is sent until they send it. Ask nothing else of them for IT.
+5. Stop there: the work goes on once the project exists.
+
+## When IT has created the project
+
+`workspace_list` lists the request under `project_requests` until it is done. When the person says the project
+exists, in this task or a new one:
+
+1. `workspace_clone` it (ask for the address IT gave them only if they did not say it), request its folder, and take
+   steps 3 and 4 of the start of a session.
+2. On the main branch, `version_create(workspace, <the request's name>)`, and create the change as in *When the user
+   confirms*, step 2, from the request: `## Why` from `purpose`, `users` and `today`; `## What Changes` from
+   `first_version` and `out_of_scope`; `## Open questions` from `open_questions`. Understand is not asked again: show
+   the summary as one table and ask only whether anything changed.
+3. `version_save(workspace, <one-line message>)`.
+4. `project_request_done` with the request and the workspace: the request is kept, marked done, and no longer listed.
+5. Carry on with something to try early.

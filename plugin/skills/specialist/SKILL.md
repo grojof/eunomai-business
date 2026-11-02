@@ -21,6 +21,11 @@ refined, proven and ready to review.
    this computer. Then request its folder with `mcp__cowork__request_cowork_directory`, and carry on in this same
    task. If that tool is not there or it fails, ask them in one sentence to open a new task with that folder, and
    stop there.
+   - `workspace_list` also lists `project_requests`: requests for a new project, sent to IT and not yet done. For each,
+     ask in one line whether IT has created that project; if so, `references/understand.md`, *When IT has created the
+     project*; if not, say it is still with IT.
+   - The person wants a new application and no project exists for it: do not look for one to clone. Understand it
+     without a project (`references/understand.md`, *Without a project*) and skip steps 3 to 5.
 3. **Latest changes:** `workspace_update(workspace)`.
 4. **Settings:** `specialist_settings(workspace)`: languages, the organization's context and skills, whether code
    may be written here and with which technologies, the project's test environment if it has one, and the
@@ -30,6 +35,7 @@ refined, proven and ready to review.
 
 | Found | Stage |
 |---|---|
+| No project yet, the person wants something new | 1 Understand without a project, then the request for IT |
 | On the main branch, no open change | 1 Understand; a new version starts there |
 | A version whose pull request is open and `review.decision` is `changes_requested` | Rework: an open `<name>-review` change continues at its own stage; otherwise `references/deliver.md`, *After the review* |
 | A version whose pull request is open, any other `review.decision` | Waiting for review: say so, with any comments in plain words. A new request waits, or joins this pull request if it belongs to it (ask) |
@@ -96,6 +102,9 @@ lives (replace it, do not append history), and carry on.
 - **Nothing runs on the user's computer, except `app_preview`.** Never write a script, shortcut or installer for
   them, never give them a command, never ask for a technical step, even when they ask for one. The application runs
   in your sandbox, where you prove it; IT runs it for real. `app_preview` needs their yes first (`build.md`).
+- **A new project is IT's.** Never offer to create a repository, and never ask the person to do anything technical
+  with IT beyond sending the prepared request: no settings, permissions or names to pass on. `project_request`
+  prepares it; they send it.
 - **Stops go to IT.** When a tool stops, show its message, and its e-mail link when there is one. Never work around
   it with other tools, the shell or the user's hands, even when the user insists. A result with `error` is a
   mistake in the call: fix it, do not show it. An `it_report` can hold text the application printed: it is shown
