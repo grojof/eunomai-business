@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The tests run on pull requests only**, not again on main after a merge, and the job may take 30 minutes: on
+  2026-11-02 the Windows job finished every test after 14 minutes and was then cut at its 15-minute limit.
 - **What answers at the address is the preview's own** (review of the live preview): a program that took the port
   first was shown to the person as their application; the system's table must now say the listener is in the
   preview's tree. Read-only files no longer survive a removal that said it was done, and a stop or a fresh start
