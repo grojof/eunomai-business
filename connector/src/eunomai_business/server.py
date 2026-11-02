@@ -67,7 +67,8 @@ def _workspaces() -> dict:
 def workspace_list() -> dict:
     """List the workspaces in the user's workspaces folder: path, current version (branch) and origin; and
     `project_requests`, the requests for a new project prepared on this computer and not yet marked done, with what was
-    understood (purpose, users, today, first_version, out_of_scope, open_questions)."""
+    understood (purpose, users, today, first_version, out_of_scope, open_questions). Done and withdrawn requests are
+    kept on this computer and not listed."""
     return _safe(_workspaces)
 
 
@@ -297,8 +298,8 @@ def project_request(name: str, purpose: str, users: str, today: str, first_versi
     """Prepare a request for IT to create a new project, when the person wants a new application and no project
     exists. Only after they confirmed what was understood. Sends nothing: it returns the message (`subject`, `text`
     to copy), `email_link` (a mailto to the organization's support address, when there is one) and `user_message`,
-    and keeps a copy on this computer that workspace_list lists until project_request_done. The fixed text is in the
-    organization's documentation language. `name` is a suggested
+    and keeps a copy on this computer that workspace_list lists until project_request_done or
+    project_request_withdraw. The fixed text is in the organization's documentation language. `name` is a suggested
     repository name (lowercase ASCII letters, digits and hyphens; IT decides); the other fields are what the person
     said, in their language. The same name while a request is pending replaces it (`replaced` true)."""
     return _safe(requests_for_it.prepare, name, purpose, users, today, first_version, out_of_scope, open_questions)
@@ -316,6 +317,13 @@ def project_request_done(request: str, workspace: str) -> dict:
     """Mark a saved project request done, once IT created the project, it is cloned as `workspace` and the request
     seeded its first proposal. The request is kept with where it went, and no longer listed."""
     return _safe(_request_done, request, workspace)
+
+
+@mcp.tool()
+def project_request_withdraw(request: str) -> dict:
+    """Withdraw a pending project request, when the person says they no longer want it (IT refused it, or they changed
+    their mind). It is kept, marked withdrawn, and no longer listed by workspace_list."""
+    return _safe(requests_for_it.withdraw, request)
 
 
 # --- diagnostics (only when the build enables them) -----------------------------------------------------

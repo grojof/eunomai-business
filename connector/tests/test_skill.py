@@ -159,3 +159,8 @@ def test_the_docs_say_who_creates_a_project_and_how():
     assert "documentation does not say" in practices
     flows = plain((docs / "guided-flows.md").read_text(encoding="utf-8"))
     assert "`project_request`" in flows
+
+
+def test_a_pending_request_can_be_withdrawn_when_the_person_no_longer_wants_it():
+    start = plain(SPECIALIST.split("## Start of every session")[1].split("## Whose context counts")[0])
+    assert "`project_request_withdraw`" in start and "changed their mind" in start and "IT refused" in start

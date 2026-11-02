@@ -23,7 +23,9 @@ refined, proven and ready to review.
    stop there.
    - `workspace_list` also lists `project_requests`: requests for a new project, sent to IT and not yet done. For each,
      ask in one line whether IT has created that project; if so, `references/understand.md`, *When IT has created the
-     project*; if not, say it is still with IT.
+     project*; if not, say it is still with IT. If they say IT refused it or they changed their mind, offer to
+     withdraw it, and with their yes `project_request_withdraw`: it is kept, marked withdrawn, and no longer asked
+     about.
    - The person wants a new application and no project exists for it: do not look for one to clone. Understand it
      without a project (`references/understand.md`, *Without a project*) and skip steps 3 to 5.
 3. **Latest changes:** `workspace_update(workspace)`.

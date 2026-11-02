@@ -354,6 +354,7 @@ the organization's template; the person comes back, the specialist clones it and
 | 2 Request | The connector prepares it, the person sends it | `project_request` builds a message with a fixed format, in the organization's documentation language (`docs_language`: Spanish, Catalan or English, otherwise English): a suggested name, what it is for, who will use it, what was understood and the open questions. It returns an e-mail link to `support_email` and the same text to copy, and keeps a copy on the person's computer. Nothing is sent automatically |
 | 3 Create | IT | A repository from the organization's template, with `main` protected ([how](project-practices.md#creating-a-project-from-the-template)). IT decides the name |
 | 4 Carry on | The specialist, in the same task or a new one | `workspace_list` lists the pending request; once the person says the project exists, the specialist clones it, seeds the first proposal from the request, so Understand is not asked again, and marks the request done with `project_request_done`. It is kept, not deleted |
+| Or withdraw it | The person, through the specialist | When IT refused it or the person changed their mind, `project_request_withdraw` marks it withdrawn: kept, and no longer asked about at the start of a session |
 
 **Why.**
 
@@ -371,7 +372,7 @@ the organization's template; the person comes back, the specialist clones it and
 | The specialist sends the request itself | Nothing leaves the computer in the person's name without them seeing it; an e-mail link is the way stops already reach IT |
 | Writing the Understand summary into a folder before the project exists | A folder that is not a workspace has no versions, no barriers and no place in the registry; the connector's own folder holds the request instead |
 
-- **Consequence:** a request is a file in the connector's folder until it is done
+- **Consequence:** a request is a file in the connector's folder, pending, done or withdrawn, and never deleted
   ([data on computers](data-on-computers.md#on-the-users-computer)); the same name while it is pending replaces it.
 - **Consequence:** the subject always starts `eunomai-business:`, whatever the language, so a mailbox rule can
   recognise a request; the person's own words are never translated.

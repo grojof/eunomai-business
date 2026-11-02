@@ -258,3 +258,38 @@ def test_every_language_has_every_fixed_text():
     keys = set(project_request.WORDS["en"])
     assert set(project_request.WORDS) == {"en", "es", "ca"}
     assert all(set(words) == keys for words in project_request.WORDS.values())
+
+
+# --- withdrawn -------------------------------------------------------------------------------------------------
+
+def test_a_withdrawn_request_is_kept_and_no_longer_listed():
+    prepare()
+    answer = tools.project_request_withdraw("alta-de-pedidos")
+    assert answer["status"] == "withdrawn" and answer["request"] == "alta-de-pedidos"
+    [path] = saved_files()
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["status"] == "withdrawn" and saved["withdrawn"] and saved["text"]
+    assert tools.workspace_list()["project_requests"] == []
+    assert tools.project_request_withdraw("alta-de-pedidos")["status"] == "already_withdrawn"
+    assert "error" in tools.project_request_done("alta-de-pedidos", "anything")
+
+
+def test_the_same_name_after_one_is_withdrawn_is_a_new_request():
+    prepare()
+    tools.project_request_withdraw("alta-de-pedidos")
+    again = prepare()
+    assert again["replaced"] is False and again["request"] == "alta-de-pedidos-2"
+
+
+def test_a_request_already_done_is_not_withdrawn(signed_in, workspaces):
+    signed_in.initialize("pedidos-kept")
+    prepare()
+    tools.workspace_clone(f"{signed_in.url}/me/pedidos-kept.git")
+    tools.project_request_done("alta-de-pedidos", "pedidos-kept")
+    assert tools.project_request_withdraw("alta-de-pedidos")["status"] == "already_done"
+    assert json.loads(saved_files()[0].read_text(encoding="utf-8"))["status"] == "done"
+
+
+def test_withdrawing_an_unknown_request_is_a_mistake_in_the_call():
+    assert "error" in tools.project_request_withdraw("never-asked")
+    assert "error" in tools.project_request_withdraw("../x")

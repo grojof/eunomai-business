@@ -9,7 +9,8 @@
   connector's folder and `workspace_list` lists it; once IT has created the project, the specialist clones it, starts
   the first proposal from the request without asking again, and `project_request_done` marks it done and keeps it.
   The request's fixed text is in the organization's documentation language (Spanish, Catalan or English), with a
-  subject that always starts `eunomai-business:`. The specialist never offers to create a repository. [Project practices](docs/project-practices.md#creating-a-project-from-the-template)
+  subject that always starts `eunomai-business:`. A request the person no longer wants is withdrawn with
+  `project_request_withdraw`: kept, and no longer asked about. The specialist never offers to create a repository. [Project practices](docs/project-practices.md#creating-a-project-from-the-template)
   say how IT generates one from a Gitea template with `protected_branch`, and what Gitea's docs leave open: the
   caller's permission, and any default protection for new repositories (H24). The connector creating repositories
   itself was set aside for that reason.

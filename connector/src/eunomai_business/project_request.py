@@ -61,6 +61,7 @@ WORDS = {
                       "(propietari/nom). Qui ho sol·licita avisa llavors l'assistent que existeix, i la feina continua "
                       "a partir d'aquesta sol·licitud."},
 }
+_STATUSES = ("pending", "done", "withdrawn")
 
 
 def _folder() -> Path:
@@ -114,7 +115,7 @@ def _read(path: Path) -> dict | None:
         saved = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return saved if isinstance(saved, dict) and saved.get("status") in ("pending", "done") else None
+    return saved if isinstance(saved, dict) and saved.get("status") in _STATUSES else None
 
 
 def _write(path: Path, saved: dict, new: bool) -> None:
@@ -199,16 +200,33 @@ def pending() -> list[dict]:
     return sorted(found, key=lambda entry: (str(entry["created"]), entry["request"]))
 
 
-def done(request: str, workspace: str, origin: str) -> dict:
-    """Mark a request done once its project is a workspace here. It is kept, with where it went."""
+def _find(request: str) -> tuple[Path, dict]:
     if not isinstance(request, str) or not _REQUEST.match(request):
         raise ValueError("request: the `request` of a saved project request, as workspace_list lists it")
     path = _folder() / f"{request}.json"
     saved = _read(path) if path.is_file() else None
     if saved is None:
         raise FileNotFoundError(f"no saved project request {request!r}; see workspace_list")
+    return path, saved
+
+
+def done(request: str, workspace: str, origin: str) -> dict:
+    """Mark a request done once its project is a workspace here. It is kept, with where it went."""
+    path, saved = _find(request)
     if saved["status"] == "done":
         return {"status": "already_done", "request": request, "workspace": saved.get("workspace")}
+    if saved["status"] == "withdrawn":
+        raise ValueError(f"project request {request!r} was withdrawn; a new one is prepared with project_request")
     saved.update(status="done", done=_now(), workspace=workspace, origin=origin)
     _write(path, saved, new=False)
     return {"status": "done", "request": request, "workspace": workspace}
+
+
+def withdraw(request: str) -> dict:
+    """The person no longer wants a pending request. It is kept, marked withdrawn, and no longer listed."""
+    path, saved = _find(request)
+    if saved["status"] != "pending":
+        return {"status": f"already_{saved['status']}", "request": request}
+    saved.update(status="withdrawn", withdrawn=_now())
+    _write(path, saved, new=False)
+    return {"status": "withdrawn", "request": request}
