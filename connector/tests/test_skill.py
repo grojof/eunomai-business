@@ -189,3 +189,13 @@ def test_a_search_that_finds_no_tool_is_not_a_lost_connection():
     assert "`mcp__plugin_eunomai-business_eunomai-business__<tool>`" in start and "`select:`" in start
     assert "is not a lost connection" in start and "only when a call to one of its tools fails" in start
 
+
+def test_the_application_is_documented_and_its_template_is_not_left_in_the_readme():
+    """On 2026-11-03 a project made from a template kept the base's README and docs, and its own were never written."""
+    build = plain(reference("build"))
+    assert "never leave a project's README describing the template or its base" in build
+    assert "an index that reaches every page of `docs/`" in build and "One fact, one home" in build
+    assert "the README index and the affected page change in the same save" in build
+    deliver = plain(reference("deliver"))
+    assert "the README describes this application, not its template" in deliver
+
