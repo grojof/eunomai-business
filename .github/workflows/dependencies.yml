@@ -1,13 +1,13 @@
 name: Dependencies
 
-# Every day: bring dependencies to the newest versions the project's own rules allow, propose them as one pull
+# Every Monday: bring dependencies to the newest versions the project's own rules allow, propose them as one pull
 # request, and keep an issue open while anything no allowed version solves remains.
 #
 # The job that runs freshly upgraded packages has read-only access. Writing (branch, pull request, issue) happens in
 # separate jobs on fresh runners that execute no project code and accept only the three files the update produces.
 on:
   schedule:
-    - cron: "23 5 * * *"
+    - cron: "23 5 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -85,7 +85,7 @@ jobs:
           {
             cat "$RUNNER_TEMP/in/summary.md"
             echo
-            echo "Prepared by the daily Dependencies workflow; tests passed on Linux, and the Tests workflow was"
+            echo "Prepared by the weekly Dependencies workflow; tests passed on Linux, and the Tests workflow was"
             echo "started on Linux and Windows for this branch (see Actions)."
           } > "$RUNNER_TEMP/body.md"
           if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
@@ -119,5 +119,5 @@ jobs:
             if [ -n "$number" ]; then gh issue edit "$number" --body-file "$RUNNER_TEMP/in/problems.md"
             else gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/in/problems.md"; fi
           elif [ -n "$number" ]; then
-            gh issue close "$number" --comment "Resolved: the daily check finds no problem left."
+            gh issue close "$number" --comment "Resolved: the weekly check finds no problem left."
           fi
