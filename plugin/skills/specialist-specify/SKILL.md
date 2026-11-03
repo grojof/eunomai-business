@@ -1,3 +1,8 @@
+---
+name: specialist-specify
+description: Stage 3, Specify, of the eunomai-business specialist: requirements with scenarios, design and tasks, confirmed by the user. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+---
+
 # 3 · Specify
 
 Goal: requirements and examples precise enough to become tests, short enough to read in a few minutes. Write

@@ -1,3 +1,8 @@
+---
+name: specialist-deliver
+description: Stage 5, Deliver, of the eunomai-business specialist: the version sent and proposed to IT as a pull request, and what follows the review. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+---
+
 # 5 · Deliver
 
 Goal: a pull request a reviewer can judge quickly, where anything not settled is visible.
@@ -11,7 +16,7 @@ running it again. Each line holds, or goes into the summary under *Not settled* 
 - the `verdict` of `dependency_audit(workspace)` is `allowed`: this line has to hold, since the connector refuses to
   send otherwise;
 - review your own changes with two lenses, as a reviewer would: does it do what the specs say, no more and no less;
-  and does it meet the table in `build.md`. If the organization provides a code or security review skill, run it
+  and does it meet the table in `specialist-build`. If the organization provides a code or security review skill, run it
   too;
 - the README, `design.md`, `proposal.md` and `docs/` say what the code does (scope, settings, how to run it),
   nothing more: every setting they name exists;
@@ -47,7 +52,7 @@ Both audit what is saved and refuse unless it is `allowed`, whatever the project
 
 | Answer | Next |
 |---|---|
-| `audit_refused` | Back to the dependency steps in `build.md`, save, and send again. What only IT can lift (`reasons` that no allowed version solves): show `user_message` and offer `email_link`, and wait for IT |
+| `audit_refused` | Back to the dependency steps in `specialist-build`, save, and send again. What only IT can lift (`reasons` that no allowed version solves): show `user_message` and offer `email_link`, and wait for IT |
 | `audit_unavailable` | Show `user_message`, and its `email_link` if there is one: an address stays closed until IT opens it. Try again when the network is back |
 | `not_sent` | The latest save is not on the server: `version_send`, then propose again. If the send is refused, as above |
 | `main_missing`, `not_a_version` | Show `user_message`, and its `email_link` if there is one; these are not for you to work around |
