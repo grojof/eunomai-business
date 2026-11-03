@@ -163,7 +163,7 @@ younger than two weeks unless it fixes a vulnerability). Users' computers instal
 `uv run --frozen`, which checks every package against the hash recorded in the lock and refuses a mismatch,
 downloads with the operating system's certificate store, and ignores uv's configuration files on the computer.
 Outside what a computer installs: a test tool used only on developers' computers, and a package installed only
-in web browsers. Every day, a workflow applies these rules to the tree and proposes the result as a pull request.
+in web browsers. Every Monday, a workflow applies these rules to the tree and proposes the result as a pull request.
 
 ## When the connector stops
 

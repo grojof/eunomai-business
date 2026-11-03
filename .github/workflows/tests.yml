@@ -1,8 +1,13 @@
 name: Tests
 
+# Started by hand, and by the Dependencies workflow on its own pull requests: the whole suite runs on a computer before
+# each push, and here now and then, to confirm both systems. Not on every pull request, to spend few minutes.
 on:
-  pull_request:  # what merges has passed here; main is not tested again after a merge
-  workflow_dispatch:  # started by the Dependencies workflow on its own pull requests
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

@@ -64,10 +64,10 @@ cd connector
 uv run --frozen --group dev pytest           # the whole suite against a fake git server
 ```
 
-Dependencies are maintained by a daily workflow (`.github/workflows/dependencies.yml`, `tools/update_dependencies.py`):
+Dependencies are maintained by a weekly workflow (`.github/workflows/dependencies.yml`, `tools/update_dependencies.py`):
 it proposes the newest versions the project's own rules allow as one pull request, and keeps an issue open for
-anything no allowed version solves. Tests run on every pull request, on Linux and Windows, and on the workflow's
-own pull requests.
+anything no allowed version solves. The tests run on a computer before each push, and on GitHub, on Linux and
+Windows, when started by hand and on the workflow's own pull requests.
 
 After changing dependencies by hand (`connector/uv.lock`), refresh the bill of materials:
 
