@@ -84,6 +84,19 @@ def test_app_tests_reaches_the_connector_on_its_own(tmp_path, value):
     assert specialist["app_tests"] is value and specialist["app_preview"] is False
 
 
+def test_the_message_style_reaches_the_connector(tmp_path):
+    style = {"accent": "#7a1f5c", "font": "Verdana, sans-serif"}
+    build.build(dict(EXAMPLE, message_style=style), tmp_path)
+    mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
+    assert json.loads(mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_SPECIALIST"])["message_style"] == style
+
+
+@pytest.mark.parametrize("style", [{"accent": "red"}, {"accent": "#7a1f5c;x"}, {"font": "x}body{display:none"},
+                                   {"colour": "#7a1f5c"}, {"accent": 5}, "Verdana", None])
+def test_a_message_style_that_is_not_a_colour_and_font_names_is_refused(style):
+    assert any(error.startswith("message_style takes") for error in build.validate(dict(EXAMPLE, message_style=style)))
+
+
 def test_app_tests_is_off_in_the_example_and_must_be_true_or_false():
     assert EXAMPLE["app_tests"] is False
     assert "app_tests must be true or false" in build.validate(dict(EXAMPLE, app_tests="yes"))
