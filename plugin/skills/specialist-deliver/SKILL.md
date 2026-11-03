@@ -19,7 +19,8 @@ running it again. Each line holds, or goes into the summary under *Not settled* 
   and does it meet the table in `specialist-build`. If the organization provides a code or security review skill, run it
   too;
 - the README, `design.md`, `proposal.md` and `docs/` say what the code does (scope, settings, how to run it),
-  nothing more: every setting they name exists;
+  nothing more: every setting they name exists; the README describes this application, not its template, and its
+  index reaches every page of `docs/` (as `specialist-build` says);
 - the application matches the agreed screens or the approved prototype, and the specs, or the user agreed each
   difference (noted is not agreed);
 - the history has one save per task;
