@@ -49,7 +49,7 @@ Grouped by the control themes of an information-security management system (such
 ## Software supply chain
 
 - **Dependencies:** the whole tree is locked and checked by the project's own rules; users' computers install
-  exactly that tree, with every package's hash verified ([barriers](barriers.md#dependencies)). A daily workflow
+  exactly that tree, with every package's hash verified ([barriers](barriers.md#dependencies)). A weekly workflow
   re-checks it, proposes updates and opens an issue for any vulnerability without an allowed fix.
 - **Licenses of the locked runtime tree** (43 packages, some installed only on Windows, Linux or web browsers): permissive (MIT, BSD, Apache-2.0, PSF) except two, both compatible
   with use as a dependency:
