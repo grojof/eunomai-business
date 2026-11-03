@@ -1,3 +1,8 @@
+---
+name: specialist-shape
+description: Stage 2, Shape, of the eunomai-business specialist: the first real screens, or a clickable prototype where code is not allowed, approved by the user. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+---
+
 # 2 · Shape
 
 Goal: the user tries what they will see and do early, while changing it costs little. Say why once, in one line:
@@ -18,9 +23,9 @@ Build them before tests and the full specification: the point is to agree on the
   refinements, nothing the user has not asked to see. Time spent here on what may change is wasted.
 - Example data the application holds itself: roles and invented names, never real personal data. Say plainly that
   it is example data.
-- Dependencies as in `build.md`: `dependency_check`, the whole tree pinned, `dependency_audit` allowed. Neither
+- Dependencies as in `specialist-build`: `dependency_check`, the whole tree pinned, `dependency_audit` allowed. Neither
   `app_preview` nor the send works without them.
-- `version_save(workspace, <message>)`, then show them as `build.md` says, one way at a time.
+- `version_save(workspace, <message>)`, then show them as `specialist-build` says, one way at a time.
 
 ## A clickable prototype
 

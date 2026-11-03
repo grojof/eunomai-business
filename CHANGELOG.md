@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Each stage of the specialist is a skill** (`specialist-understand`, `-shape`, `-specify`, `-build`, `-deliver`). In a Cowork test, once the project's folder was connected, Cowork refused to read the specialist's references: it shaped, built and delivered without them, and never ran the tests on the person's computer. A skill loads through the Skill tool wherever the task's folders are. The connector's tools are loaded by their exact names, and a search that finds none is no longer reported as a lost connection: the person had been told to check their VPN.
 - **A request for a new project reaches IT whole.** In a Cowork test the model retyped the e-mail link and left out the request, the date, how it is done today, the scope and the open questions. The connector now opens the request on a page in the person's browser: a button copies it, formatted for a mail program and as plain text, and a link starts the e-mail with the subject alone, so no mail program cuts a long link. The model gets a short message and the page's address, never the request. The request names the signed-in git user, for the access IT gives. `message_style` gives the page and the copied e-mail an organization's accent and font; the default is neutral.
 - **The tests run on pull requests only**, not again on main after a merge, and the job may take 30 minutes: on
   2026-11-02 the Windows job finished every test after 14 minutes and was then cut at its 15-minute limit.

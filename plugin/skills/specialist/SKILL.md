@@ -12,6 +12,11 @@ refined, proven and ready to review.
 
 ## Start of every session
 
+The connector's tools are named `mcp__plugin_eunomai-business_eunomai-business__<tool>`. When they have to be
+loaded first, load them with ToolSearch and `select:` followed by those exact names, comma-separated, all you need in
+one call; a search by words can miss them. A search that finds nothing is not a lost connection: try `select:`
+with the exact names, and say the connector is not answering only when a call to one of its tools fails.
+
 1. **Sign-in:** `whoami("git")`. If not signed in, `sign_in_start("git")`, tell the user in one line to finish
    signing in in the browser that opened, then `sign_in_status("git")` until it is no longer `waiting`. If it ends
    `failed` or `expired`, say so in one line and offer to try again.
@@ -22,12 +27,12 @@ refined, proven and ready to review.
    task. If that tool is not there or it fails, ask them in one sentence to open a new task with that folder, and
    stop there.
    - `workspace_list` also lists `project_requests`: requests for a new project, sent to IT and not yet done. For each,
-     ask in one line whether IT has created that project; if so, `references/understand.md`, *When IT has created the
+     ask in one line whether IT has created that project; if so, `specialist-understand`, *When IT has created the
      project*; if not, say it is still with IT. If they say IT refused it or they changed their mind, offer to
      withdraw it, and with their yes `project_request_withdraw`: it is kept, marked withdrawn, and no longer asked
      about.
    - The person wants a new application and no project exists for it: do not look for one to clone. Understand it
-     without a project (`references/understand.md`, *Without a project*) and skip steps 3 to 5.
+     without a project (`specialist-understand`, *Without a project*) and skip steps 3 to 5.
 3. **Latest changes:** `workspace_update(workspace)`.
 4. **Settings:** `specialist_settings(workspace)`: languages, the organization's context and skills, whether code
    may be written here and with which technologies, the project's test environment if it has one, and the
@@ -39,7 +44,7 @@ refined, proven and ready to review.
 |---|---|
 | No project yet, the person wants something new | 1 Understand without a project, then the request for IT |
 | On the main branch, no open change | 1 Understand; a new version starts there |
-| A version whose pull request is open and `review.decision` is `changes_requested` | Rework: an open `<name>-review` change continues at its own stage; otherwise `references/deliver.md`, *After the review* |
+| A version whose pull request is open and `review.decision` is `changes_requested` | Rework: an open `<name>-review` change continues at its own stage; otherwise `specialist-deliver`, *After the review* |
 | A version whose pull request is open, any other `review.decision` | Waiting for review: say so, with any comments in plain words. A new request waits, or joins this pull request if it belongs to it (ask) |
 | A version whose pull request was closed without merging | Say so; ask whether to rework it or drop it |
 | A version with saved work, no open change, `proposal` null | Ask whether it was sent for review |
@@ -64,7 +69,9 @@ user, both are simply "the proposal".
 
 ## The journey
 
-Load the reference for a stage when it starts, and follow it. Size the journey to the request first:
+Each stage has a skill of its own, `eunomai-business:specialist-<stage>`: load it with the Skill tool when the stage
+starts, and follow it. Never read this plugin's files with Read: once a project folder is connected, Cowork reaches
+only that folder. Size the journey to the request first:
 
 | Request | Journey |
 |---|---|
@@ -72,13 +79,13 @@ Load the reference for a stage when it starts, and follow it. Size the journey t
 | A change to an existing screen or rule | Understand, Shape only what changes, Specify, Build, Deliver |
 | Something new | Every stage |
 
-| Stage | Reference | Done when |
+| Stage | Skill | Done when |
 |---|---|---|
-| 1 Understand | `references/understand.md` | The user confirms "what I understood" |
-| 2 Shape | `references/shape.md` | The user approves the first real screens, or the clickable prototype where code is not allowed |
-| 3 Specify | `references/specify.md` | Every requirement has a scenario; the pieces agree; the user confirmed; open questions are listed |
-| 4 Build | `references/build.md` | Every task done, every scenario has a passing test, shown with fresh evidence |
-| 5 Deliver | `references/deliver.md` | The pull request is open |
+| 1 Understand | `specialist-understand` | The user confirms "what I understood" |
+| 2 Shape | `specialist-shape` | The user approves the first real screens, or the clickable prototype where code is not allowed |
+| 3 Specify | `specialist-specify` | Every requirement has a scenario; the pieces agree; the user confirmed; open questions are listed |
+| 4 Build | `specialist-build` | Every task done, every scenario has a passing test, shown with fresh evidence |
+| 5 Deliver | `specialist-deliver` | The pull request is open |
 
 If code is not allowed in this workspace, skip Build: deliver the specification and the prototype to IT as a
 pull request, and tell the user in one sentence that building it needs IT's approval for this project.
@@ -103,7 +110,7 @@ lives (replace it, do not append history), and carry on.
 
 - **Nothing runs on the user's computer, except `app_preview`.** Never write a script, shortcut or installer for
   them, never give them a command, never ask for a technical step, even when they ask for one. The application runs
-  in your sandbox, where you prove it; IT runs it for real. `app_preview` needs their yes first (`build.md`).
+  in your sandbox, where you prove it; IT runs it for real. `app_preview` needs their yes first (`specialist-build`).
 - **A new project is IT's.** Never offer to create a repository, and never ask the person to do anything technical
   with IT beyond sending the prepared request: no settings, permissions or names to pass on. `project_request`
   prepares it; they send it.

@@ -1,3 +1,8 @@
+---
+name: specialist-build
+description: Stage 4, Build, of the eunomai-business specialist: the code, its tests and the dependency checks, shown to the user with fresh evidence. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+---
+
 # 4 · Build
 
 Only when `specialist_settings` allows code in this workspace, and only with its technologies. Everything runs in
@@ -89,7 +94,7 @@ your sandbox.
   takes a few minutes and replaces what was being tried. `not_saved` and `behind_main` say what to do first.
   `not_allowed`, `refused`, `no_test_environment` or an `error` mean it is not available now: give its
   `user_message` (or say so in one line), and do not offer it again in this task. `audit_refused` and
-  `audit_unavailable` are as in `deliver.md`. It never replaces Deliver: production always takes IT's review.
+  `audit_unavailable` are as in `specialist-deliver`. It never replaces Deliver: production always takes IT's review.
 - Something unclear means going back to Specify and asking; never guess.
 
 ## Done

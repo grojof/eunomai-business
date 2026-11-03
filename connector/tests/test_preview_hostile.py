@@ -443,7 +443,7 @@ def test_a_changed_declaration_starts_it_again(signed_in, workspaces, turned_on,
 
 def test_a_person_is_told_a_preparation_ends_with_the_turn():
     assert "starts over" in preview._starting("x")["user_message"]
-    build = (Path(preview.__file__).parents[3] / "plugin" / "skills" / "specialist" / "references" / "build.md")
+    build = (Path(preview.__file__).parents[3] / "plugin" / "skills" / "specialist-build" / "SKILL.md")
     assert "in the same turn" in " ".join(build.read_text(encoding="utf-8").split())
 
 
