@@ -27,7 +27,8 @@ CONNECTOR_SRC = ROOT / "connector"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache",
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov")
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies",
-                   "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests"}
+                   "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests",
+                   "message_style"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers", "deny"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -38,6 +39,8 @@ PROVIDER_REQUIRED = {"authorize_url", "token_url", "client_id", "redirect_uri", 
 LOOPBACK = {"127.0.0.1", "localhost"}
 EMAIL = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
 LANGUAGE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
+STYLE_ACCENT = re.compile(r"#[0-9a-fA-F]{6}\Z")  # as connector/src/eunomai_business/message_page.py reads them
+STYLE_FONT = re.compile(r"[A-Za-z0-9 ,'\"-]{1,100}\Z")
 EXCEPTION = re.compile(r"^(pypi|npm):[A-Za-z0-9@/._-]+$")
 
 
@@ -72,6 +75,13 @@ def validate_specialist(cfg: dict) -> list[str]:
             isinstance(s, dict) and set(s) == {"skill", "use_for"} and _strings([s["skill"], s["use_for"]])
             for s in skills):
         errors.append('organization_skills must be a list of {"skill": "<plugin:skill>", "use_for": "<purpose>"}')
+    style = cfg.get("message_style", {})
+    accent, font = (style.get("accent", "#000000"), style.get("font", "x")) if isinstance(style, dict) else ("", "")
+    if not isinstance(style, dict) or set(style) - {"accent", "font"} \
+            or not (isinstance(accent, str) and STYLE_ACCENT.match(accent)) \
+            or not (isinstance(font, str) and STYLE_FONT.match(font)):
+        errors.append('message_style takes "accent" (a colour such as #1f4e79) and "font" (font names separated by '
+                      'commas), both optional')
     exceptions = cfg.get("dependency_exceptions", [])
     if not isinstance(exceptions, list):
         errors.append("dependency_exceptions must be a list")

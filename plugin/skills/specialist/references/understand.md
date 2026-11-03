@@ -55,8 +55,10 @@ IT):
 3. When they confirm "what I understood", suggest a name for the project from the goal (lowercase ASCII with
    hyphens, in `docs_language`) and say IT decides it. Then call `project_request` with that `name` and their words:
    `purpose`, `users`, `today`, `first_version`, `out_of_scope`, `open_questions`.
-4. Show its `user_message` and offer its `email_link`; without one, show its `text` to copy. Say plainly that
-   nothing is sent until they send it. Ask nothing else of them for IT.
+4. Show its `user_message`, in one or two lines: the request is on a page in their browser, with a button that
+   copies it and another that opens the e-mail to IT. When `opened` is false, give them `page` as a link. Never write
+   the request or an e-mail link yourself: the page holds the whole message, and a retyped one can come out shorter.
+   Say plainly that nothing is sent until they send it. Ask nothing else of them for IT.
 5. Stop there: the work goes on once the project exists.
 
 ## When IT has created the project

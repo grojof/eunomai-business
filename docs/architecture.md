@@ -157,7 +157,7 @@ sequenceDiagram
 | `project_tests` | `app_tests`, off by default: the project's tests on the person's computer through the preview's watcher, gate and environment; counts and at most ten failures back, the output kept for IT | As `preview` |
 | `watcher` | What owns a preview: a detached process with the standard library alone, which starts its steps, holds its tree, enforces the limit and cleans up | A job object on Windows |
 | `support` | The stop: the user's message, IT's report, the e-mail link (RFC 6068, one function for every message to IT) | — |
-| `project_request` | A request for a new project: a fixed message for IT in the organization's documentation language, its e-mail link, and a copy kept, pending until the project is cloned or the request is withdrawn ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)) | — |
+| `project_request` | A request for a new project: a fixed message for IT in the organization's documentation language, shown on a page in the person's browser that copies it and starts the e-mail (`message_page`), and a copy kept, pending until the project is cloned or the request is withdrawn ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)) | — |
 | `settings` | The specialist's settings: languages, the organization's context and skills, where code may be written, and what a project declares, the preview included | — |
 | `deps` | `dependency_check`: which package version may be used; `dependency_audit`: every package a workspace pins | PyPI, npm and OSV public APIs; the source repositories' web addresses |
 | `guard` | The file guard: the PreToolUse hook, and the rules `version_save` enforces | — |
