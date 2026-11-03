@@ -311,13 +311,25 @@ def dependency_audit(workspace: str) -> dict:
 def project_request(name: str, purpose: str, users: str, today: str, first_version: str, out_of_scope: str = "",
                     open_questions: list[str] | None = None) -> dict:
     """Prepare a request for IT to create a new project, when the person wants a new application and no project
-    exists. Only after they confirmed what was understood. Sends nothing: it returns the message (`subject`, `text`
-    to copy), `email_link` (a mailto to the organization's support address, when there is one) and `user_message`,
-    and keeps a copy on this computer that workspace_list lists until project_request_done or
-    project_request_withdraw. The fixed text is in the organization's documentation language. `name` is a suggested
-    repository name (lowercase ASCII letters, digits and hyphens; IT decides); the other fields are what the person
-    said, in their language. The same name while a request is pending replaces it (`replaced` true)."""
-    return _safe(requests_for_it.prepare, name, purpose, users, today, first_version, out_of_scope, open_questions)
+    exists. Only after they confirmed what was understood. Sends nothing: it opens a page in the person's browser with
+    the whole message, a button that copies it and one that opens an e-mail to the organization's support address
+    with its subject, and returns `user_message` and `page`, never the message itself. It keeps a copy on this
+    computer that workspace_list lists until project_request_done or project_request_withdraw. The fixed text is in
+    the organization's documentation language and names the signed-in git user. `name` is a suggested repository name
+    (lowercase ASCII letters, digits and hyphens; IT decides); the other fields are what the person said, in their
+    language. The same name while a request is pending replaces it (`replaced` true)."""
+    return _safe(_project_request, name, purpose, users, today, first_version, out_of_scope, open_questions)
+
+
+def _project_request(name: str, purpose: str, users: str, today: str, first_version: str, out_of_scope: str,
+                     open_questions: list[str] | None) -> dict:
+    try:
+        signed = auth.whoami("git")
+    except (OSError, ValueError, RuntimeError):  # no git provider or no sign-in: the request goes without the user
+        signed = {}
+    requester = str(signed.get("login", "")) if signed.get("signed_in") else ""
+    return requests_for_it.prepare(name, purpose, users, today, first_version, out_of_scope, open_questions,
+                                   requester)
 
 
 def _request_done(request: str, workspace: str) -> dict:
