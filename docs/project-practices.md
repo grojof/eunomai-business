@@ -26,6 +26,9 @@ carries on from the request.
 
 **The template** is one repository with what every project starts from: a `main` branch with a README, the
 `.gitattributes` and `.gitignore` below, the project's context and declaration, and `main` protected as below.
+Its README is a skeleton the specialist fills in with the application's own map; where the template is made from
+a base, the base's reference goes in a folder of its own that the project reads and never edits, so the
+project's `docs/` holds only the application's pages.
 
 **In Gitea** (template repositories exist since 1.11):
 

@@ -64,9 +64,19 @@ your sandbox.
 | External resources | None: fonts, scripts and styles are served by the application |
 | Errors | A clear message to the user, never a raw error page; no tokens or personal data in logs. "Not found" and "not allowed" answer alike |
 
-- A short `README.md` section on how IT runs it and runs the tests, true to the code. A page in `docs/` starts with
-  frontmatter: `type` (one of `tutorial`, `how-to`, `reference`, `explanation`, `decision`, in English), `title` and
-  `description`; it describes only what the code does.
+- **The application's documentation, in `docs_language`, kept with the code in the same save:**
+  - `README.md` is a map for someone who has never seen the application: what it is, for whom and why, a diagram
+    when a picture says it better, how IT runs it and runs its tests, and an index that reaches every page of
+    `docs/`. Replace whatever the project's template left there to fill in; never leave a project's README
+    describing the template or its base.
+  - A page in `docs/` for what the README cannot hold in a few lines: the screens and what each person can do, the
+    data and its rules, the settings, a decision worth keeping. It starts with frontmatter: `type` (one of
+    `tutorial`, `how-to`, `reference`, `explanation`, `decision`, in English), `title` and `description`; one page,
+    one kind. It describes only what the code does.
+  - One fact, one home: link to what another page or the project's own reference (for example the base's
+    documentation a template brings, which is never edited) already says, instead of restating it.
+  - When behaviour changes, the README index and the affected page change in the same save. The project's own
+    checks of its documentation, when it has them, pass.
 
 ## Progress
 
