@@ -138,7 +138,7 @@ sequenceDiagram
 
 | Piece | What it is | Status |
 |---|---|---|
-| Plugin (`plugin/`) | What Claude Desktop installs: the connector's launch settings, the `specialist` and `review-skills` skills and the file guard hook, plus validation skills and measurement hooks when diagnostics are on. Built per organization from its configuration | Built |
+| Plugin (`plugin/`) | What Claude Desktop installs: the connector's launch settings, the `specialist` skill with one skill per stage (`specialist-understand` to `specialist-deliver`), the `review-skills` skill and the file guard hook, plus validation skills and measurement hooks when diagnostics are on. Built per organization from its configuration | Built |
 | Local connector (`connector/`) | A Python program started with `uv run --frozen` on the user's computer. Claude talks to it through MCP; it runs outside Claude's sandbox ([decision 1](decisions.md#1--a-local-connector-on-the-users-computer)) | Built |
 | Build tool | `tools/build.py`: organization configuration + source → `eunomai-business.zip`, after validating the configuration | Built |
 | Bill of materials | `tools/sbom.py` → `connector/sbom.cdx.json`, regenerated whenever `connector/uv.lock` changes | Built |

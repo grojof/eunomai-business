@@ -26,7 +26,7 @@ with no stage names and no commands; assumptions in the open; something to try e
 versions and proposals on its own. The journey is sized to the request: a wording change has nothing to try
 first, something new goes through every stage. Nothing is claimed without fresh evidence, and nothing runs on
 the user's computer but a preview IT turned on ([decision 7](decisions.md#7--nothing-runs-on-the-users-computer-except-a-preview-it-turns-on)). The
-rules it follows are in the skill itself ([`SKILL.md`](../plugin/skills/specialist/SKILL.md)); when it is not
+rules it follows are in the skill itself ([`SKILL.md`](../plugin/skills/specialist/SKILL.md)) and in one skill per stage; when it is not
 certain, it stops and hands IT a report ([decision 6](decisions.md#6--the-user-never-resolves-a-technical-problem)).
 
 ## The journey
@@ -95,7 +95,7 @@ project's context, and course changes that matter. Below it, the connector appen
 audit), which the model does not write, and a version the audit does not allow is not sent at all
 ([barriers](barriers.md#dependencies)). Gaps are visible instead of hidden, and the reviewer can take
 any of them straight back to the user. The template is in
-[`deliver.md`](../plugin/skills/specialist/references/deliver.md).
+[`specialist-deliver`](../plugin/skills/specialist-deliver/SKILL.md).
 
 ## Keeping it clean
 

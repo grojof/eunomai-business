@@ -9,7 +9,7 @@ SPECIALIST = (SKILLS / "specialist" / "SKILL.md").read_text(encoding="utf-8")
 
 
 def reference(stage: str) -> str:
-    return (SKILLS / "specialist" / "references" / f"{stage}.md").read_text(encoding="utf-8")
+    return (SKILLS / f"specialist-{stage}" / "SKILL.md").read_text(encoding="utf-8")
 
 
 def test_the_specialist_never_runs_git_in_the_workspace():
@@ -164,3 +164,28 @@ def test_the_docs_say_who_creates_a_project_and_how():
 def test_a_pending_request_can_be_withdrawn_when_the_person_no_longer_wants_it():
     start = plain(SPECIALIST.split("## Start of every session")[1].split("## Whose context counts")[0])
     assert "`project_request_withdraw`" in start and "changed their mind" in start and "IT refused" in start
+
+
+STAGES = ("understand", "shape", "specify", "build", "deliver")
+
+
+def test_each_stage_is_a_skill_cowork_can_load_once_a_folder_is_connected():
+    """In Cowork, Read reaches only the connected folder: on 2026-11-03 the specialist could not read its references
+    and built and delivered without them, the tests on the person's computer left out."""
+    assert not (SKILLS / "specialist" / "references").exists()
+    for stage in STAGES:
+        skill = reference(stage)
+        assert skill.startswith(f"---\nname: specialist-{stage}\n"), stage
+        assert "only when the specialist skill reaches this stage" in plain(skill.split("---")[1]), stage
+        assert not re.search(r"\b(references/|(understand|shape|specify|build|deliver)\.md)", skill), stage
+    journey = plain(SPECIALIST.split("## The journey")[1])
+    assert "load it with the Skill tool" in journey and "Never read this plugin's files with Read" in journey
+    assert all(f"`specialist-{stage}`" in journey for stage in STAGES)
+
+
+def test_a_search_that_finds_no_tool_is_not_a_lost_connection():
+    """On 2026-11-03 a search by words missed workspace_clone and the person was told to check their VPN."""
+    start = plain(SPECIALIST.split("## Start of every session")[1].split("1. **Sign-in:**")[0])
+    assert "`mcp__plugin_eunomai-business_eunomai-business__<tool>`" in start and "`select:`" in start
+    assert "is not a lost connection" in start and "only when a call to one of its tools fails" in start
+
