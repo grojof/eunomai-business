@@ -135,10 +135,12 @@ def page(language: str, words: dict, title: str, lead: list[str], sections: list
     )
 
 
-def write_and_open(path: Path, content: str) -> bool:
-    """Writes the page and opens it in the person's browser. Whether the browser said it opened."""
+def write_and_open(path: Path, content: str) -> tuple[str, bool]:
+    """Writes the page and opens it in the person's browser: its address, and whether the browser said it opened.
+    The address is of the resolved path, the one opened, so a short Windows name never gives two addresses."""
     path.write_bytes(content.encode("utf-8"))
+    address = path.resolve().as_uri()
     try:
-        return bool(webbrowser.open(path.resolve().as_uri()))
+        return address, bool(webbrowser.open(address))
     except Exception:  # noqa: BLE001 - no browser is not a failure: the page is there to open by hand
-        return False
+        return address, False

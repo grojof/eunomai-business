@@ -220,12 +220,12 @@ def prepare(name: str, purpose: str, users: str, today: str, first_version: str,
     content = message_page.page(record["language"], WORDS[record["language"]], title, lead, sections, text, address,
                                 subject, message_page.style(settings.load().get("message_style")))
     shown = path.with_suffix(".html")
-    opened = message_page.write_and_open(shown, content)
-    where = "is open in your browser" if opened else f"is on this page: {shown.as_uri()}"
+    address_of_page, opened = message_page.write_and_open(shown, content)
+    where = "is open in your browser" if opened else f"is on this page: {address_of_page}"
     how = ("copy it with the button, open the e-mail with the other and paste it" if address else
            "copy it with the button and send it to IT the way you usually reach them")
     return {"status": "prepared", "request": request, "name": name, "replaced": bool(pending), "subject": subject,
-            "saved": str(path), "page": shown.as_uri(), "opened": opened,
+            "saved": str(path), "page": address_of_page, "opened": opened,
             "user_message": (f"Your request for a new project {where}: {how}. Nothing has been sent yet. When IT tells "
                              "you the project exists, come back and say so, and the work goes on from here.")}
 
