@@ -7,8 +7,10 @@ Gitea API calls the connector makes. Nothing leaves this computer.
 import atexit
 import base64
 import contextlib
+import inspect
 import json
 import os
+import re
 import shutil
 import socket
 import sys
@@ -360,3 +362,23 @@ def signed_in(server, monkeypatch):
         time.sleep(0.1)
     assert auth.status("git")["status"] == "signed_in", auth.status("git")
     return server
+
+
+# A test that waits on the clock to see a process end or a limit pass needs the computer to itself: beside other tests
+# it only gets slower, and then wrong (seen with pytest-xdist: a time limit or a stop missed under load). Such a test
+# is marked `serial` by what its body calls, so a new one is too; tools/test.py runs those last, two at a time. Tests that
+# start real applications (`preview`) run before, a few at a time, so their own waits are not starved.
+CLOCK = re.compile(r"\bgone\(|TIME_LIMIT|_ANSWER_WAIT|_READY_WAIT|_END_WAIT|time\.sleep|deadline|_STALE")
+
+
+def pytest_collection_modifyitems(items: list) -> None:
+    waits: dict = {}
+    for item in items:
+        function = getattr(item, "function", None)
+        if function is None:
+            continue
+        if function not in waits:
+            waits[function] = bool(CLOCK.search(inspect.getsource(function)))
+        if waits[function]:
+            item.add_marker(pytest.mark.serial)
+
