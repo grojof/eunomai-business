@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest==9.1.1"]
+dev = ["pytest==9.1.1", "pytest-xdist==3.8.0"]
 
 [project.scripts]
 eunomai-business = "eunomai_business.server:main"
@@ -41,4 +41,5 @@ cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }]
 testpaths = ["tests"]
 # A deprecated call breaks the tests now rather than the connector after an upgrade.
 filterwarnings = ["error::DeprecationWarning"]
-markers = ["preview: starts a real application with uv on this computer, and checks its processes and folder"]
+markers = ["preview: starts a real application with uv on this computer, and checks its processes and folder",
+           "serial: waits on the clock to see a process end or a limit pass; tools/test.py runs it last, two at a time"]

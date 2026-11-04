@@ -68,9 +68,11 @@ python tools\new_project.py --request request.txt --title "Asset inventory"
 **Developers, to work on it:**
 
 ```powershell
-cd connector
-uv run --frozen --group dev pytest           # the whole suite against a fake git server
+python tools/test.py --affected   # while working: only what the changes against main can break, and why
+python tools/test.py              # before merging: every suite, in parallel, what waits on the clock two at a time
 ```
+
+`cd connector` and `uv run --frozen --group dev pytest` still runs the connector's suite one test at a time.
 
 Dependencies are maintained by a weekly workflow (`.github/workflows/dependencies.yml`, `tools/update_dependencies.py`):
 it proposes the newest versions the project's own rules allow as one pull request, and keeps an issue open for

@@ -54,8 +54,10 @@ How to work in this repository, for people and AI assistants alike. What the pro
 ## Every change
 
 - Branch from `main`; never stack a pull request on a branch that will be deleted.
-- Tests: `connector/` and `templates/project-plugin/server/` (`uv run --frozen pytest -q`), the agent's on Linux,
-  `python tools/build.py` on the example configuration, and the docs check.
+- Tests: while working, `python tools/test.py --affected` (what the changes against main can break, by the rules in
+  the script); before merging, `python tools/test.py` (every suite: the connector's in parallel, the previews four at a
+  time, then the tests marked `serial`, which wait on the clock, two at a time), `python tools/build.py` on the example configuration, and the docs check. GitHub's workflow runs
+  by hand, now and then.
 - An independent review before pushing; its findings are fixed or answered in the pull request.
 - Commits carry no AI co-author; a pull request description ends with `Assisted-by: Claude`.
 - Docs say how it works and why, in tables where they help; what was found on the way goes to the pull request or
