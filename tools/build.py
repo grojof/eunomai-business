@@ -1,6 +1,6 @@
 """Build the uploadable plugin from the organization's configuration.
 
-    python tools/build.py                      # config.local.json -> dist/eunomai-business/ and .zip
+    python tools/build.py                      # config.local.json -> dist/<plugin_name>/ and .zip
     python tools/build.py --variant tests      # config.local.json + variants/tests.json -> dist/tests/
     python tools/build.py --all                # the configuration and every variant
     python tools/build.py --config other.json --out some/folder
@@ -30,8 +30,12 @@ SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowe
                    "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests",
                    "message_style"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
-        "providers", "deny"} | SPECIALIST_KEYS
+        "providers", "deny", "plugin_name", "plugin_description"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+PLUGIN_NAME = VARIANT  # as connector/src/eunomai_business/__init__.py reads it
+DEFAULT_PLUGIN = "eunomai-business"
+DEFAULT_DESCRIPTION = ("Versions, save points and pull requests for business users in Claude Cowork, with sign-in "
+                       "through the organization and barriers enforced by a local connector.")
 MOVED = {"projects": "projects is no longer a setting: each project declares it in .eunomai/project.toml on its main "
                      "branch (docs/project-practices.md)"}
 PROVIDER_KEYS = {"authorize_url", "token_url", "client_id", "scopes", "redirect_uri", "userinfo_url", "login_field"}
@@ -98,6 +102,11 @@ def validate(cfg: dict) -> list[str]:
     """Every problem in the configuration, so IT fixes them in one pass. Keys starting with "_" are comments."""
     errors = [MOVED.get(key, f"unknown setting {key!r}") for key in cfg if not key.startswith("_") and key not in KEYS]
     errors += validate_specialist(cfg)
+    if not PLUGIN_NAME.match(str(cfg.get("plugin_name", DEFAULT_PLUGIN))):
+        errors.append("plugin_name: 1 to 40 lowercase ASCII letters, digits and hyphens, starting with a letter or digit")
+    description = cfg.get("plugin_description", DEFAULT_DESCRIPTION)
+    if not isinstance(description, str) or not description.strip() or len(description) > 300:
+        errors.append("plugin_description must be text of at most 300 characters")
     errors += _rules().problems(cfg.get("deny", []))  # each rule parses, has a reason, and meets its examples
     if cfg.get("connector_source", "bundled") not in ("bundled", "path"):
         errors.append('connector_source must be "bundled" or "path"')
@@ -164,8 +173,14 @@ def _merge_hooks(folder: Path, diagnostics: bool) -> None:
     extra.unlink()
 
 
+def plugin_of(cfg: dict) -> str:
+    return str(cfg.get("plugin_name") or DEFAULT_PLUGIN)
+
+
 def build(cfg: dict, out_dir: Path) -> Path:
-    out, archive_path = out_dir / "eunomai-business", out_dir / "eunomai-business.zip"
+    """The plugin as the organization named it: <name>/ and <name>.zip in out_dir."""
+    plugin = plugin_of(cfg)
+    out, archive_path = out_dir / plugin, out_dir / f"{plugin}.zip"
     diagnostics = cfg.get("diagnostics", False)
     if out.exists():
         shutil.rmtree(out)
@@ -189,7 +204,9 @@ def build(cfg: dict, out_dir: Path) -> Path:
         "CONNECTOR": connector,
         "PROVIDERS": json.dumps({k: v for k, v in cfg["providers"].items() if not k.startswith("_")},
                                 separators=(",", ":")),
-        "WORKSPACES_ROOT": cfg.get("workspaces_root") or "~/eunomai-business-workspaces",
+        "WORKSPACES_ROOT": cfg.get("workspaces_root") or f"~/{plugin}-workspaces",
+        "PLUGIN": plugin,
+        "PLUGIN_DESCRIPTION": cfg.get("plugin_description") or DEFAULT_DESCRIPTION,
         "DIAGNOSTICS": "1" if diagnostics else "0",
         "BUILD": _build_id(),
         "SPECIALIST": json.dumps({k: cfg[k] for k in sorted(SPECIALIST_KEYS) if k in cfg}, separators=(",", ":"),
@@ -203,6 +220,11 @@ def build(cfg: dict, out_dir: Path) -> Path:
         json.loads(text)  # fail here, not in Claude, if the result is not valid JSON
         template.with_suffix("").write_text(text, encoding="utf-8", newline="\n")  # LF on every OS
         template.unlink()
+    # The skills name the plugin's own tools and skills by one placeholder, and nothing else of theirs is replaced
+    for skill in (out / "skills").rglob("*.md"):
+        markdown = skill.read_text(encoding="utf-8")
+        if "{{PLUGIN}}" in markdown:
+            skill.write_text(markdown.replace("{{PLUGIN}}", plugin), encoding="utf-8", newline="\n")
 
     policy = json.dumps({"deny": cfg.get("deny", [])}, indent=2, ensure_ascii=False) + "\n"
     (out / "policy.json").write_text(policy, encoding="utf-8", newline="\n")  # the guard's deny rules
@@ -255,8 +277,8 @@ def main(argv: list[str] | None = None) -> int:
     names = sorted(p.stem for p in args.variants.glob("*.json")) if args.all else args.variant
     builds = ([("", base, args.out)] if args.all or not names else [])
     for name in names:
-        if not VARIANT.match(name) or name == "eunomai-business":  # that folder is the base package's
-            print(f"variant {name!r}: lowercase letters, digits and hyphens only, and not eunomai-business",
+        if not VARIANT.match(name) or name == plugin_of(base):  # that folder is the base build's
+            print(f"variant {name!r}: lowercase letters, digits and hyphens only, and not {plugin_of(base)}",
                   file=sys.stderr)
             return 1
         changes = _read(args.variants / f"{name}.json")

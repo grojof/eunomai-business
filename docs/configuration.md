@@ -16,7 +16,7 @@ plugin and sign in; they configure nothing. Why: [decision 4](decisions.md#4--co
 
 1. Copy `config.example.json` to `config.local.json` and fill it in. Git ignores `config.local.json`.
 2. Run `python tools/build.py` (Python 3.10 or later, standard library only). It checks the configuration,
-   reports every problem at once, and writes `dist/eunomai-business.zip` with your values built in.
+   reports every problem at once, and writes `dist/<plugin_name>.zip` (by default `dist/eunomai-business.zip`) with your values built in.
 3. Publish the zip to your Claude organization (Team or Enterprise, by an Owner), or install it on one computer
    for testing: *Customize → Plugins → Upload plugin*.
 
@@ -33,15 +33,15 @@ such as `providers` merge key by key. For example `variants/tests.json`:
 ```
 
 ```powershell
-python tools\build.py --variant tests   # -> dist\tests\eunomai-business.zip
+python tools\build.py --variant tests   # -> dist\tests\<plugin_name>.zip
 python tools\build.py --all             # the configuration and every variant, each in its own folder
 ```
 
 | Good to know | |
 |---|---|
 | Checks | Every build is checked before any is written |
-| Limits | A variant adds or changes settings; to remove one, use another configuration (`--config`). It cannot be named `eunomai-business` |
-| What it is for | A test installation, a test server, another organization. Every variant is the plugin `eunomai-business`, and an organization publishes one; it is not a way to give some people a different base plugin |
+| Limits | A variant adds or changes settings; to remove one, use another configuration (`--config`). It cannot have the name of the configuration's own plugin, whose folder is already in `dist/` |
+| What it is for | A test installation, a test server, another organization. A variant is the configuration's plugin, with its name, unless it sets a `plugin_name` of its own; it is not a way to give some people a different base plugin |
 | Not for | Where code may be written: each project declares that ([project practices](project-practices.md#where-code-may-be-written)) |
 
 ## Settings
@@ -51,7 +51,9 @@ python tools\build.py --all             # the configuration and every variant, e
 | `uv` | `uv` | Command that starts the connector. Keep the default when possible: hooks run through whichever shell Claude Desktop uses, and the bare command works in all of them. A full path is a fallback; if it contains spaces it is quoted, which PowerShell does not accept. |
 | `connector_source` | `bundled` | `bundled`: the connector ships inside the zip. `path`: it runs from `connector_path` (development only). Any other value is an error. |
 | `connector_path` | — | Folder of the connector source; required when `connector_source` is `path`. |
-| `workspaces_root` | `~/eunomai-business-workspaces` | Where each user's workspaces (local clones) go. `~` is the user's profile; `%VAR%` is expanded. Must be absolute after expansion. |
+| `plugin_name` | `eunomai-business` | The plugin's name: what people install and see, the prefix of its tools (`mcp__plugin_<name>_<name>__<tool>`) and skills (`<name>:specialist`), its folder on each computer (`%LOCALAPPDATA%\<name>`), its default workspaces folder and the start of every e-mail subject it prepares. 1 to 40 lowercase ASCII letters, digits and hyphens. See [several plugins on one computer](#several-plugins-on-one-computer). |
+| `plugin_description` | eunomai-business's own | What the plugin is for, in the list of plugins. Up to 300 characters. |
+| `workspaces_root` | `~/<plugin_name>-workspaces` | Where each user's workspaces (local clones) go. `~` is the user's profile; `%VAR%` is expanded. Must be absolute after expansion. Two plugins never share it. |
 | `support_email` | — | The address users send to when the connector stops and needs IT, and where a request for a new project goes ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)). Optional; without it users get the report or the request to copy, but no e-mail link. |
 | `message_style` | neutral | The look of the request for a new project, on its page and in the e-mail it copies: `accent`, a colour such as `#1f4e79`, and `font`, font names separated by commas. Both optional; anything else is refused when building. |
 | `diagnostics` | `false` | `true` adds the diagnostic tools (`diag_*`), the validation skills and a hook log. For validating an installation; keep `false` for users. |
@@ -238,12 +240,30 @@ provide uv to a plugin, so IT deploys it ([decision 9](decisions.md#9--it-provid
 | Updates | IT updates uv like any other tool, after checking it against the connector's tests. A uv too old for an option the plugin uses fails to start the connector, with the error in Claude Desktop's logs |
 | Computers that already have uv | Developers and IT keep their own uv: with an absolute path in the build, the connector uses IT's. The download cache is shared, which is harmless. Environment variables starting with `UV_` still apply: do not set them globally on business users' computers |
 
+## Several plugins on one computer
+
+An organization may build more than one plugin from eunomai-business, one per kind of project: for example
+`acme-apps` for applications made from its application template, and `acme-web` for its web projects. Each is a
+configuration of its own, with its own `plugin_name`, and a person installs those they need.
+
+| Each plugin has its own | Why |
+|---|---|
+| Name, tools and skills | Claude tells them apart by name: the specialist of one never calls the tools of another |
+| Folder on the computer (`%LOCALAPPDATA%\<name>`) | Sign-ins, project requests, previews and logs never mix |
+| Workspaces folder | A project belongs to the plugin that cloned it |
+| Guard | Each guard protects the workspaces its own connector registered, and only matches its own tools |
+| `allowed_technologies`, `deny`, `support_email`, `organization_context` | What fits one kind of project, the rules it needs and the team that supports it |
+
+The program is the same in every plugin: only the name the build gives it changes. A plugin built before names were
+configurable is `eunomai-business`, and keeps its folder, sign-ins and workspaces.
+
 ## Environment variables the plugin sets for its connector
 
 Set by the plugin from the build; listed so nothing is hidden. Users never set them.
 
 | Variable | Content |
 |---|---|
+| `EUNOMAI_PLUGIN` | `plugin_name`: whose folder, sign-ins and workspaces the connector uses. The hooks get it as `--plugin` |
 | `EUNOMAI_PROVIDERS` | The `providers` object, as JSON |
 | `EUNOMAI_WORKSPACES_ROOT` | `workspaces_root` |
 | `EUNOMAI_DIAGNOSTICS` | `1` or `0`, from `diagnostics` |

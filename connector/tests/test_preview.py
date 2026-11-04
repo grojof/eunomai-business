@@ -463,7 +463,7 @@ def test_a_task_in_the_cloud_is_refused_by_the_guard(monkeypatch):
 def test_the_guard_covers_both_tools():
     import re
     template = Path(__file__).parents[2] / "plugin" / "hooks" / "hooks.json.template"
-    matcher = json.loads(template.read_text())["hooks"]["PreToolUse"][0]["matcher"]
+    matcher = json.loads(template.read_text().replace("{{PLUGIN}}", "eunomai-business"))["hooks"]["PreToolUse"][0]["matcher"]
     assert re.search(matcher, "mcp__plugin_eunomai-business_eunomai-business__app_preview")
     assert re.search(matcher, "mcp__eunomai-business__app_preview_stop")
 

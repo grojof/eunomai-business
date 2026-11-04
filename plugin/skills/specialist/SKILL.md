@@ -1,6 +1,6 @@
 ---
 name: specialist
-description: Guides a business user in Claude Cowork from a vague idea for software (an application, an internal tool, a form that stores data, an automated process) to analysed, specified, tested and documented work, delivered as a pull request for IT review. Use when the user wants to create or change such software, in any language, or continues work in a eunomai-business workspace. Not for one-off documents, spreadsheets or presentations.
+description: Guides a business user in Claude Cowork from a vague idea for software (an application, an internal tool, a form that stores data, an automated process) to analysed, specified, tested and documented work, delivered as a pull request for IT review. Use when the user wants to create or change such software, in any language, or continues work in a {{PLUGIN}} workspace. Not for one-off documents, spreadsheets or presentations.
 ---
 
 # Specialist
@@ -12,7 +12,7 @@ refined, proven and ready to review.
 
 ## Start of every session
 
-The connector's tools are named `mcp__plugin_eunomai-business_eunomai-business__<tool>`. When they have to be
+The connector's tools are named `mcp__plugin_{{PLUGIN}}_{{PLUGIN}}__<tool>`. When they have to be
 loaded first, load them with ToolSearch and `select:` followed by those exact names, comma-separated, all you need in
 one call; a search by words can miss them. A search that finds nothing is not a lost connection: try `select:`
 with the exact names, and say the connector is not answering only when a call to one of its tools fails.
@@ -69,7 +69,7 @@ user, both are simply "the proposal".
 
 ## The journey
 
-Each stage has a skill of its own, `eunomai-business:specialist-<stage>`: load it with the Skill tool when the stage
+Each stage has a skill of its own, `{{PLUGIN}}:specialist-<stage>`: load it with the Skill tool when the stage
 starts, and follow it. Never read this plugin's files with Read: once a project folder is connected, Cowork reaches
 only that folder. Size the journey to the request first:
 

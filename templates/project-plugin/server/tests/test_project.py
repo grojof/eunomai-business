@@ -83,3 +83,12 @@ def test_a_failure_that_is_no_limit_keeps_its_details_on_the_computer(config, mo
     with pytest.raises(UnexpectedToolError) as failed:
         call(mcp, "project_workspaces")
     assert "division" not in str(failed.value)
+
+
+def test_the_register_is_the_named_base_plugins(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    assert project.registry_file("acme-apps") == tmp_path / "acme-apps" / "workspaces.json"
+    assert project.registry_file() == tmp_path / "eunomai-business" / "workspaces.json"
+    with pytest.raises(ValueError):
+        project.registry_file("../elsewhere")
+

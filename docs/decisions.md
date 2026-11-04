@@ -378,6 +378,6 @@ the organization's template; the person comes back, the specialist clones it and
 
 - **Consequence:** a request is a file in the connector's folder, pending, done or withdrawn, and never deleted
   ([data on computers](data-on-computers.md#on-the-users-computer)); the same name while it is pending replaces it.
-- **Consequence:** the subject always starts `eunomai-business:`, whatever the language, so a mailbox rule can
+- **Consequence:** the subject always starts with the plugin's name (`eunomai-business:` by default), whatever the language, so a mailbox rule can
   recognise a request; the person's own words are never translated.
 - **Consequence:** without `support_email` the person copies the text and sends it to IT as they usually do.

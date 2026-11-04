@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard --policy \"${CLAUDE_PLUGIN_ROOT}/policy.json\"",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard --plugin {{PLUGIN}} --policy \"${CLAUDE_PLUGIN_ROOT}/policy.json\"",
             "timeout": 60,
             "onFailure": "continue"
           }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard --policy \"${CLAUDE_PLUGIN_ROOT}/policy.json\"",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard --plugin {{PLUGIN}} --policy \"${CLAUDE_PLUGIN_ROOT}/policy.json\"",
             "timeout": 60,
             "onFailure": "continue"
           }
@@ -26,11 +26,11 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "^(Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__workspace__bash)$|^mcp__(plugin_eunomai-business_)?eunomai-business__",
+        "matcher": "^(Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__workspace__bash)$|^mcp__(plugin_{{PLUGIN}}_)?{{PLUGIN}}__",
         "hooks": [
           {
             "type": "command",
-            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard --policy \"${CLAUDE_PLUGIN_ROOT}/policy.json\"",
+            "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-guard --plugin {{PLUGIN}} --policy \"${CLAUDE_PLUGIN_ROOT}/policy.json\"",
             "timeout": 60,
             "onFailure": "block"
           }

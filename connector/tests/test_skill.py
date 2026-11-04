@@ -186,7 +186,7 @@ def test_each_stage_is_a_skill_cowork_can_load_once_a_folder_is_connected():
 def test_a_search_that_finds_no_tool_is_not_a_lost_connection():
     """On 2026-11-03 a search by words missed workspace_clone and the person was told to check their VPN."""
     start = plain(SPECIALIST.split("## Start of every session")[1].split("1. **Sign-in:**")[0])
-    assert "`mcp__plugin_eunomai-business_eunomai-business__<tool>`" in start and "`select:`" in start
+    assert "`mcp__plugin_{{PLUGIN}}_{{PLUGIN}}__<tool>`" in start and "`select:`" in start
     assert "is not a lost connection" in start and "only when a call to one of its tools fails" in start
 
 

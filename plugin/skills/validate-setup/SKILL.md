@@ -1,11 +1,11 @@
 ---
 name: validate-setup
-description: Validate an eunomai-business installation (where the local connector and hooks run, reachability of internal hosts, sign-in with every provider) and report the results as a table. Only present in builds with diagnostics enabled. Use when the user asks to validate the setup, run the eunomai checks, or test the connector.
+description: Validate a {{PLUGIN}} installation (where the local connector and hooks run, reachability of internal hosts, sign-in with every provider) and report the results as a table. Only present in builds with diagnostics enabled. Use when the user asks to validate the setup, run the eunomai checks, or test the connector.
 ---
 
 # Validate the setup
 
-Run the checks in this order with the `eunomai-business` connector tools. Do not change anything else and never
+Run the checks in this order with the `{{PLUGIN}}` connector tools. Do not change anything else and never
 print tokens. If a tool is missing, say so: that is a result too (the connector did not start). Reply in the
 language the user writes in; keep tool names, hypothesis numbers and error texts as they are.
 
@@ -18,7 +18,7 @@ language the user writes in; keep tool names, hypothesis numbers and error texts
    retrying further). Note `stored_bytes` and `token_bytes` (sizes only) and any error text verbatim.
 4. `whoami(provider)` again for each provider, to confirm the stored sign-in works.
 5. `diag_hook_log` — say whether hook lines exist, on which host and with which shell. If the session context
-   contains a line starting with `[eunomai-business] SessionStart hook ran`, quote it.
+   contains a line starting with `[{{PLUGIN}}] SessionStart hook ran`, quote it.
 6. Guard probe (H9). None of these files exist; the point is whether a hook stops the tool first:
    a. with your file-reading tool, read `eunomai-guard-test-json.txt`;
    b. with your shell, run `cat eunomai-guard-test-exit2.txt`;
