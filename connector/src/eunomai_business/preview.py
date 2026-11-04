@@ -62,6 +62,41 @@ _SYSTEM = ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "OS", "N
            "PROCESSOR_ARCHITECTURE", "LANG", "LC_ALL", "LC_CTYPE", "TZ",
            # where installed programs are, so a browser the computer has is found: never downloaded
            "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432")
+# The same folders from Windows itself, for those the connector's own environment lacks: in a Cowork test on 2026-11-04
+# the host started it without PROGRAMFILES(X86), where Edge is installed, and no browser test could start.
+_PROGRAM_FOLDERS = {"PROGRAMFILES": "{905E63B6-C1BF-494E-B29C-65B732D3D21A}",
+                    "PROGRAMFILES(X86)": "{7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E}",
+                    "PROGRAMW6432": "{6D809377-6AF0-444B-8957-A3773F02200E}"}
+
+
+def _known_folder(folder_id: str) -> str:
+    """A folder as Windows names it (SHGetKnownFolderPath), or "" where it has none or this is not Windows."""
+    if sys.platform != "win32":
+        return ""
+    import ctypes
+    import uuid
+    from ctypes import wintypes
+
+    class _Guid(ctypes.Structure):
+        _fields_ = [("data", ctypes.c_byte * 16)]
+
+    guid = _Guid()
+    ctypes.memmove(guid.data, uuid.UUID(folder_id).bytes_le, 16)
+    found = ctypes.c_wchar_p()
+    shell = ctypes.windll.shell32  # type: ignore[attr-defined]
+    shell.SHGetKnownFolderPath.argtypes = [ctypes.POINTER(_Guid), wintypes.DWORD, wintypes.HANDLE,
+                                           ctypes.POINTER(ctypes.c_wchar_p)]
+    if shell.SHGetKnownFolderPath(ctypes.byref(guid), 0, None, ctypes.byref(found)) != 0:
+        return ""
+    try:
+        return found.value or ""
+    finally:
+        ctypes.windll.ole32.CoTaskMemFree(found)  # type: ignore[attr-defined]
+
+
+def _program_folders() -> dict:
+    return {name: folder for name, folder_id in _PROGRAM_FOLDERS.items()
+            if name not in os.environ and (folder := _known_folder(folder_id))}
 # Only for installing, never for what the project runs: a proxy's address can hold a password.
 _PROXY = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy")
 _INSTALL = ("sync", "--frozen", "--no-dev", "--no-install-project", "--no-build", "--no-config", "--system-certs",
@@ -401,7 +436,7 @@ class _Preview:
         path = [str(self.environment_folder / ("Scripts" if system else "bin"))]
         if installing:
             path = [str(Path(uv).parent), *([f"{system}\\System32", system] if system else ["/usr/bin", "/bin"])]
-        built = {key: os.environ[key] for key in _SYSTEM if key in os.environ}
+        built = {**_program_folders(), **{key: os.environ[key] for key in _SYSTEM if key in os.environ}}
         built.update({"PATH": os.pathsep.join(path), "NO_COLOR": "1", "UV_PROJECT_ENVIRONMENT": str(self.environment_folder),
                       "UV_CACHE_DIR": self.uv_cache, "UV_PYTHON_INSTALL_DIR": self.uv_pythons,
                       # the person's own folders stay out of what a library finds by itself

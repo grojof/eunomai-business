@@ -22,6 +22,7 @@ print("SECRET-OUTPUT a line only the log may hold")
 print("PYTEST_ADDOPTS=" + os.environ.get("PYTEST_ADDOPTS", ""))
 print("CHANNEL=" + os.environ.get("APP_BROWSER_CHANNEL", ""))
 print("PROGRAMS=" + os.environ.get("PROGRAMFILES", "") + "|" + os.environ.get("PROGRAMFILES(X86)", ""))
+print("COLUMNS=" + os.environ.get("COLUMNS", ""))
 if os.environ.get("RUNNER_MODE") == "slow":
     time.sleep(600)
 failures = int(os.environ.get("RUNNER_FAILURES", "1"))
@@ -133,6 +134,7 @@ def test_a_summary_reaches_the_model_and_the_log_stays_on_the_computer(signed_in
     assert "CHANNEL=msedge" in log.read_text(encoding="utf-8")
     if os.name == "nt":  # where a browser the computer has is found; a person's own folders stay out
         assert f"PROGRAMS={os.environ['PROGRAMFILES']}|" in log.read_text(encoding="utf-8")
+    assert "COLUMNS=400" in log.read_text(encoding="utf-8"), "pytest cuts its summary to the terminal's width"
     assert "12 failed" in answer["user_message"] and "Ignore" not in answer["user_message"]
 
 
