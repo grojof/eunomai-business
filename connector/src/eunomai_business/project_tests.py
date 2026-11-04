@@ -93,7 +93,8 @@ def _prepare(current: _Run, declared: dict) -> dict:
     current.uv_cache, current.uv_pythons = preview._uv_folder(uv, "cache", "dir"), preview._uv_folder(uv, "python", "dir")
     current.step(uv, [*_INSTALL, *current.python], current.environment(uv, installing=True), "installing")
     preview._check_programs(current, {"setup": [], "run": declared["run"]})
-    environment = current.environment(uv, {**declared["environment"], "PYTEST_ADDOPTS": _ADDOPTS})
+    # pytest cuts each line of its summary to the terminal's width, 80 without one: the cause of an error went with it
+    environment = current.environment(uv, {**declared["environment"], "PYTEST_ADDOPTS": _ADDOPTS, "COLUMNS": "400"})
     began_at = current.log.stat().st_size if current.log.exists() else 0
     answer = current.ask({"do": "step", "limit": TIME_LIMIT,
                           **current.request(uv, [*preview._RUN, *current.python, *declared["run"]], environment)})

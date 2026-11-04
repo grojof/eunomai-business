@@ -1430,3 +1430,27 @@ def test_the_home_a_preview_gives_is_shaped_as_a_profile():
 def test_an_export_can_leave_the_folders_state_for_later(signed_in, workspaces, tmp_path):
     name, _ = project(signed_in, declaration(Path("x")))
     assert set(gitops.export_saved(name, tmp_path / "copy", gitops.project_files(name)["tip"], None, False)) == {"head"}
+
+
+def test_where_programs_are_installed_comes_from_windows_when_the_host_left_it_out(monkeypatch):
+    """On 2026-11-04 Cowork's host started the connector without PROGRAMFILES(X86), where Edge was installed."""
+    monkeypatch.delenv("PROGRAMFILES(X86)", raising=False)
+    monkeypatch.setenv("PROGRAMFILES", "C:\\Program Files")
+    asked = []
+    monkeypatch.setattr(preview, "_known_folder", lambda folder_id: asked.append(folder_id) or "C:\\Programs x86")
+    found = preview._program_folders()
+    assert found["PROGRAMFILES(X86)"] == "C:\\Programs x86"
+    assert "PROGRAMFILES" not in found, "what the host gave is kept as it is"
+    assert preview._PROGRAM_FOLDERS["PROGRAMFILES"] not in asked
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows' own known folders")
+def test_windows_names_its_program_folders():
+    folder = preview._known_folder(preview._PROGRAM_FOLDERS["PROGRAMFILES(X86)"])
+    assert folder and Path(folder).is_dir()
+
+
+def test_elsewhere_than_windows_no_folder_is_asked_for(monkeypatch):
+    monkeypatch.setattr(preview.sys, "platform", "linux")
+    assert preview._known_folder(preview._PROGRAM_FOLDERS["PROGRAMFILES"]) == ""
+
