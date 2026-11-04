@@ -1,7 +1,7 @@
 """Workspaces, versions (branches) and save points (commits), without Git installed (dulwich).
 
 Each workspace is a clone in the workspaces folder the organization sets when it builds the plugin (default
-~/eunomai-business-workspaces/<workspace>). The task has access to the workspace's folder, so Claude edits the same
+~/<plugin>-workspaces/<workspace>). The task has access to the workspace's folder, so Claude edits the same
 files the connector saves. The git sign-in token goes only to the git server's own origin, as HTTP basic auth
 (login + OAuth access token); it is never written to .git/config, only to the encrypted sign-in record.
 """
@@ -37,7 +37,7 @@ from dulwich.object_store import iter_tree_contents
 from dulwich.objects import Blob, Commit, SubmoduleEncountered, Tree, parse_tree
 from dulwich.repo import ParentsProvider, Repo
 
-from . import auth, data_dir, deps, guard
+from . import auth, data_dir, deps, guard, plugin_name
 from .support import NeedsIT, Unreachable, clean
 
 # Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
@@ -71,7 +71,7 @@ _GITLINK = 0o160000
 
 def root() -> Path:
     """Workspaces folder: EUNOMAI_WORKSPACES_ROOT with ~ and %VAR% expanded."""
-    raw = os.environ.get("EUNOMAI_WORKSPACES_ROOT") or "~/eunomai-business-workspaces"
+    raw = os.environ.get("EUNOMAI_WORKSPACES_ROOT") or f"~/{plugin_name()}-workspaces"
     path = Path(os.path.expandvars(os.path.expanduser(raw)))
     if not path.is_absolute():
         raise ValueError(f"workspaces folder must be absolute after expansion, got {raw!r}")

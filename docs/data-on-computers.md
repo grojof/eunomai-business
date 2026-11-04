@@ -12,7 +12,7 @@ related: [barriers.md, configuration.md]
 Everything eunomai-business creates, where it lives, whether it is sensitive, and what is left after
 uninstalling. Paths are for Windows; *measured* means observed on a real computer on the date given.
 
-**`<data>`** below is the connector's folder, `%LOCALAPPDATA%\eunomai-business`. Claude Desktop installed as a
+**`<data>`** below is the connector's folder, `%LOCALAPPDATA%\<plugin_name>` (`eunomai-business` by default). Claude Desktop installed as a
 Windows package (MSIX, as from the Microsoft Store) redirects *new* folders under `AppData\Local` to
 `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\eunomai-business` (measured 2026-10-24,
 `Claude_pzs8sxrjxfjjc`); if the folder already exists in the real location, for example from an earlier run
@@ -84,8 +84,8 @@ To leave nothing behind, in this order:
 2. **Sign out:** ask Claude for `sign_out` for each provider. This deletes the local tokens only.
 3. **Revoke on the servers** (the table above) if the tokens must stop working now and not at expiry.
 4. **Uninstall the plugin** in Claude Desktop.
-5. **Delete** the connector's folder, `<data>` above: `%LOCALAPPDATA%\eunomai-business` and, with Claude Desktop
-   installed as a Windows package, `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\eunomai-business`.
+5. **Delete** the connector's folder, `<data>` above: `%LOCALAPPDATA%\<plugin_name>` and, with Claude Desktop
+   installed as a Windows package, `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\<plugin_name>`.
    Check both.
 6. **Clean uv's cache** of the connector: `uv cache clean eunomai-business`. If uv is used for nothing else,
    remove uv itself following uv's uninstall guide.

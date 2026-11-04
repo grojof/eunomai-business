@@ -15,12 +15,12 @@ import socket
 import sys
 import time
 
-from . import data_dir
+from . import data_dir, plugin_name
 
 LOG_NAME = "hooks.log"
 _LOG_LIMIT = 1_000_000  # bytes
 _GUARD_TEST = {"eunomai-guard-test-json": "json", "eunomai-guard-test-exit2": "exit2"}
-_DENIED = "eunomai-business guard test (H9): this file is protected."
+_DENIED = "guard test (H9): this file is protected."
 
 
 def _shell_hint() -> str:
@@ -53,6 +53,8 @@ def _process_start(pid: int) -> float | None:
 
 def main() -> None:
     started = time.time()
+    if sys.argv[1:2] == ["--plugin"] and len(sys.argv) > 2:  # the build names the plugin whose folder it writes to
+        os.environ["EUNOMAI_PLUGIN"] = sys.argv[2]
     try:
         payload = json.load(sys.stdin) if not sys.stdin.isatty() else {}
     except Exception:
@@ -92,7 +94,7 @@ def main() -> None:
     except OSError:
         pass
     if event == "SessionStart":
-        print(f"[eunomai-business] SessionStart hook ran on host {entry['host']} ({entry['os']}), "
+        print(f"[{plugin_name()}] SessionStart hook ran on host {entry['host']} ({entry['os']}), "
               f"shell {entry['shell']}, CLAUDE_CODE_REMOTE={entry['remote']}, "
               f"remote session id {'set' if entry['remote_session'] else 'not set'}.")
     if guard == "json":

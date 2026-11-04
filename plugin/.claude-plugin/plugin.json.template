@@ -1,0 +1,5 @@
+{
+  "name": "{{PLUGIN}}",
+  "version": "0.1.0",
+  "description": "{{PLUGIN_DESCRIPTION}}"
+}

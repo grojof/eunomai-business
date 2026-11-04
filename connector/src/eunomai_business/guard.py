@@ -22,7 +22,7 @@ import re
 import sys
 from typing import NamedTuple
 
-from . import data_dir, rules
+from . import data_dir, plugin_name, rules
 
 CONTEXT_FILES = {"agents.md", "claude.md"}
 # Claude's configuration, the repository's, the project's declaration, and continuous integration, which runs on
@@ -584,7 +584,7 @@ def _inside(text: str, names: set[str]) -> bool:
 # Cowork task in the cloud cannot reach: such a task is refused outright, prompt by prompt and tool by tool. Claude
 # Code sets these variables in cloud sessions for hooks to read; the PreToolUse hook's onFailure also blocks when
 # the hook cannot start there.
-CLOUD = ("this Cowork task runs in the cloud, and eunomai-business only works with tasks on the user's computer. "
+CLOUD = ("this Cowork task runs in the cloud, and this plugin only works with tasks on the user's computer. "
          "Ask the user to start a new task on this computer; if Cowork offers no way to, IT has to turn off running "
          "tasks in the cloud for the organization")
 
@@ -628,19 +628,19 @@ def load_policy(path: str | None) -> list[dict]:
         policy = json.load(handle).get("deny", [])
     errors = rules.problems(policy, examples=False)
     if errors:
-        raise ValueError("eunomai-business: the packaged deny rules are invalid: " + "; ".join(errors))
+        raise ValueError(f"{plugin_name()}: the packaged deny rules are invalid: " + "; ".join(errors))
     return policy
 
 
 def _refuse_the_cloud(event: str | None) -> None:
     if event == "UserPromptSubmit":
-        print(json.dumps({"decision": "block", "reason": f"eunomai-business: {CLOUD}."}))
+        print(json.dumps({"decision": "block", "reason": f"{plugin_name()}: {CLOUD}."}))
     elif event == "SessionStart":
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
-                                                 "additionalContext": f"eunomai-business: {CLOUD}."}}))
+                                                 "additionalContext": f"{plugin_name()}: {CLOUD}."}}))
     else:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                                 "permissionDecisionReason": f"eunomai-business: {CLOUD}."}}))
+                                                 "permissionDecisionReason": f"{plugin_name()}: {CLOUD}."}}))
     sys.exit(0)
 
 
@@ -649,7 +649,10 @@ def main(argv: list[str] | None = None) -> None:
     calls are checked, and input it cannot read is let through: version_save still holds for workspaces."""
     parser = argparse.ArgumentParser(description="eunomai-business's guard hook.")
     parser.add_argument("--policy", help="the organization's deny rules (policy.json in the plugin)")
+    parser.add_argument("--plugin", help="the plugin's name, as the build wrote it: whose workspaces it guards")
     arguments = parser.parse_args(argv)
+    if arguments.plugin:
+        os.environ["EUNOMAI_PLUGIN"] = arguments.plugin
     try:
         payload = json.load(sys.stdin)
     except Exception:
@@ -662,5 +665,5 @@ def main(argv: list[str] | None = None) -> None:
     found = decide(payload, load_policy(arguments.policy))
     if found:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                                 "permissionDecisionReason": f"eunomai-business: {found}."}}))
+                                                 "permissionDecisionReason": f"{plugin_name()}: {found}."}}))
     sys.exit(0)

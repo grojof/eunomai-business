@@ -16,6 +16,8 @@ from urllib.parse import quote
 import httpx
 import urllib3
 
+from . import plugin_name
+
 # Mistakes in how a tool was called: Claude fixes the call. A server that cannot be reached is the user's network.
 # Anything else unexpected goes to IT, never to the user.
 _FOR_CLAUDE = (ValueError, FileExistsError, FileNotFoundError, PermissionError)
@@ -62,14 +64,15 @@ def report(error: NeedsIT) -> dict:
     lines = [f"Problem: {error.problem}", ""]
     lines += [f"{key}: {clean(value)}" for key, value in error.details.items()]
     build = os.environ.get("EUNOMAI_BUILD", "").strip()
-    lines += ["", f"Connector: eunomai-business {_connector_version()}" + (f" (build {build})" if build else ""),
+    lines += ["", f"Connector: eunomai-business {_connector_version()}, plugin {plugin_name()}"
+              + (f" (build {build})" if build else ""),
               f"Computer: {platform.platform()}",
               f"Time: {time.strftime('%Y-%m-%d %H:%M:%S %z')}"]
     text = "\n".join(lines)
     result = {"status": "needs_it", "user_message": error.user_message, "it_report": text}
     address = os.environ.get("EUNOMAI_SUPPORT_EMAIL", "").strip()
     if address:
-        result["email_link"] = mail_link(address, f"eunomai-business: {clean(error.problem, 200)}", text)
+        result["email_link"] = mail_link(address, f"{plugin_name()}: {clean(error.problem, 200)}", text)
     return result
 
 

@@ -72,7 +72,7 @@ class Connector:
     started: list = []
 
     def __init__(self, environment: dict, job: int = 0, entry: tuple[str, ...] = ()):
-        arguments = json.loads(TEMPLATE.read_text(encoding="utf-8"))["mcpServers"]["eunomai-business"]["args"]
+        arguments = json.loads(TEMPLATE.read_text(encoding="utf-8"))["mcpServers"]["{{PLUGIN}}"]["args"]
         arguments = [str(CONNECTOR) if word == "{{CONNECTOR}}" else word for word in arguments]
         uv = os.environ.get("UV") or shutil.which("uv")
         if entry:  # the same command, with a limit a test can wait for

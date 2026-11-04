@@ -1,6 +1,6 @@
 ---
 name: review-skills
-description: Reviews a skill or plugin that business users will use alongside eunomai-business (the organization's own, such as branding or document skills, or a third party's) for security risks and for conflicts with eunomai-business's quality and security rules, and reports what to change. Use when IT asks to review, vet or approve a skill or plugin, or when the specialist reported a conflict with another skill in a pull request.
+description: Reviews a skill or plugin that business users will use alongside {{PLUGIN}} (the organization's own, such as branding or document skills, or a third party's) for security risks and for conflicts with {{PLUGIN}}'s quality and security rules, and reports what to change. Use when IT asks to review, vet or approve a skill or plugin, or when the specialist reported a conflict with another skill in a pull request.
 ---
 
 # Review skills
@@ -28,7 +28,7 @@ Based on Anthropic's review checklist for skills in organizations
 9. **Coexistence.** Whether its description is so broad that it takes requests meant for other skills, the
    specialist's included.
 
-## Conflicts with eunomai-business's rules
+## Conflicts with {{PLUGIN}}'s rules
 
 | Rule | What breaks it in a skill |
 |---|---|

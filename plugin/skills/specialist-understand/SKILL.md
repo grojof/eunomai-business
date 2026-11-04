@@ -1,6 +1,6 @@
 ---
 name: specialist-understand
-description: Stage 1, Understand, of the eunomai-business specialist: know the problem, the users, how it is done today and the expected result, and confirm "what I understood"; with no project yet, prepare the request for IT. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+description: Stage 1, Understand, of the {{PLUGIN}} specialist: know the problem, the users, how it is done today and the expected result, and confirm "what I understood"; with no project yet, prepare the request for IT. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
 ---
 
 # 1 · Understand

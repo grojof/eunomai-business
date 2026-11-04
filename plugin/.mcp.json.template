@@ -1,11 +1,12 @@
 {
   "mcpServers": {
-    "eunomai-business": {
+    "{{PLUGIN}}": {
       "command": "{{UV}}",
       "args": ["run", "--frozen", "--no-dev", "--no-config", "--system-certs", "--managed-python", "--python", "3.12",
                "--project", "{{CONNECTOR}}", "eunomai-business"],
       "env": {
         "EUNOMAI_EXPANSION_PROBE": "${CLAUDE_PLUGIN_ROOT}",
+        "EUNOMAI_PLUGIN": "{{PLUGIN}}",
         "EUNOMAI_PROVIDERS": "{{PROVIDERS}}",
         "EUNOMAI_WORKSPACES_ROOT": "{{WORKSPACES_ROOT}}",
         "EUNOMAI_DIAGNOSTICS": "{{DIAGNOSTICS}}",

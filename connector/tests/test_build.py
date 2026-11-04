@@ -26,7 +26,7 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     hooks = json.loads((tmp_path / "eunomai-business" / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
     assert list(hooks) == ["SessionStart", "UserPromptSubmit", "PreToolUse"]  # the guard alone, on three events
     assert all(len(entries) == 1 for entries in hooks.values())
-    guard_command = 'eunomai-business-guard --policy "${CLAUDE_PLUGIN_ROOT}/policy.json"'
+    guard_command = 'eunomai-business-guard --plugin eunomai-business --policy "${CLAUDE_PLUGIN_ROOT}/policy.json"'
     assert all(e[0]["hooks"][0]["command"].endswith(guard_command) for e in hooks.values())
     guard = hooks["PreToolUse"][0]
     assert "Write" in guard["matcher"] and "mcp__workspace__bash" in guard["matcher"]
@@ -195,3 +195,53 @@ def test_a_wrong_variant_builds_nothing(tmp_path, capsys, variants, argument, me
     out = tmp_path / "dist"
     assert build.main(["--config", str(config), "--variants", str(folder), "--out", str(out), argument]) == 1
     assert message in capsys.readouterr().err and not out.exists()
+
+
+def built(tmp_path: Path, name: str, **settings) -> Path:
+    build.build(dict(EXAMPLE, plugin_name=name, **settings), tmp_path)
+    return tmp_path / name
+
+
+def test_by_default_the_plugin_is_eunomai_business(tmp_path):
+    archive = build.build(dict(EXAMPLE), tmp_path)
+    assert archive.name == "eunomai-business.zip"
+    manifest = json.loads((tmp_path / "eunomai-business" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest["name"] == "eunomai-business" and manifest["description"] == build.DEFAULT_DESCRIPTION
+    mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+    assert list(mcp) == ["eunomai-business"] and mcp["eunomai-business"]["env"]["EUNOMAI_PLUGIN"] == "eunomai-business"
+
+
+def test_an_organization_names_its_plugin_everywhere_the_plugin_is_named(tmp_path):
+    folder = built(tmp_path, "acme-apps", plugin_description="Applications made from the organization's template.")
+    assert (tmp_path / "acme-apps.zip").is_file()
+    manifest = json.loads((folder / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest == {"name": "acme-apps", "version": manifest["version"],
+                        "description": "Applications made from the organization's template."}
+    server = json.loads((folder / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+    assert list(server) == ["acme-apps"]
+    assert server["acme-apps"]["args"][-1] == "eunomai-business", "the program keeps its name; the plugin changes"
+    assert server["acme-apps"]["env"]["EUNOMAI_PLUGIN"] == "acme-apps"
+    assert server["acme-apps"]["env"]["EUNOMAI_WORKSPACES_ROOT"] == "~/acme-apps-workspaces"
+    hooks = json.loads((folder / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+    assert all("--plugin acme-apps --policy" in entries[0]["hooks"][0]["command"] for entries in hooks.values())
+    skills = {path: path.read_text(encoding="utf-8") for path in (folder / "skills").rglob("*.md")}
+    assert not [path for path, text in skills.items() if "{{" in text or "eunomai-business" in text]
+    specialist = skills[folder / "skills" / "specialist" / "SKILL.md"]
+    assert "`mcp__plugin_acme-apps_acme-apps__<tool>`" in specialist and "`acme-apps:specialist-<stage>`" in specialist
+
+
+def test_a_set_workspaces_root_is_kept_whatever_the_name(tmp_path):
+    folder = built(tmp_path, "acme-web", workspaces_root="D:/projects/web")
+    server = json.loads((folder / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["acme-web"]
+    assert server["env"]["EUNOMAI_WORKSPACES_ROOT"] == "D:/projects/web"
+
+
+@pytest.mark.parametrize("name", ["Acme", "acme apps", "acme_apps", "-acme", "a" * 41, "acme/apps", "acme.apps", ""])
+def test_a_plugin_name_that_is_not_plain_is_refused(name):
+    assert any(error.startswith("plugin_name:") for error in build.validate(dict(EXAMPLE, plugin_name=name)))
+
+
+@pytest.mark.parametrize("description", ["", "   ", "x" * 301, 5])
+def test_a_plugin_description_must_be_short_text(description):
+    errors = build.validate(dict(EXAMPLE, plugin_description=description))
+    assert "plugin_description must be text of at most 300 characters" in errors

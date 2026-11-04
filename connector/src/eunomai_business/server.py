@@ -6,9 +6,10 @@ import os
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
-from . import auth, deps, gitops, hook, preview, probe, project_request as requests_for_it, project_tests, settings, support
+from . import (auth, deps, gitops, hook, plugin_name, preview, probe, project_request as requests_for_it,
+               project_tests, settings, support)
 
-mcp = MCPServer("eunomai-business", instructions=(
+mcp = MCPServer(plugin_name(), instructions=(
     "The user is not technical. When a tool result has a `user_message`, show that message, in the user's "
     "language, and nothing technical. When `status` is \"needs_it\", the connector stopped to keep the user's work "
     "safe: say so with `user_message` and offer `email_link`, which opens an e-mail to IT with the report already "

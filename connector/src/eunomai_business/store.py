@@ -11,9 +11,9 @@ import json
 import os
 import sys
 
-from . import data_dir
+from . import data_dir, plugin_name
 
-_SERVICE = "eunomai-business"
+_SERVICE = plugin_name()  # the keyring entry, elsewhere than on Windows: one per plugin
 
 
 def _key(name: str) -> str:

@@ -14,7 +14,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-from . import data_dir, message_page, settings
+from . import data_dir, message_page, plugin_name, settings
 
 # A suggestion IT may change: lowercase letters, digits and hyphens, which every git hosting accepts as a repository
 # name and every file system as a file name. Windows' reserved device names are refused, as for workspaces.
@@ -28,7 +28,6 @@ _QUESTIONS = 30
 # Characters that change how a line reads without being seen: bidirectional overrides and isolates.
 _INVISIBLE = re.compile("[‪-‮⁦-⁩]")
 _SECTIONS = ("purpose", "users", "today", "first_version")
-_SUBJECT = "eunomai-business: "  # fixed, so a mailbox rule can recognise a request in any language
 # The fixed text, in the organization's documentation language (docs_language); any other language reads English.
 # The person's own words are never translated.
 WORDS = {
@@ -137,7 +136,8 @@ def parts(fields: dict) -> tuple[str, list[str], list[tuple[str, str | list[str]
 
 def message(fields: dict) -> tuple[str, str]:
     """(subject, text) of a request, in its language. The same fields always give the same message."""
-    subject = _SUBJECT + WORDS[fields["language"]]["subject"].format(name=fields["name"])
+    # The plugin's name first, in any language, so a mailbox rule can recognise a request, plugin by plugin
+    subject = f"{plugin_name()}: " + WORDS[fields["language"]]["subject"].format(name=fields["name"])
     title, lead, sections = parts(fields)
     lines = [title, "", *lead]
     for heading, content in sections:
