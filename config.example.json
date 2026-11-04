@@ -29,12 +29,27 @@
     {
       "rule": "Bash(npm *)",
       "reason": "Node packages are not among the organization's technologies",
-      "examples": {"denied": ["npm install left-pad", "cd app && npm ci"], "allowed": ["uv run pytest"]}
+      "examples": {
+        "denied": [
+          "npm install left-pad",
+          "cd app && npm ci"
+        ],
+        "allowed": [
+          "uv run pytest"
+        ]
+      }
     },
     {
       "rule": "Bash(pip install *)",
       "reason": "dependencies go through uv and the project's lock file",
-      "examples": {"denied": ["pip install requests"], "allowed": ["uv add requests"]}
+      "examples": {
+        "denied": [
+          "pip install requests"
+        ],
+        "allowed": [
+          "uv add requests"
+        ]
+      }
     }
   ],
   "_organization": "What the specialist should know about the organization (what it does, systems that already exist), and which of its skills to use for what. These come before anything personal in a user's session. See docs/configuration.md",
@@ -45,6 +60,8 @@
       "use_for": "the look of web pages and applications"
     }
   ],
+  "_platform": "The git hosting: gitea. github and gitlab are refused by the build until the connector has their code (docs/configuration.md#the-git-hosting-platform)",
+  "platform": "gitea",
   "providers": {
     "directory": {
       "authorize_url": "https://login.microsoftonline.com/<tenant id>/oauth2/v2.0/authorize",
