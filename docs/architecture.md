@@ -151,7 +151,8 @@ sequenceDiagram
 |---|---|---|
 | `auth` | Sign-in with any OAuth 2.0 provider (authorization code + PKCE, loopback redirect), token refresh | Standard OAuth 2.0; nothing server-specific |
 | `store` | Keeps sign-in records encrypted per user | The operating system (DPAPI on Windows, keyring elsewhere) |
-| `gitops` | Workspaces, versions, save points, sending, pull requests | Standard git over HTTPS (dulwich), except two Gitea-specific parts below |
+| `gitops` | Workspaces, versions, save points, sending, pull requests | Standard git over HTTPS (dulwich); pull requests and reviews through `hosting` |
+| `hosting` | The git hosting's own API: open and update a pull request, find a version's, read its reviews | One interface, one class per platform: Gitea; GitHub and GitLab refused until they have their class |
 | `server` | Exposes the tools to Claude (MCP over stdio): `sign_in_*`, `whoami`, `sign_out`, `workspace_*`, `version_*`, `specialist_settings`, `dependency_check`, `dependency_audit`, `app_preview`, `app_preview_stop`, `app_tests`, `project_request`, `project_request_done`, `project_request_withdraw`; `diag_*` only with diagnostics. Turns every stop into a plain message for the user and a report for IT | MCP |
 | `preview` | `app_preview`, off by default: the saved version in a temporary folder, audited, run through uv on 127.0.0.1, found again by any connector, with its whole process tree stopped on request and after 60 minutes ([barriers](barriers.md#the-preview-on-the-persons-computer)) | uv; a job object on Windows, a process group elsewhere |
 | `project_tests` | `app_tests`, off by default: the project's tests on the person's computer through the preview's watcher, gate and environment; counts and at most ten failures back, the output kept for IT | As `preview` |
@@ -192,11 +193,13 @@ sequenceDiagram
 | Clone, send, branches, save points | Standard git over HTTPS | Yes |
 | Git sign-in | OAuth 2.0 public client with PKCE; user endpoint and login field configurable | Yes in principle; tested only with Gitea |
 | Sending the token | HTTP basic auth (login + OAuth token) | Works with Gitea; to be checked per hosting |
-| Pull request, its merged state, and branch link | Gitea API (`/api/v1/repos/.../pulls`, the 250 most recently updated) and Gitea web paths | **No**: Gitea only; without it, an accepted version is recognized only by its history (not after a squash merge) |
+| Pull request, its merged state, its reviews | Through `hosting.Hosting`: Gitea's API (`/api/v1/repos/.../pulls`, the 250 most recently updated) | One class per platform; Gitea's is written. Without it, an accepted version is recognized only by its history (not after a squash merge) |
 | Check that the token only goes to the git host | Compares the repository's origin (scheme, host, port) with the `userinfo_url` origin | Works when both share an origin (Gitea); GitHub uses a separate API host |
 
-**Planned:** a hosting adapter per server type (Gitea first, then GitHub and GitHub Enterprise), chosen in the
-organization's configuration. Only the hosting-specific rows above move into it.
+The platform is the build's `platform` setting ([configuration](configuration.md#the-git-hosting-platform)).
+GitHub, GitHub Enterprise and GitLab need their class of `Hosting`, written against their official API and tested
+against a real server; until then the build refuses them, so no organization ships a plugin that would fail when a
+person proposes a version. The token check and the sign-in rows above are the other parts to look at for them.
 
 ## Hooks
 

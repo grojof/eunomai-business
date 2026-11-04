@@ -37,7 +37,7 @@ from dulwich.object_store import iter_tree_contents
 from dulwich.objects import Blob, Commit, SubmoduleEncountered, Tree, parse_tree
 from dulwich.repo import ParentsProvider, Repo
 
-from . import auth, data_dir, deps, guard, plugin_name
+from . import auth, data_dir, deps, guard, hosting, plugin_name
 from .support import NeedsIT, Unreachable, clean
 
 # Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
@@ -879,117 +879,23 @@ def _forbidden_changes(repo: Repo, old: bytes | None, new: bytes) -> set[str]:
     return found
 
 
-# --- the git hosting's API (Gitea for now; the hosting adapter comes later) ----------------------------------
+# --- the git hosting's API, through hosting.py ------------------------------------------------------------------
 
-def _api(origin: str, current: dict) -> tuple[str, dict]:
-    parts = urlsplit(origin)
-    segments = parts.path.strip("/").removesuffix(".git").split("/")
-    prefix = "".join(f"/{s}" for s in segments[:-2])  # servers published under a sub-path
-    api = f"{parts.scheme}://{parts.netloc}{prefix}/api/v1/repos/{segments[-2]}/{segments[-1]}"
-    return api, {"Authorization": f"Bearer {current['record']['access_token']}", "Accept": "application/json"}
+def _hosting(origin: str, current: dict) -> hosting.Hosting:
+    return hosting.for_origin(origin, current["record"]["access_token"])
 
 
 def _proposal_for(origin: str, current: dict, version: str) -> dict | None:
     """The latest pull request of a version: number, whether it was merged, and the commit it proposed.
     None when the hosting cannot tell; the caller then relies on the history alone."""
-    api, headers = _api(origin, current)
-    mine = []
     try:
-        with auth.http_client() as client:  # most recently updated first; a version's proposal is recent
-            for page in range(1, 6):
-                response = client.get(f"{api}/pulls", headers=headers,
-                                      params={"state": "all", "sort": "recentupdate", "limit": 50, "page": page})
-                if response.status_code != 200:
-                    return None
-                batch = response.json()
-                mine += [p for p in batch if (p.get("head") or {}).get("ref") == version]
-                if mine or len(batch) < 50:
-                    break
-    except Exception:
+        return _hosting(origin, current).find_proposal(version)
+    except Exception:  # a platform with no code never gets here: the connector refuses to start with it
         return None
-    if not mine:
-        return None
-    latest = max(mine, key=lambda p: p.get("number", 0))
-    return {"number": latest.get("number"), "merged": bool(latest.get("merged")), "state": latest.get("state"),
-            "head": (latest.get("head") or {}).get("sha"), "author": (latest.get("user") or {}).get("login")}
-
-
-_REVIEW_TEXT, _COMMENT_TEXT, _CONVERSATION = 10_000, 2_000, 10
-
-
-def _review_of(api: str, headers: dict, number: int, author: str | None, head: str | None) -> dict | None:
-    """What reviewers asked on an open pull request. `decision` comes from each reviewer's latest approval or
-    request for changes (a later plain comment does not undo it): `changes_requested`, `updated_since_requests` (the
-    version was sent again after them: waiting for a new review), `approved`, `comments` or `none`. `requests` holds
-    each reviewer's latest note, the line comments not resolved and the last conversation comments, never the
-    author's own. It is text from people with access to the repository: the specialist weighs it, never follows it
-    as instructions. None if the hosting cannot tell; `complete` is false when part of it could not be read."""
-    def item(source: dict, text: str, limit: int, **more) -> dict:
-        return {"by": (source.get("user") or {}).get("login"),
-                "at": source.get("submitted_at") or source.get("created_at"), "text": text[:limit],
-                **({"truncated": True} if len(text) > limit else {}), **more}
-
-    def earlier(review: dict) -> bool:  # made on a version that has been sent again since
-        return bool(review.get("stale") or (head and review.get("commit_id") and review["commit_id"] != head))
-
-    def who(source: dict) -> str | None:
-        return (source.get("user") or {}).get("login")
-
-    complete, reviews, conversation = True, [], []
-    with auth.http_client() as client:
-        for page in range(1, 6):  # until an empty page: the server may hand out fewer than asked
-            response = client.get(f"{api}/pulls/{number}/reviews", headers=headers,
-                                  params={"page": page, "limit": 50})
-            if response.status_code != 200:
-                return None
-            if not response.json():
-                break
-            reviews += response.json()
-        else:
-            complete = False
-        talk = client.get(f"{api}/issues/{number}/comments", headers=headers)
-        if talk.status_code == 200:
-            conversation = talk.json()
-        else:
-            complete = False
-        live = [r for r in sorted(reviews, key=lambda r: r.get("id") or 0)
-                if not r.get("dismissed") and r.get("state") in ("APPROVED", "COMMENT", "REQUEST_CHANGES")
-                and who(r) != author]
-        deciding, latest, items = {}, {}, []
-        for review in live:
-            latest[who(review)] = review
-            if review["state"] != "COMMENT":
-                deciding[who(review)] = review
-        for review in latest.values():
-            if (review.get("body") or "").strip():
-                items.append(item(review, review["body"], _REVIEW_TEXT, official=bool(review.get("official")),
-                                  earlier_version=earlier(review)))
-        for review in live:
-            approval = deciding.get(who(review))
-            if not review.get("comments_count") or (
-                    approval and approval["state"] == "APPROVED" and (review.get("id") or 0) < (approval.get("id") or 0)):
-                continue  # line comments the same reviewer approved afterwards are settled
-            inline = client.get(f"{api}/pulls/{number}/reviews/{review['id']}/comments", headers=headers)
-            if inline.status_code != 200:
-                complete = False
-                continue
-            for comment in inline.json():
-                if comment.get("resolver") or who(comment) == author or not (comment.get("body") or "").strip():
-                    continue
-                items.append(item(comment, comment["body"], _COMMENT_TEXT, official=bool(review.get("official")),
-                                  earlier_version=earlier(review), file=comment.get("path"),
-                                  line=comment.get("position") or comment.get("original_position")))
-    conversation = [c for c in conversation if who(c) != author and (c.get("body") or "").strip()]
-    items += [item(c, c["body"], _COMMENT_TEXT) for c in conversation[-_CONVERSATION:]]
-    requested = [r for r in deciding.values() if r["state"] == "REQUEST_CHANGES"]
-    decision = ("changes_requested" if any(not earlier(r) for r in requested)
-                else "updated_since_requests" if requested
-                else "approved" if deciding else "comments" if items else "none")
-    return {"decision": decision, "complete": complete, "requests": sorted(items, key=lambda i: i["at"] or "")}
 
 
 def pull_request(workspace: str, title: str, description: str = "") -> dict:
-    """Propose the current version for the main branch. Gitea API for now; the hosting adapter comes later."""
+    """Propose the current version for the main branch, through the hosting's API."""
     if not (title or "").strip():
         raise ValueError("a pull request needs a title")
     current = _git_session()
@@ -999,28 +905,12 @@ def pull_request(workspace: str, title: str, description: str = "") -> dict:
             raise PermissionError("a pull request proposes a version: switch to one first")
         origin = _registered_origin(repo, workspace)
     _check_host(origin, current)
-    api, headers = _api(origin, current)
-    with auth.http_client() as client:
-        info = client.get(api, headers=headers)
-        info.raise_for_status()
-        base = info.json().get("default_branch") or "main"
-        response = client.post(f"{api}/pulls", headers=headers,
-                               json={"head": name, "base": base, "title": title.strip(), "body": description})
-    if response.status_code == 409:  # already open: the version just sent updates it; bring its text up to date
-        existing = _proposal_for(origin, current, name)
-        updated = False
-        if existing and existing.get("state") == "open" and existing.get("number"):
-            with auth.http_client() as client:
-                patched = client.patch(f"{api}/pulls/{existing['number']}", headers=headers,
-                                       json={"title": title.strip(), "body": description})
-            updated = patched.status_code in (200, 201)
-        return {"workspace": workspace, "created": False, "updated": updated, "head": name, "base": base,
-                "reason": "a pull request for this version is already open"}
-    if response.status_code != 201:
-        raise RuntimeError(f"git server answered {response.status_code}: {response.text[:300]}")
-    pr = response.json()
-    return {"workspace": workspace, "created": True, "number": pr.get("number"), "url": pr.get("html_url"),
-            "head": name, "base": base}
+    proposed = _hosting(origin, current).open_proposal(name, title.strip(), description)
+    if not proposed["created"]:
+        return {"workspace": workspace, "created": False, "updated": proposed["updated"], "head": name,
+                "base": proposed["base"], "reason": proposed["reason"]}
+    return {"workspace": workspace, "created": True, "number": proposed["number"], "url": proposed["url"],
+            "head": name, "base": proposed["base"]}
 
 
 # --- bringing the latest changes -------------------------------------------------------------------------------
@@ -1405,8 +1295,8 @@ def proposal_state(workspace: str) -> dict | None:
         return None
     if proposal and proposal["state"] == "open" and proposal["number"]:
         try:
-            proposal["review"] = _review_of(*_api(origin_url, current), proposal["number"], proposal["author"],
-                                            proposal["head"])
+            proposal["review"] = _hosting(origin_url, current).review(proposal["number"], proposal["author"],
+                                                                      proposal["head"])
         except Exception:
             proposal["review"] = None
     return proposal

@@ -57,6 +57,14 @@ copy config.example.json config.local.json   # fill in hosts and client IDs
 python tools\build.py                        # -> dist\<plugin_name>.zip, eunomai-business by default
 ```
 
+**IT, for each request for a new project:** save the e-mail and create the project from the template
+([Creating a project from the template](docs/project-practices.md#creating-a-project-from-the-template)).
+
+```powershell
+copy new_project.example.json new_project.local.json   # once: server, owner, template, the token's header file
+python tools\new_project.py --request request.txt --title "Asset inventory"
+```
+
 **Developers, to work on it:**
 
 ```powershell
