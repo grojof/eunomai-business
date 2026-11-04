@@ -74,3 +74,23 @@ def test_the_plugin_depends_on_eunomai_business_and_carries_no_tests(tmp_path):
         for name in names:
             if name.endswith((".json", ".md", ".py", ".toml")):
                 assert b"\r" not in built.read(name), name
+
+
+def test_a_project_plugin_depends_on_the_organizations_base_plugin_by_its_name(tmp_path):
+    cfg = dict(copy.deepcopy(EXAMPLE), base_plugin="acme-apps")
+    archive = build.build(cfg, tmp_path)
+    with zipfile.ZipFile(archive) as built:
+        assert json.loads(built.read(".claude-plugin/plugin.json"))["dependencies"] == ["acme-apps"]
+        assert json.loads(built.read("project.json"))["base_plugin"] == "acme-apps"
+
+
+@pytest.mark.parametrize("base", ["Acme", "acme apps", "../acme", "", 5])
+def test_a_base_plugin_that_is_not_a_plugins_name_is_refused(base):
+    errors = build.validate(dict(copy.deepcopy(EXAMPLE), base_plugin=base))
+    assert any(error.startswith("base_plugin:") for error in errors)
+
+
+def test_a_project_plugin_cannot_take_its_base_plugins_name():
+    errors = build.validate(dict(copy.deepcopy(EXAMPLE), base_plugin="acme-apps", name="acme-apps"))
+    assert any("and not acme-apps" in error for error in errors)
+

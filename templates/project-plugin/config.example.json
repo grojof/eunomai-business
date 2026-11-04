@@ -5,6 +5,8 @@
   "display_name": "Example project",
   "description": "Tools and rules of the Example project, next to eunomai-business.",
   "version": "0.1.0",
+  "_base_plugin": "The name of the organization's eunomai-business plugin, as its build named it (plugin_name): the project plugin depends on it and reads the workspaces it cloned. Default eunomai-business.",
+  "base_plugin": "eunomai-business",
   "_uv": "The same uv as eunomai-business's build: IT deploys it at a fixed version and absolute path.",
   "uv": "uv",
   "_repositories": "The project's repositories (https). A workspace eunomai-business cloned from one of them is the project's.",

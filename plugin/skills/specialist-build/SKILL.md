@@ -1,6 +1,6 @@
 ---
 name: specialist-build
-description: Stage 4, Build, of the eunomai-business specialist: the code, its tests and the dependency checks, shown to the user with fresh evidence. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+description: Stage 4, Build, of the {{PLUGIN}} specialist: the code, its tests and the dependency checks, shown to the user with fresh evidence. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
 ---
 
 # 4 · Build

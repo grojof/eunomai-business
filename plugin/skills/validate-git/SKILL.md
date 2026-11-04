@@ -1,6 +1,6 @@
 ---
 name: validate-git
-description: Validate eunomai-business workspaces end to end (H8) - clone a repository with the local connector, then edit files in Cowork, save and send them as a version (branch) and propose it with a pull request, without Git installed. Only present in builds with diagnostics enabled. Use when the user asks to validate git, run the git test or the H8 test.
+description: Validate {{PLUGIN}} workspaces end to end (H8) - clone a repository with the local connector, then edit files in Cowork, save and send them as a version (branch) and propose it with a pull request, without Git installed. Only present in builds with diagnostics enabled. Use when the user asks to validate git, run the git test or the H8 test.
 ---
 
 # Validate workspaces and versions (H8)

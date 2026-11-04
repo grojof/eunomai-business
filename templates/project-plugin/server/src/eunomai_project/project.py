@@ -8,6 +8,7 @@ Standard library only: the hook imports this module without the server's depende
 
 import json
 import os
+import re
 from pathlib import Path
 
 
@@ -23,16 +24,23 @@ def repository_key(url: str | None) -> str:
     return (url or "").strip().removesuffix("/").removesuffix(".git").lower()
 
 
-def registry_file() -> Path:
-    """eunomai-business's register of workspaces: the same folder its connector uses (eunomai_business.data_dir)."""
+BASE_PLUGIN = re.compile(r"[a-z0-9][a-z0-9-]{0,39}\Z")
+
+
+def registry_file(base_plugin: str = "eunomai-business") -> Path:
+    """The base plugin's register of workspaces: the folder its connector uses (eunomai_business.data_dir), named
+    after the plugin as the organization's build named it."""
+    if not BASE_PLUGIN.match(base_plugin):
+        raise ValueError(f"base_plugin {base_plugin!r} is not a plugin's name")
     base = os.environ.get("LOCALAPPDATA") or os.path.join(Path.home(), ".local", "share")
-    return Path(base) / "eunomai-business" / "workspaces.json"
+    return Path(base) / base_plugin / "workspaces.json"
 
 
 def workspaces(config: dict) -> list[dict]:
     """This project's workspaces on this computer: folder name, path and origin."""
     try:
-        registry = json.loads(registry_file().read_text(encoding="utf-8"))
+        register = registry_file(str(config.get("base_plugin", "eunomai-business")))
+        registry = json.loads(register.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     wanted = {repository_key(url) for url in config.get("repositories", [])}

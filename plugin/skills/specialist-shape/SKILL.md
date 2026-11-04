@@ -1,6 +1,6 @@
 ---
 name: specialist-shape
-description: Stage 2, Shape, of the eunomai-business specialist: the first real screens, or a clickable prototype where code is not allowed, approved by the user. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+description: Stage 2, Shape, of the {{PLUGIN}} specialist: the first real screens, or a clickable prototype where code is not allowed, approved by the user. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
 ---
 
 # 2 · Shape

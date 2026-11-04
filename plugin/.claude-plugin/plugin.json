@@ -1,5 +1,0 @@
-{
-  "name": "eunomai-business",
-  "version": "0.1.0",
-  "description": "Versions, save points and pull requests for business users in Claude Cowork, with sign-in through the organization and barriers enforced by a local connector."
-}

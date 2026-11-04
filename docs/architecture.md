@@ -140,7 +140,7 @@ sequenceDiagram
 |---|---|---|
 | Plugin (`plugin/`) | What Claude Desktop installs: the connector's launch settings, the `specialist` skill with one skill per stage (`specialist-understand` to `specialist-deliver`), the `review-skills` skill and the file guard hook, plus validation skills and measurement hooks when diagnostics are on. Built per organization from its configuration | Built |
 | Local connector (`connector/`) | A Python program started with `uv run --frozen` on the user's computer. Claude talks to it through MCP; it runs outside Claude's sandbox ([decision 1](decisions.md#1--a-local-connector-on-the-users-computer)) | Built |
-| Build tool | `tools/build.py`: organization configuration + source → `eunomai-business.zip`, after validating the configuration | Built |
+| Build tool | `tools/build.py`: organization configuration + source → `<plugin_name>.zip`, after validating the configuration | Built |
 | Bill of materials | `tools/sbom.py` → `connector/sbom.cdx.json`, regenerated whenever `connector/uv.lock` changes | Built |
 | Maintenance | GitHub workflows: tests (Linux, Windows) started by hand and for each dependency update, the whole suite having run on a computer before each push; a weekly dependency update (`tools/update_dependencies.py`) | Built |
 | Tests | `connector/tests/`: sign-in, workspaces, versions, updates, barriers, the file guard, the dependency check and audit, the hooks, the build and the tool list, against a fake git server (`uv run --frozen --group dev pytest` in `connector/`). Those marked `preview` start real processes with uv | Built |
@@ -171,7 +171,7 @@ sequenceDiagram
   Cowork. It keeps workspaces in its own folder and returns their path; in a local Cowork session on Windows,
   Claude's file tools and the connector see the same path. A task opened without the folder asks Cowork for it and
   carries on (H23).
-- **Per-user data lives in `%LOCALAPPDATA%\eunomai-business`**, not in `CLAUDE_PLUGIN_DATA`, which points inside
+- **Per-user data lives in `%LOCALAPPDATA%\<plugin_name>`** (`eunomai-business` by default), not in `CLAUDE_PLUGIN_DATA`, which points inside
   each task's folder and does not outlive the task. Claude Desktop installed as a Windows package (MSIX) redirects
   that folder for the processes it starts unless it already exists ([where](data-on-computers.md)).
 - **Only tasks on the user's computer.** Cowork tasks may run on Anthropic's servers (Pro and Max always; Team and

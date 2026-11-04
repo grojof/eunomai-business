@@ -112,9 +112,27 @@ def test_on_the_users_computer_prompts_and_sessions_are_left_alone(monkeypatch, 
     assert run_hook(monkeypatch, capsys, {"hook_event_name": event, "prompt": "write start.bat"}) is None
 
 
+def hooks_of(plugin: str) -> dict:
+    """The hooks as the build writes them for a plugin of that name."""
+    template = (Path(__file__).parents[2] / "plugin" / "hooks" / "hooks.json.template").read_text()
+    return json.loads(template.replace("{{PLUGIN}}", plugin))["hooks"]
+
+
+@pytest.mark.parametrize("plugin, other", [("acme-apps", "acme-web"), ("acme-web", "acme-apps"),
+                                           ("acme-apps", "eunomai-business"), ("eunomai-business", "acme-apps")])
+def test_a_plugins_guard_covers_its_own_tools_and_not_another_plugins(plugin, other):
+    import re
+    matcher = hooks_of(plugin)["PreToolUse"][0]["matcher"]
+    assert re.search(matcher, f"mcp__plugin_{plugin}_{plugin}__version_save")
+    assert re.search(matcher, f"mcp__{plugin}__workspace_status")
+    for tool in (f"mcp__plugin_{other}_{other}__version_save", f"mcp__{other}__workspace_status",
+                 f"mcp__plugin_{plugin}-x_{plugin}-x__version_save", f"mcp__plugin_{plugin}_{other}__x"):
+        assert not re.search(matcher, tool), tool
+
+
 def test_the_hooks_cover_the_connectors_tools_and_nothing_else():
     import re
-    hooks = json.loads((Path(__file__).parents[2] / "plugin" / "hooks" / "hooks.json.template").read_text())["hooks"]
+    hooks = hooks_of("eunomai-business")
     matcher = hooks["PreToolUse"][0]["matcher"]
     # Claude Code tests a matcher like this one as an unanchored JavaScript regular expression: re.search
     for tool in ("Write", "Edit", "Bash", "mcp__workspace__bash", "mcp__eunomai-business__version_save",
@@ -424,3 +442,23 @@ def test_a_prototype_is_saved_only_if_it_loads_nothing_from_other_sites(signed_i
     page.write_text("<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
                     "style-src 'unsafe-inline'\"></head></html>", encoding="utf-8")
     assert gitops.save(name, "Prototype")["saved"]
+
+
+def test_a_plugins_guard_protects_its_own_workspaces_and_not_another_plugins(monkeypatch, capsys):
+    """Two plugins on one computer: each guard reads the workspaces its own connector registered."""
+    from eunomai_business import data_dir
+
+    for plugin, folder in (("acme-apps", "/home/person/acme-apps-workspaces/orders"),
+                           ("acme-web", "/home/person/acme-web-workspaces/site")):
+        monkeypatch.setenv("EUNOMAI_PLUGIN", plugin)
+        (data_dir() / "workspaces.json").write_text(json.dumps({folder: {}}), encoding="utf-8")
+    payload = {"tool_name": "Write", "tool_input": {"file_path": "/mnt/orders/AGENTS.md"}}
+    for plugin, guarded in (("acme-apps", True), ("acme-web", False)):
+        monkeypatch.delenv("EUNOMAI_PLUGIN")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        with pytest.raises(SystemExit):
+            guard.main(["--plugin", plugin])
+        out = capsys.readouterr().out
+        assert bool(out.strip()) is guarded, plugin
+        if guarded:
+            assert json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"].startswith("acme-apps: ")

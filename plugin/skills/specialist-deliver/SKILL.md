@@ -1,6 +1,6 @@
 ---
 name: specialist-deliver
-description: Stage 5, Deliver, of the eunomai-business specialist: the version sent and proposed to IT as a pull request, and what follows the review. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+description: Stage 5, Deliver, of the {{PLUGIN}} specialist: the version sent and proposed to IT as a pull request, and what follows the review. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
 ---
 
 # 5 · Deliver

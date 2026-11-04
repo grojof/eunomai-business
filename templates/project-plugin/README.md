@@ -47,7 +47,7 @@ From decision 10, checked by IT before every publish:
 
 | Rule | How the template keeps it |
 |---|---|
-| Declares eunomai-business in `dependencies` | `build.py` writes it; without eunomai-business, Cowork does not load the plugin |
+| Declares its base plugin in `dependencies` | `build.py` writes `base_plugin`, the organization's eunomai-business plugin as its build named it (`eunomai-business` by default); without it, Cowork does not load the plugin, and the project's workspaces are read from that plugin's register |
 | Its hooks act only in its project's workspaces | `project.py` takes them from eunomai-business's register of workspaces, where each one's origin was recorded when it was cloned |
 | Its hooks only deny; never `allow`, never a rewritten input | `guard.py` answers deny or nothing |
 | Its tools enforce their own limits | Every tool starts from `project.own_workspace`; the rest is the project's code, reviewed by IT |

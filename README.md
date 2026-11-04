@@ -54,7 +54,7 @@ Claude's sandbox, signs in as the user and turns the work into a pull request. D
 
 ```powershell
 copy config.example.json config.local.json   # fill in hosts and client IDs
-python tools\build.py                        # -> dist\eunomai-business.zip
+python tools\build.py                        # -> dist\<plugin_name>.zip, eunomai-business by default
 ```
 
 **Developers, to work on it:**

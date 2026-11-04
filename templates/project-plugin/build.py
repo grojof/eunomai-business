@@ -24,7 +24,8 @@ HERE = Path(__file__).resolve().parent
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache",
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov",
                                 "requirements*.txt")
-KEYS = {"name", "display_name", "description", "version", "uv", "repositories", "deny", "settings"}
+KEYS = {"name", "display_name", "description", "version", "uv", "repositories", "deny", "settings", "base_plugin"}
+DEFAULT_BASE = "eunomai-business"
 NAME = re.compile(r"^[a-z][a-z0-9-]{1,48}[a-z0-9]$")
 DISPLAY_NAME = re.compile(r"^[\w .()-]{1,60}$")
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -53,8 +54,12 @@ def _rules():
 def validate(cfg: dict) -> list[str]:
     """Every problem in the configuration, so IT fixes them in one pass. Keys starting with "_" are comments."""
     errors = [f"unknown setting {key!r}" for key in cfg if not key.startswith("_") and key not in KEYS]
-    if not NAME.match(str(cfg.get("name", ""))) or cfg.get("name") == "eunomai-business":
-        errors.append("name must be lowercase letters, digits and hyphens (3 to 50), and not eunomai-business")
+    base = cfg.get("base_plugin", DEFAULT_BASE)
+    if not isinstance(base, str) or not VARIANT.match(base):
+        errors.append("base_plugin: the name of the organization's eunomai-business plugin, as its build named it "
+                      "(lowercase letters, digits and hyphens)")
+    if not NAME.match(str(cfg.get("name", ""))) or cfg.get("name") == base:
+        errors.append(f"name must be lowercase letters, digits and hyphens (3 to 50), and not {base}")
     if not DISPLAY_NAME.match(str(cfg.get("display_name", ""))):
         errors.append("display_name must be up to 60 letters, digits, spaces, dots, hyphens or brackets")
     if not _text(cfg.get("description"), 300):
@@ -99,11 +104,12 @@ def build(cfg: dict, out_dir: Path) -> Path:
     shutil.copytree(HERE / "plugin", out, ignore=IGNORE)
     shutil.copytree(HERE / "server", out / "server", ignore=IGNORE)
     manifest = {"name": name, "version": cfg["version"], "description": cfg["description"],
-                "dependencies": ["eunomai-business"]}
+                "dependencies": [cfg.get("base_plugin", DEFAULT_BASE)]}
     (out / ".claude-plugin").mkdir(exist_ok=True)
     (out / ".claude-plugin" / "plugin.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8",
                                                         newline="\n")
     project = {key: cfg[key] for key in ("name", "display_name", "repositories", "deny", "settings") if key in cfg}
+    project["base_plugin"] = cfg.get("base_plugin", DEFAULT_BASE)  # whose register of workspaces it reads
     (out / "project.json").write_text(json.dumps(project, indent=2, ensure_ascii=False) + "\n", encoding="utf-8",
                                       newline="\n")
     uv = str(cfg.get("uv") or "uv").replace("\\", "/")
