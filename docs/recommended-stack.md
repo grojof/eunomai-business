@@ -22,7 +22,7 @@ the facts behind them in [sources](sources.md#recommended-stack).
 | Server | Python 3.12+, FastAPI, Pydantic v2; uv with `uv.lock` | Typed contracts serve the pages, an API and AI tools alike |
 | Data | PostgreSQL, SQLAlchemy 2, Alembic, psycopg 3 | Mature; versioned migrations; `numeric` arrives as `Decimal` |
 | Reading another system's SQL Server | pyodbc with Microsoft's ODBC Driver 18 and a read-only user | `decimal` arrives as `Decimal` |
-| Pages | Jinja2 with escaping always on, htmx 2.0, a little plain JavaScript in the application's own file | No Node; its authors support htmx 2 indefinitely. `business-app-base` built every form, including a searchable select, without Alpine.js: a screen holding a lot of browser state may still want its CSP build, as a decision of its own |
+| Pages | Jinja2 with escaping always on, htmx 2.0, a little plain JavaScript in the application's own file | No Node; its authors support htmx 2 indefinitely. `eunomai-business-app-base` built every form, including a searchable select, without Alpine.js: a screen holding a lot of browser state may still want its CSP build, as a decision of its own |
 | Look | Tailwind CSS 4 with daisyUI 5, behind Jinja macros | Components free to customise, with colours from one theme; screens call macros, so an organization can replace this layer without touching a screen |
 | Tables | A native HTML table with daisyUI's classes; paged, sorted, filtered and grouped on the server | Only one page of rows reaches the browser, and a native table needs no keyboard code. Tabulator and AG Grid stay for an application that truly needs spreadsheet-like editing. Exports go through Excel on the server |
 | Charts | Chart.js, one file, always with a text summary and the data as a table | MIT and 210 KB, no violation of the Content Security Policy, and tooltips that fit the theme. ECharts is richer, at 1.1 MB, and its default tooltip breaks under the policy ([measured](sources.md#measured-on-real-installations)) |
@@ -61,8 +61,8 @@ An organization does not install its layer: it clones it.
 | Piece | Owner | Contents |
 |---|---|---|
 | eunomai-business | The product, the same for every organization | This page as the recommended value for `technologies`, the guard and its [deny rules](hooks.md) |
-| `business-app-base` | A separate repository, the same for every organization | A demo application: Jinja macros with a gallery of every component, the rules for assistants in its `AGENTS.md`, and the tests that hold them |
-| The organization's base | Its IT | A clone of `business-app-base`, made once, with its brand added: daisyUI's theme (colours, radius) and logos |
+| `eunomai-business-app-base` | A separate repository, the same for every organization | A demo application: Jinja macros with a gallery of every component, the rules for assistants in its `AGENTS.md`, and the tests that hold them |
+| The organization's base | Its IT | A clone of `eunomai-business-app-base`, made once, with its brand added: daisyUI's theme (colours, radius) and logos |
 | An application | Its project | A clone of the organization's base with the demo deleted |
 | A project plugin | IT, per project | The project's tools and rules ([decision 11](decisions.md#11--project-plugins-from-a-template-a-project-declares-its-own-development)) |
 
@@ -114,6 +114,6 @@ technologies = ["Python", "FastAPI", "Pydantic", "SQLAlchemy", "Alembic", "Postg
 | An organization clones the base application, adds its brand and clones it again for an application | Measure IT's effort |
 | Generating the stylesheet in Cowork under another organization's network rules ([H20](validation/hypotheses.md)) | In a local task there, download the executable, compare its hash and generate; it has run on one sandbox so far ([measured](sources.md#measured-on-real-installations)) |
 | A person sees the application on their own computer through the connector ([H22](validation/hypotheses.md)) | On a business user's computer, in Cowork, with a clone of the base application. A server in the sandbox cannot be opened from the computer (H21) |
-| `business-app-base` ready to clone | As of 2026-10-31 it holds lists over 50,000 rows, Excel, charts and forms, and its tests run on PostgreSQL; it is private, has no licence and is still to be tried in Cowork ([guide](validation/run-the-validation.md#9--the-business-user-test-and-the-newer-checks-h11h18)) |
+| `eunomai-business-app-base` ready to clone | As of 2026-10-31 it holds lists over 50,000 rows, Excel, charts and forms, and its tests run on PostgreSQL; it is private, has no licence and is still to be tried in Cowork ([guide](validation/run-the-validation.md#9--the-business-user-test-and-the-newer-checks-h11h18)) |
 
 The first application built with this stack runs these checks first.
