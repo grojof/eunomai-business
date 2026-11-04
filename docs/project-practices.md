@@ -30,7 +30,7 @@ Its README is a skeleton the specialist fills in with the application's own map;
 a base, the base's reference goes in a folder of its own that the project reads and never edits, so the
 project's `docs/` holds only the application's pages.
 
-**With `tools/new_project.py`**, in Gitea, IT does it in one command, always the same way:
+**With `tools/new_project.py`**, IT does it in one command, always the same way:
 
 1. Once: copy `new_project.example.json` to `new_project.local.json` (git-ignored) and fill in the server, the owner
    (the organization of the projects), the template and the file that holds the `Authorization: token …` header of
@@ -59,7 +59,14 @@ project's `docs/` holds only the application's pages.
 | Check after | Reads back the protection, the access and the name | Says what to check by hand if any does not show |
 
 Certificates are always verified; `ca_file` names an organization's own authority. If a step fails after the
-repository exists, the tool says what was done and what is left, and never deletes it. Only Gitea is supported.
+repository exists, the tool says what was done and what is left, and never deletes it.
+
+| Platform (`platform`) | State |
+|---|---|
+| `gitea` (the default) | Works: every step above, tested against a fake Gitea and run against a real one |
+| `github`, `gitlab` | Refused before the server is asked anything, with what an implementation needs |
+
+Every call to a server goes through one interface, `Platform` in the tool, whose operations are the steps above. To add a platform, write its class with every operation, against its official API, test it against a real server of that platform, and list it in `PLATFORMS`. A test checks that the interface is every operation the tool asks for, and that a platform that works implements all of them; nothing else in the tool changes.
 
 **In Gitea** (template repositories exist since 1.11):
 

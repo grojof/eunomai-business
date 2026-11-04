@@ -1,6 +1,7 @@
 """IT's command that creates a project from a person's request: the request read in each language, and every step
 against a fake Gitea, in its order, with the token kept out of everything it prints."""
 
+import ast
 import base64
 import json
 import sys
@@ -272,3 +273,56 @@ def test_the_example_configuration_reads(tmp_path):
     config = new_project.read_config(tmp_path / "new_project.local.json")
     assert config.protection == new_project.PROTECTION and config.ca_file is None
     assert urlsplit(config.server).scheme == "https"
+    assert config.platform == "gitea"
+
+
+# --- platforms ---------------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("platform", ["github", "gitlab"])
+def test_a_platform_with_no_code_yet_is_refused_before_anything_is_read_or_changed(gitea, tmp_path, capsys, platform):
+    settings = {**json.loads(gitea.config.read_text(encoding="utf-8")), "platform": platform}
+    gitea.config.write_text(json.dumps(settings), encoding="utf-8")
+    for extra in ((), ("--dry-run",)):
+        code, _, err = run(gitea, tmp_path, capsys, *extra)
+        assert code == 1 and f"Nothing was changed: {platform} is not supported yet: it needs a " in err
+        assert not gitea.calls, "not even a read: the server is never asked"
+
+
+def test_an_unknown_platform_is_a_mistake_in_the_configuration(gitea, tmp_path, capsys):
+    settings = {**json.loads(gitea.config.read_text(encoding="utf-8")), "platform": "bitbucket"}
+    gitea.config.write_text(json.dumps(settings), encoding="utf-8")
+    code, _, err = run(gitea, tmp_path, capsys)
+    assert code == 1 and "platform is one of gitea, github, gitlab" in err and not gitea.calls
+
+
+def _calls_on(function: str, receiver: str) -> set[str]:
+    tree = ast.parse((ROOT / "tools" / "new_project.py").read_text(encoding="utf-8"))
+    [found] = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == function]
+    return {node.func.attr for node in ast.walk(found) if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == receiver}
+
+
+def test_the_interface_is_every_operation_the_tool_asks_of_a_platform():
+    """What `create`, `verify` and `main` call on a platform is the interface, all of it, so a new platform that
+    implements the interface cannot forget a step."""
+    asked = _calls_on("create", "platform") | _calls_on("verify", "platform") | _calls_on("main", "platform")
+    assert asked == set(new_project.Platform.OPERATIONS)
+    declared = {name for name, value in vars(new_project.Platform).items() if callable(value) and not name.startswith("_")}
+    assert declared == set(new_project.Platform.OPERATIONS)
+
+
+def test_every_platform_that_works_implements_every_operation():
+    for name, platform in new_project.PLATFORMS.items():
+        missing = [operation for operation in new_project.Platform.OPERATIONS
+                   if getattr(platform, operation) is getattr(new_project.Platform, operation)]
+        assert not missing, f"{name} does not implement {missing}"
+    assert set(new_project.PLATFORMS) | set(new_project.NOT_YET) == set(new_project.PLATFORM_NAMES)
+    assert not set(new_project.PLATFORMS) & set(new_project.NOT_YET)
+
+
+def test_no_api_address_is_written_outside_the_gitea_class():
+    source = (ROOT / "tools" / "new_project.py").read_text(encoding="utf-8")
+    start, end = source.index("class Gitea(Platform):"), source.index("NOT_YET = {")
+    assert "/api/v1" not in source[:start] + source[end:] and "/repos/" not in source[:start] + source[end:]
+

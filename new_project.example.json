@@ -1,5 +1,7 @@
 {
   "_": "Copy to new_project.local.json (git-ignored) for tools/new_project.py. No secret goes here: the token is in header_file.",
+  "_platform": "gitea. github and gitlab are refused, changing nothing, until the tool has their code: docs/project-practices.md",
+  "platform": "gitea",
   "server": "https://git.example.org",
   "owner": "example-apps",
   "template": "application-template",

@@ -15,7 +15,8 @@ proposed name, the request and the requester's git user, in the organization's d
 
 The configuration (`new_project.local.json`, git-ignored; `new_project.example.json` shows it) names the server, the
 owner, the template and a file holding the `Authorization` header, which is read and never printed. Standard library
-only, so IT needs nothing but Python. Gitea only, for now.
+only, so IT needs nothing but Python. `platform` names the hosting platform: Gitea works, and GitHub and GitLab are
+refused before anything is read or changed until each has its class (`Platform` says what one implements).
 """
 
 import argparse
@@ -59,7 +60,8 @@ FILES = {".env.example": re.compile(r'^APP_NAME="[^"\n]*"$', re.M),
          ".eunomai/project.toml": re.compile(r'^APP_NAME = "[^"\n]*"$', re.M)}
 PROTECTION = {"enable_push": False, "required_approvals": 1, "block_on_outdated_branch": True,
               "block_on_rejected_reviews": True, "dismiss_stale_approvals": True}
-CONFIG_KEYS = {"server", "owner", "template", "header_file", "actions", "protection", "ca_file"}
+CONFIG_KEYS = {"platform", "server", "owner", "template", "header_file", "actions", "protection", "ca_file"}
+PLATFORM_NAMES = ("gitea", "github", "gitlab")
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -84,6 +86,7 @@ class Config:
     actions: bool = True
     protection: dict = field(default_factory=lambda: dict(PROTECTION))
     ca_file: Path | None = None
+    platform: str = "gitea"
 
 
 def _pattern(line: str) -> re.Pattern:
@@ -140,6 +143,9 @@ def read_config(path: Path) -> Config:
     protection = {**PROTECTION, **(values.get("protection") or {})}
     if set(protection) != set(PROTECTION) or not isinstance(protection["required_approvals"], int):
         raise Refused(f"{path.name}: protection takes {', '.join(sorted(PROTECTION))}")
+    platform = values.get("platform", "gitea")
+    if platform not in PLATFORM_NAMES:
+        raise Refused(f"{path.name}: platform is one of {', '.join(PLATFORM_NAMES)}")
     if not isinstance(values.get("actions", True), bool):
         raise Refused(f"{path.name}: actions is true or false")
     base = path.parent
@@ -147,11 +153,57 @@ def read_config(path: Path) -> Config:
     return Config(server=values["server"].rstrip("/"), owner=values["owner"], template=values["template"],
                   header_file=(base / Path(values["header_file"]).expanduser()).resolve(),
                   actions=values.get("actions", True), protection=protection,
-                  ca_file=(base / Path(ca_file).expanduser()).resolve() if ca_file else None)
+                  ca_file=(base / Path(ca_file).expanduser()).resolve() if ca_file else None, platform=platform)
 
 
-class Gitea:
-    """Calls to Gitea's API. The header file's value goes only into requests, never into an error or a message."""
+class Platform:
+    """What this tool asks of the hosting platform, one method per operation. `create` and `verify` below are the same
+    for every platform and call only these. Each method reads or changes one thing and raises `Refused` with words IT
+    can act on. A new platform is one more class that implements every one, tested against a real server."""
+
+    OPERATIONS = ("check", "generate", "read_file", "commit_files", "protect", "grant_write", "turn_off_actions",
+                  "is_protected", "can_write")
+
+    def check(self, config: Config, request: Request) -> None:
+        """What must hold before anything is created: the template exists and is one, the target does not."""
+        raise NotImplementedError
+
+    def generate(self, config: Config, request: Request, title: str) -> str:
+        """The new repository from the template, private, with its content. Gives back its main branch's name."""
+        raise NotImplementedError
+
+    def read_file(self, owner: str, name: str, path: str, branch: str) -> tuple[str, str]:
+        """A file's text and the version a change must name."""
+        raise NotImplementedError
+
+    def commit_files(self, owner: str, name: str, branch: str, message: str,
+                     files: list[tuple[str, str, str]]) -> None:
+        """One commit, where the platform allows it, of (path, new text, version read) for each file."""
+        raise NotImplementedError
+
+    def protect(self, owner: str, name: str, branch: str, protection: dict) -> None:
+        raise NotImplementedError
+
+    def grant_write(self, owner: str, name: str, login: str) -> None:
+        raise NotImplementedError
+
+    def turn_off_actions(self, owner: str, name: str) -> None:
+        raise NotImplementedError
+
+    def is_protected(self, owner: str, name: str, branch: str) -> bool:
+        raise NotImplementedError
+
+    def can_write(self, owner: str, name: str, login: str) -> bool:
+        raise NotImplementedError
+
+
+def _message(answer: object) -> str:
+    return str(answer.get("message", "")) if isinstance(answer, dict) else ""
+
+
+class Gitea(Platform):
+    """Gitea's API (1.20 or later; one commit per file before). The header file's value goes only into requests,
+    never into an error or a message."""
 
     def __init__(self, config: Config):
         try:
@@ -186,25 +238,93 @@ class Gitea:
         except urllib.error.URLError as error:
             raise Refused(f"the server does not answer at {self.api}: {error.reason}") from None
 
+    def check(self, config: Config, request: Request) -> None:
+        status, template = self.call("GET", f"/repos/{config.owner}/{config.template}")
+        if status != 200 or not isinstance(template, dict):
+            raise Refused(f"the template {config.owner}/{config.template} cannot be read ({status}): check the "
+                          "configuration and the token's access")
+        if not template.get("template"):
+            raise Refused(f"{config.owner}/{config.template} is not marked as a template in its settings")
+        status, _ = self.call("GET", f"/repos/{config.owner}/{request.name}")
+        if status == 200:
+            raise Refused(f"{config.owner}/{request.name} exists already: nothing was changed. Choose another name "
+                          "with --name")
+        if status != 404:
+            raise Refused(f"whether {config.owner}/{request.name} exists cannot be told ({status})")
 
-def _message(answer: object) -> str:
-    return str(answer.get("message", "")) if isinstance(answer, dict) else ""
+    def generate(self, config: Config, request: Request, title: str) -> str:
+        status, made = self.call("POST", f"/repos/{config.owner}/{config.template}/generate", {
+            "owner": config.owner, "name": request.name, "private": True, "git_content": True, "labels": True,
+            "description": f"{title} (request {request.request})"})
+        if status != 201 or not isinstance(made, dict):
+            raise Refused(f"the repository could not be created ({status}) {_message(made)}".strip())
+        return str(made.get("default_branch") or "main")
+
+    def read_file(self, owner: str, name: str, path: str, branch: str) -> tuple[str, str]:
+        status, current = self.call("GET", f"/repos/{owner}/{name}/contents/{urllib.parse.quote(path)}"
+                                           f"?ref={urllib.parse.quote(branch)}")
+        if status != 200 or not isinstance(current, dict):
+            raise Refused(f"{path} cannot be read in {owner}/{name} ({status})")
+        return base64.b64decode(current["content"]).decode("utf-8"), str(current["sha"])
+
+    def commit_files(self, owner: str, name: str, branch: str, message: str,
+                     files: list[tuple[str, str, str]]) -> None:
+        changes = [{"operation": "update", "path": path, "sha": sha,
+                    "content": base64.b64encode(text.encode("utf-8")).decode("ascii")} for path, text, sha in files]
+        status, answer = self.call("POST", f"/repos/{owner}/{name}/contents",
+                                   {"branch": branch, "message": message, "files": changes})
+        if status in (404, 405):  # a Gitea before 1.20 has no change-files endpoint: one commit per file
+            for change in changes:
+                status, answer = self.call("PUT", f"/repos/{owner}/{name}/contents/"
+                                                  f"{urllib.parse.quote(change['path'])}",
+                                           {"branch": branch, "message": message, "sha": change["sha"],
+                                            "content": change["content"]})
+                if status not in (200, 201):
+                    break
+        if status not in (200, 201):
+            raise Refused(f"the application's name could not be committed ({status}) {_message(answer)}".strip())
+
+    def protect(self, owner: str, name: str, branch: str, protection: dict) -> None:
+        status, answer = self.call("POST", f"/repos/{owner}/{name}/branch_protections",
+                                   {"rule_name": branch, **protection})
+        if status not in (200, 201):
+            raise Refused(f"{branch} could not be protected ({status}) {_message(answer)}".strip())
+
+    def grant_write(self, owner: str, name: str, login: str) -> None:
+        status, answer = self.call("PUT", f"/repos/{owner}/{name}/collaborators/{login}", {"permission": "write"})
+        if status not in (200, 204):
+            raise Refused(f"{login} could not be given write access ({status}) {_message(answer)}".strip())
+
+    def turn_off_actions(self, owner: str, name: str) -> None:
+        status, answer = self.call("PATCH", f"/repos/{owner}/{name}", {"has_actions": False})
+        if status != 200:
+            raise Refused(f"Actions could not be turned off ({status}) {_message(answer)}".strip())
+
+    def is_protected(self, owner: str, name: str, branch: str) -> bool:
+        status, answer = self.call("GET", f"/repos/{owner}/{name}/branches/{urllib.parse.quote(branch)}")
+        return status == 200 and isinstance(answer, dict) and bool(answer.get("protected"))
+
+    def can_write(self, owner: str, name: str, login: str) -> bool:
+        status, answer = self.call("GET", f"/repos/{owner}/{name}/collaborators/{login}/permission")
+        return status == 200 and isinstance(answer, dict) and answer.get("permission") in ("write", "admin", "owner")
 
 
-def check(gitea: Gitea, config: Config, request: Request) -> None:
-    """What must hold before anything is created. Changes nothing."""
-    status, template = gitea.call("GET", f"/repos/{config.owner}/{config.template}")
-    if status != 200 or not isinstance(template, dict):
-        raise Refused(f"the template {config.owner}/{config.template} cannot be read ({status}): check the "
-                      "configuration and the token's access")
-    if not template.get("template"):
-        raise Refused(f"{config.owner}/{config.template} is not marked as a template in its settings")
-    status, _ = gitea.call("GET", f"/repos/{config.owner}/{request.name}")
-    if status == 200:
-        raise Refused(f"{config.owner}/{request.name} exists already: nothing was changed. Choose another name with "
-                      "--name")
-    if status != 404:
-        raise Refused(f"whether {config.owner}/{request.name} exists cannot be told ({status})")
+NOT_YET = {
+    "github": "it needs a GitHub class for its REST API — a repository from a template, one commit through the Git "
+              "data API, branch protection (a paid plan for private repositories), collaborators, Actions "
+              "permissions — tested against a real GitHub",
+    "gitlab": "it needs a GitLab class for its REST API v4 — a project from a group template, a commit of several "
+              "files, a protected branch, members, CI/CD settings — tested against a real GitLab",
+}
+PLATFORMS = {"gitea": Gitea}
+"""What works. The names in NOT_YET are accepted in the configuration and refused before anything is read or changed,
+so a tool that has no code for a platform never does half of what it should."""
+
+
+def platform_for(config: Config) -> Platform:
+    if config.platform in NOT_YET:
+        raise Refused(f"{config.platform} is not supported yet: {NOT_YET[config.platform]}")
+    return PLATFORMS[config.platform](config)
 
 
 def named(text: str, path: str, title: str) -> str:
@@ -217,75 +337,44 @@ def named(text: str, path: str, title: str) -> str:
     return pattern.sub(lambda _: line, text, count=1)
 
 
-def create(gitea: Gitea, config: Config, request: Request, title: str, done: list[str]) -> str:
+def create(platform: Platform, config: Config, request: Request, title: str, done: list[str]) -> str:
     """Every step, each said in `done` once it holds. Gives back the main branch's name."""
     owner, name = config.owner, request.name
-    status, made = gitea.call("POST", f"/repos/{owner}/{config.template}/generate", {
-        "owner": owner, "name": name, "private": True, "git_content": True, "labels": True,
-        "description": f"{title} (request {request.request})"})
-    if status != 201 or not isinstance(made, dict):
-        raise Refused(f"the repository could not be created ({status}) {_message(made)}".strip())
+    branch = platform.generate(config, request, title)
     done.append(f"created {owner}/{name} from {owner}/{config.template}")
-    branch = str(made.get("default_branch") or "main")
 
-    changes = []
+    files = []
     for path in FILES:
-        status, current = gitea.call("GET", f"/repos/{owner}/{name}/contents/{urllib.parse.quote(path)}"
-                                            f"?ref={urllib.parse.quote(branch)}")
-        if status != 200 or not isinstance(current, dict):
-            raise Refused(f"{path} cannot be read in the new repository ({status})")
-        text = base64.b64decode(current["content"]).decode("utf-8")
-        changes.append({"operation": "update", "path": path, "sha": current["sha"],
-                        "content": base64.b64encode(named(text, path, title).encode("utf-8")).decode("ascii")})
-    message = f"The application's name: {title}"
-    status, answer = gitea.call("POST", f"/repos/{owner}/{name}/contents",
-                                {"branch": branch, "message": message, "files": changes})
-    if status in (404, 405):  # a Gitea before 1.20 has no change-files endpoint: one commit per file
-        for change in changes:
-            status, answer = gitea.call("PUT", f"/repos/{owner}/{name}/contents/{urllib.parse.quote(change['path'])}",
-                                        {"branch": branch, "message": message, "sha": change["sha"],
-                                         "content": change["content"]})
-            if status not in (200, 201):
-                break
-    if status not in (200, 201):
-        raise Refused(f"the application's name could not be committed ({status}) {_message(answer)}".strip())
+        text, version = platform.read_file(owner, name, path, branch)
+        files.append((path, named(text, path, title), version))
+    platform.commit_files(owner, name, branch, f"The application's name: {title}", files)
     done.append(f"committed the application's name, {title!r}, into {' and '.join(FILES)}")
 
-    status, answer = gitea.call("POST", f"/repos/{owner}/{name}/branch_protections",
-                                {"rule_name": branch, **config.protection})
-    if status not in (200, 201):
-        raise Refused(f"{branch} could not be protected ({status}) {_message(answer)}".strip())
+    platform.protect(owner, name, branch, config.protection)
     done.append(f"protected {branch}: changes by a reviewed pull request ({config.protection['required_approvals']} "
                 "approval), up to date with it, blocked by a rejected review")
 
-    status, answer = gitea.call("PUT", f"/repos/{owner}/{name}/collaborators/{request.requester}",
-                                {"permission": "write"})
-    if status not in (200, 204):
-        raise Refused(f"{request.requester} could not be given write access ({status}) {_message(answer)}".strip())
+    platform.grant_write(owner, name, request.requester)
     done.append(f"gave {request.requester} write access")
 
     if not config.actions:
-        status, answer = gitea.call("PATCH", f"/repos/{owner}/{name}", {"has_actions": False})
-        if status != 200:
-            raise Refused(f"Actions could not be turned off ({status}) {_message(answer)}".strip())
+        platform.turn_off_actions(owner, name)
         done.append("turned Actions off (this server has no runner)")
     return branch
 
 
-def verify(gitea: Gitea, config: Config, request: Request, title: str, branch: str) -> list[str]:
+def verify(platform: Platform, config: Config, request: Request, title: str, branch: str) -> list[str]:
     """What is wrong in the new repository, read back from the server; empty when all holds."""
     owner, name, wrong = config.owner, request.name, []
-    status, answer = gitea.call("GET", f"/repos/{owner}/{name}/branches/{urllib.parse.quote(branch)}")
-    if status != 200 or not isinstance(answer, dict) or not answer.get("protected"):
+    if not platform.is_protected(owner, name, branch):
         wrong.append(f"{branch} is not protected")
-    status, answer = gitea.call("GET", f"/repos/{owner}/{name}/collaborators/{request.requester}/permission")
-    if status != 200 or not isinstance(answer, dict) or answer.get("permission") not in ("write", "admin", "owner"):
+    if not platform.can_write(owner, name, request.requester):
         wrong.append(f"{request.requester} has no write access")
     for path in FILES:
-        status, answer = gitea.call("GET", f"/repos/{owner}/{name}/contents/{urllib.parse.quote(path)}"
-                                           f"?ref={urllib.parse.quote(branch)}")
-        text = base64.b64decode(answer["content"]).decode("utf-8") if status == 200 and isinstance(answer, dict) \
-            else ""
+        try:
+            text, _ = platform.read_file(owner, name, path, branch)
+        except Refused:
+            text = ""
         if f'"{title}"' not in text:
             wrong.append(f"{path} does not hold the application's name")
     return wrong
@@ -307,15 +396,15 @@ def main(arguments: list[str] | None = None) -> int:
         text = sys.stdin.read() if args.request == "-" else Path(args.request).read_text(encoding="utf-8")
         request = read_request(text, args.name, args.requester)
         config = read_config(args.config)
-        gitea = Gitea(config)
-        check(gitea, config, request)
+        platform = platform_for(config)
+        platform.check(config, request)
         address = f"{config.owner}/{request.name}"
         if args.dry_run:
             print(f"Dry run: {address} can be created from {config.owner}/{config.template} for {request.requester} "
                   f"(request {request.request}, {request.language}). Nothing was changed.")
             return 0
-        branch = create(gitea, config, request, args.title, done)
-        wrong = verify(gitea, config, request, args.title, branch)
+        branch = create(platform, config, request, args.title, done)
+        wrong = verify(platform, config, request, args.title, branch)
     except Refused as error:
         if done:
             print("Done so far:\n" + "\n".join(f"- {step}" for step in done), file=sys.stderr)
