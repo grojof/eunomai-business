@@ -1,0 +1,20 @@
+{
+  "_": "Copy to new_project.local.json (git-ignored) for tools/new_project.py. No secret goes here: the token is in header_file.",
+  "server": "https://git.example.org",
+  "owner": "example-apps",
+  "template": "application-template",
+  "_header_file": "A file holding one line, 'Authorization: token <token>', of an account that may create repositories in owner. Relative to this file, or absolute; ~ is the user's folder.",
+  "header_file": "~/.config/gitea/header",
+  "_actions": "false when the server has no runner: the new repository's Actions are turned off, so nothing waits in a queue.",
+  "actions": true,
+  "_protection": "How the main branch is protected; these are the defaults.",
+  "protection": {
+    "enable_push": false,
+    "required_approvals": 1,
+    "block_on_outdated_branch": true,
+    "block_on_rejected_reviews": true,
+    "dismiss_stale_approvals": true
+  },
+  "_ca_file": "Optional: the organization's own certificate authority, when the server's certificate is issued by it.",
+  "ca_file": ""
+}
