@@ -57,6 +57,7 @@ python tools\build.py --all             # the configuration and every variant, e
 | `support_email` | — | The address users send to when the connector stops and needs IT, and where a request for a new project goes ([decision 15](decisions.md#15--a-business-person-never-creates-a-repository)). Optional; without it users get the report or the request to copy, but no e-mail link. |
 | `message_style` | neutral | The look of the request for a new project, on its page and in the e-mail it copies: `accent`, a colour such as `#1f4e79`, and `font`, font names separated by commas. Both optional; anything else is refused when building. |
 | `diagnostics` | `false` | `true` adds the diagnostic tools (`diag_*`), the validation skills and a hook log. For validating an installation; keep `false` for users. |
+| `platform` | `gitea` | The git hosting's platform, whose API opens pull requests and reads their reviews. `github` and `gitlab` are refused when building, until the connector has their code: see [the git hosting platform](#the-git-hosting-platform). |
 | `providers` | — | Sign-in providers, by name. Must include `git`. See below. |
 
 ### The specialist
@@ -205,11 +206,23 @@ person. Create one named `eunomai-business`; do not reuse the applications Gitea
 The git sign-in belongs to whoever is signed in to the git server in the browser. With single sign-on that is
 the user's own account; on a shared or test browser, check who is signed in first.
 
-### Other git hosting
+### The git hosting platform
 
-Only **Gitea** is tested. Plain git operations (clone, send) use standard HTTPS and are not tied to Gitea;
-sign-in details and the pull-request call are. GitHub, GitHub Enterprise and GitLab are **not supported yet**.
-See [architecture.md](architecture.md#what-is-tied-to-a-git-hosting).
+Plain git (clone, fetch, send) is standard HTTPS, the same on every hosting, and sign-in is OAuth, set per provider.
+What differs is each platform's API, which the connector needs for what git cannot do: open a pull request, update
+it, and read its reviews. Every call to it goes through one interface, `Hosting` in
+`connector/src/eunomai_business/hosting.py`, with one class per platform.
+
+| `platform` | State |
+|---|---|
+| `gitea` (the default) | Works, tested against a fake and a real Gitea |
+| `github`, `gitlab` | Refused by the build, and by the connector when it starts, with what an implementation needs |
+
+To add a platform: write its class with every operation of `Hosting`, against its official API, test it against a
+real server of that platform, list it in `hosting.PLATFORMS` and in the build's `PLATFORMS`, and register its OAuth
+client as for Gitea. A test checks that the interface is every operation the connector asks for, that a platform
+that works implements all of them, and that no hosting API is called anywhere else. See
+[architecture.md](architecture.md#what-is-tied-to-a-git-hosting).
 
 ## What users need on their computer
 
@@ -264,6 +277,7 @@ Set by the plugin from the build; listed so nothing is hidden. Users never set t
 | Variable | Content |
 |---|---|
 | `EUNOMAI_PLUGIN` | `plugin_name`: whose folder, sign-ins and workspaces the connector uses. The hooks get it as `--plugin` |
+| `EUNOMAI_PLATFORM` | `platform`: whose API opens pull requests and reads their reviews. An unknown or unsupported one stops the connector as it starts |
 | `EUNOMAI_PROVIDERS` | The `providers` object, as JSON |
 | `EUNOMAI_WORKSPACES_ROOT` | `workspaces_root` |
 | `EUNOMAI_DIAGNOSTICS` | `1` or `0`, from `diagnostics` |

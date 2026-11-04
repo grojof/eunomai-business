@@ -30,6 +30,44 @@ Its README is a skeleton the specialist fills in with the application's own map;
 a base, the base's reference goes in a folder of its own that the project reads and never edits, so the
 project's `docs/` holds only the application's pages.
 
+**With `tools/new_project.py`**, IT does it in one command, always the same way:
+
+1. Once: copy `new_project.example.json` to `new_project.local.json` (git-ignored) and fill in the server, the owner
+   (the organization of the projects), the template and the file that holds the `Authorization: token …` header of
+   an account that may create repositories there. Set `actions` to `false` when the server has no runner, so nothing
+   waits in a queue. No secret goes in that file; the token is read from its own file and never printed.
+2. For each request, save the e-mail as it arrived in a text file and run, with the name people will see:
+
+   ```bash
+   python tools/new_project.py --request request.txt --title "Asset inventory" --dry-run   # checks, changes nothing
+   python tools/new_project.py --request request.txt --title "Asset inventory"
+   ```
+
+   `--name` sets the repository's name instead of the request's proposal; `--requester`, the requester's git user
+   when the request names none (they were not signed in when it was prepared).
+3. Send the requester the reply it prints, in the request's language.
+
+| Step | What it does | Why |
+|---|---|---|
+| Read the request | Its fixed lines (proposed name, request, requester's git user), in English, Spanish or Catalan | They are the connector's own; nothing is typed again |
+| Check first | The template exists and is a template; no repository has the name | A name in use stops everything before any change |
+| Create | From the template, private, with its labels | Every project starts from the same files |
+| Name it | One commit sets `APP_NAME` in `.env.example` and in the preview's environment | Before `main` is protected, so it needs no pull request; a template with no such line is refused, never guessed |
+| Protect `main` | No direct push, one approval, up to date with `main`, blocked by a rejected review, stale approvals dismissed | What reaches `main` has been reviewed by IT |
+| Give access | The requester gets write access | They work through versions and pull requests |
+| Actions off | Only with `actions: false` | A server without a runner would queue every run forever |
+| Check after | Reads back the protection, the access and the name | Says what to check by hand if any does not show |
+
+Certificates are always verified; `ca_file` names an organization's own authority. If a step fails after the
+repository exists, the tool says what was done and what is left, and never deletes it.
+
+| Platform (`platform`) | State |
+|---|---|
+| `gitea` (the default) | Works: every step above, tested against a fake Gitea and run against a real one |
+| `github`, `gitlab` | Refused before the server is asked anything, with what an implementation needs |
+
+Every call to a server goes through one interface, `Platform` in the tool, whose operations are the steps above. To add a platform, write its class with every operation, against its official API, test it against a real server of that platform, and list it in `PLATFORMS`. A test checks that the interface is every operation the tool asks for, and that a platform that works implements all of them; nothing else in the tool changes.
+
 **In Gitea** (template repositories exist since 1.11):
 
 | Step | Through the API (1.24) |

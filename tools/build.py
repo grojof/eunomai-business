@@ -30,12 +30,19 @@ SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowe
                    "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests",
                    "message_style"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
-        "providers", "deny", "plugin_name", "plugin_description"} | SPECIALIST_KEYS
+        "providers", "deny", "plugin_name", "plugin_description", "platform"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 PLUGIN_NAME = VARIANT  # as connector/src/eunomai_business/__init__.py reads it
 DEFAULT_PLUGIN = "eunomai-business"
 DEFAULT_DESCRIPTION = ("Versions, save points and pull requests for business users in Claude Cowork, with sign-in "
                        "through the organization and barriers enforced by a local connector.")
+PLATFORMS = ("gitea",)  # the hosting platforms the connector has code for: connector/src/eunomai_business/hosting.py
+NOT_YET = {  # as hosting.NOT_YET says it; a test keeps the two in step
+    "github": "it needs a GitHub class for its REST API — pull requests, their reviews and review comments, and the "
+              "repository's default branch — tested against a real GitHub",
+    "gitlab": "it needs a GitLab class for its REST API v4 — merge requests, their approvals, notes and discussions, "
+              "and the project's default branch — tested against a real GitLab",
+}
 MOVED = {"projects": "projects is no longer a setting: each project declares it in .eunomai/project.toml on its main "
                      "branch (docs/project-practices.md)"}
 PROVIDER_KEYS = {"authorize_url", "token_url", "client_id", "scopes", "redirect_uri", "userinfo_url", "login_field"}
@@ -104,6 +111,11 @@ def validate(cfg: dict) -> list[str]:
     errors += validate_specialist(cfg)
     if not PLUGIN_NAME.match(str(cfg.get("plugin_name", DEFAULT_PLUGIN))):
         errors.append("plugin_name: 1 to 40 lowercase ASCII letters, digits and hyphens, starting with a letter or digit")
+    platform = cfg.get("platform", PLATFORMS[0])
+    if platform in NOT_YET:
+        errors.append(f"platform: {platform} is not supported yet: {NOT_YET[platform]}")
+    elif platform not in PLATFORMS:
+        errors.append(f"platform is one of {', '.join([*PLATFORMS, *NOT_YET])}; only {', '.join(PLATFORMS)} works")
     description = cfg.get("plugin_description", DEFAULT_DESCRIPTION)
     if not isinstance(description, str) or not description.strip() or len(description) > 300:
         errors.append("plugin_description must be text of at most 300 characters")
@@ -206,6 +218,7 @@ def build(cfg: dict, out_dir: Path) -> Path:
                                 separators=(",", ":")),
         "WORKSPACES_ROOT": cfg.get("workspaces_root") or f"~/{plugin}-workspaces",
         "PLUGIN": plugin,
+        "PLATFORM": cfg.get("platform") or PLATFORMS[0],
         "PLUGIN_DESCRIPTION": cfg.get("plugin_description") or DEFAULT_DESCRIPTION,
         "DIAGNOSTICS": "1" if diagnostics else "0",
         "BUILD": _build_id(),

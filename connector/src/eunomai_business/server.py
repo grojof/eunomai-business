@@ -6,7 +6,7 @@ import os
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
-from . import (auth, deps, gitops, hook, plugin_name, preview, probe, project_request as requests_for_it,
+from . import (auth, deps, gitops, hook, hosting, plugin_name, preview, probe, project_request as requests_for_it,
                project_tests, settings, support)
 
 mcp = MCPServer(plugin_name(), instructions=(
@@ -389,4 +389,7 @@ if os.environ.get("EUNOMAI_DIAGNOSTICS") == "1":
 
 
 def main() -> None:
+    why = hosting.refusal(hosting.platform_name())
+    if why:  # the build refuses it too: a plugin that could not propose a version never starts
+        raise SystemExit(f"{plugin_name()}: {why}")
     mcp.run("stdio")
