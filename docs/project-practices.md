@@ -252,15 +252,22 @@ project's tests on the person's computer, those a sandbox cannot run included. D
 
 ```toml
 [tests]
-run = ["pytest"]
+run = ["pytest"]                          # the whole suite
+some = ["python", "tools/test.py", "--"]  # optional: some test files, which the connector appends
 
 [tests.environment]
 APP_BROWSER_CHANNEL = "msedge"   # a browser the computer has; nothing is downloaded
 ```
 
+With `some`, the specialist checks what it just built by running only its test files, in a minute, and runs the
+whole suite once before it delivers. The connector runs `some` followed by the files the specialist names, and
+nothing else: `python tools/test.py -- tests/test_orders.py tests/web/test_screens.py`.
+
 | Rule | Why |
 |---|---|
 | `run` follows the rules of the preview's commands, with nothing in braces | What IT reviewed is what runs |
+| `some`, if declared, follows the same rules as `run` and ends in `--`, after which its command takes test files | The model chooses which of the project's test files run, never how they run: a file can never become an option's value |
+| A file the specialist names is a path under `tests/`, ending in `.py`, with letters, digits, `_`, `-`, `.` and `/` only, no `..`, a file of the version that runs; at most 50. No `::` and no options | What the model names can only be a test file: never an option, a parent folder or a file elsewhere |
 | `[tests.environment]` follows the preview's, and cannot set `PYTEST_*` | The connector sets `PYTEST_ADDOPTS` to read the summary |
 | Browser tests use a browser the computer has, named by a variable the project reads, such as Edge (`msedge`) on Windows | Nothing is downloaded on a person's computer |
 | The tests' output is pytest's | The specialist reads its counts and short summary; the rest stays on the computer |
