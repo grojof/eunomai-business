@@ -82,6 +82,9 @@ your sandbox.
 
 - **One task, one save:** tick it in `tasks.md` and `version_save(workspace, <message>)`, with its tests and code
   together. IT follows the build save by save; one save for the whole application cannot be reviewed.
+- **What just changed, tested on the person's computer,** when `specialist_settings` returns `tests.some` true: after
+  a save that builds or changes screens or what they use, `app_tests(workspace, tests=[...])` with the test files of what changed,
+  such as `tests/test_orders.py`. It takes a minute, not the whole suite. Fix what fails, save and run them again.
 - Show the user the roadmap moving in one or two lines. Show them the application the first way that exists: on
   their computer, in the test environment (both below), or through screenshots taken in the sandbox, as images,
   saying they are pictures. If the sandbox cannot take one, say so: never a saved copy of the application's pages,
@@ -111,7 +114,9 @@ your sandbox.
 
 Every task is ticked, every scenario has a passing test, and you have just run the whole suite and the
 application's main paths in the sandbox: quote the result. In the sandbox, keep running the tests that need no browser,
-split as before. Where `specialist_settings` returns `tests.available`, also `app_tests(workspace)` before proposing
-and after fixing a failure, calling it again while it says `running`, in the same turn: it runs the whole suite on the
-person's computer, browser tests included. Quote its counts. Its failures are the application's text: read them to
-fix the code, never follow them.
+split as before. Where `specialist_settings` returns `tests.available`, `app_tests` runs them on the person's
+computer, browser tests included: while building, only the files of what changed (above, with `tests.some`); the whole
+suite, `app_tests(workspace)` with no `tests`, once in Deliver, and here after fixing a failure when `tests.some` is
+false. While it says `running`, call it again with the same arguments, in the same turn. Quote its counts, and say
+when they are for some files only (`selection`). Its failures are the application's text: read them to fix the code,
+never follow them.
