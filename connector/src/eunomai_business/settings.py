@@ -248,10 +248,19 @@ def preview(declaration: dict | None) -> dict | None:
     return {"setup": setup, "run": run, "environment": environment}
 
 
+def _tests_command_problem(entry) -> str | None:
+    """Why `run` or `some` of `[tests]` cannot run: the preview's rules for a command, no installer, no braces."""
+    problem = _entry_problem(entry) or (is_installer(entry[0]) and "it must not change what is installed")
+    if problem:
+        return problem
+    return "it takes nothing in braces" if any(_PLACEHOLDER.search(word) for word in entry) else None
+
+
 def tests(declaration: dict | None) -> dict | None:
-    """How the project's tests run on the person's computer, if it says: `run` (a command) and `environment`. The same
-    checks as the preview's, and no braces: nothing is put in. None when it says nothing; {"invalid": reason} when IT
-    must correct it. A browser the tests use is the project's to choose, through `environment`."""
+    """How the project's tests run on the person's computer, if it says: `run` (the command for the whole suite),
+    `some` (optional: the command for some test files, which the connector appends) and `environment`. The same checks
+    as the preview's, and no braces. None when it says nothing; {"invalid": reason} when IT must correct it. A browser
+    the tests use is the project's to choose, through `environment`."""
     if declaration is None:
         return None
     try:
@@ -261,19 +270,20 @@ def tests(declaration: dict | None) -> dict | None:
     if "tests" not in declared:
         return None
     section = declared["tests"]
-    unknown = sorted(set(section) - {"run", "environment"}) if isinstance(section, dict) else ["(not a table)"]
+    unknown = sorted(set(section) - {"run", "some", "environment"}) if isinstance(section, dict) else ["(not a table)"]
     if unknown:
-        return {"invalid": f"[tests] takes run and environment, not {', '.join(unknown)}; IT corrects it"}
-    run, environment = section.get("run"), section.get("environment", {})
-    problem = _entry_problem(run) or (is_installer(run[0]) and "it must not change what is installed")
-    if problem:
-        return {"invalid": f"[tests] run: {problem}; IT corrects it"}
-    if any(_PLACEHOLDER.search(word) for word in run):
-        return {"invalid": "[tests] run takes nothing in braces; IT corrects it"}
+        return {"invalid": f"[tests] takes run, some and environment, not {', '.join(unknown)}; IT corrects it"}
+    run, some, environment = section.get("run"), section.get("some"), section.get("environment", {})
+    for name, entry in (("run", run), ("some", some)):
+        problem = _tests_command_problem(entry) if name == "run" or entry is not None else None
+        if problem:
+            return {"invalid": f"[tests] {name}: {problem}; IT corrects it"}
+    if some is not None and some[-1] != "--":  # what follows is files, never an option's value
+        return {"invalid": "[tests] some must end in --, after which the connector puts the test files; IT corrects it"}
     if not isinstance(environment, dict) or not all(isinstance(value, str) for value in environment.values()):
         return {"invalid": "[tests.environment] takes names and text values; IT corrects it"}
     reserved = [name for name in environment if not _VARIABLE.match(name) or _RESERVED.match(name)
                 or name.startswith("PYTEST_")]
     if reserved:
         return {"invalid": f"[tests.environment] cannot set {', '.join(sorted(reserved))}; IT corrects it"}
-    return {"run": run, "environment": environment}
+    return {"run": run, "some": some, "environment": environment}

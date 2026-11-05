@@ -16,8 +16,9 @@ needs_uv = pytest.mark.skipif(not (os.environ.get("UV") or preview.shutil.which(
 
 # A runner that prints what pytest prints, so what is read of it can be checked without a download. It also prints
 # what must never reach the model, and says what the connector gave it.
-RUNNER = b'''import os, sys, time
+RUNNER = b'''import json, os, sys, time
 print("collected 15 items")
+print("ARGS=" + json.dumps(sys.argv[1:]))
 print("SECRET-OUTPUT a line only the log may hold")
 print("PYTEST_ADDOPTS=" + os.environ.get("PYTEST_ADDOPTS", ""))
 print("CHANNEL=" + os.environ.get("APP_BROWSER_CHANNEL", ""))
@@ -37,16 +38,21 @@ sys.exit(int(os.environ.get("RUNNER_EXIT", "1" if failures else "0")))
 '''
 
 
-def declaration_of_tests(**environment) -> bytes:
+SOME = b'some = ["python", "runner.py", "--"]\n'
+TEST_FILES = {"tests/test_orders.py": b"", "tests/web/test_screens.py": b"", "tests/test_other.py": b""}
+
+
+def declaration_of_tests(some: bool = False, **environment) -> bytes:
     lines = "".join(f'{name} = "{value}"\n' for name, value in environment.items())
-    return b'[development]\ncode = true\n\n[tests]\nrun = ["python", "runner.py"]\n\n[tests.environment]\n' + lines.encode()
+    return (b'[development]\ncode = true\n\n[tests]\nrun = ["python", "runner.py"]\n' + (SOME if some else b"")
+            + b'\n[tests.environment]\n' + lines.encode())
 
 
-def project_with_tests(server, **environment) -> str:
+def project_with_tests(server, some: bool = False, **environment) -> str:
     name = f"tests-{uuid.uuid4().hex[:8]}"
     server.initialize(name)
-    server.server_commit(name, "main", {"pyproject.toml": PYPROJECT, "uv.lock": LOCK, "runner.py": RUNNER,
-                                        ".eunomai/project.toml": declaration_of_tests(**environment)})
+    server.server_commit(name, "main", {"pyproject.toml": PYPROJECT, "uv.lock": LOCK, "runner.py": RUNNER, **TEST_FILES,
+                                        ".eunomai/project.toml": declaration_of_tests(some, **environment)})
     gitops.clone(f"{server.url}/me/{name}.git")
     gitops.branch(name, "draft/work")
     return name
@@ -57,9 +63,9 @@ def tests_on(monkeypatch):
     monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"app_tests": True}))
 
 
-def run(name: str) -> dict:
+def run(name: str, tests: list[str] | None = None) -> dict:
     for _ in range(300):
-        answer = tools.app_tests(name)
+        answer = tools.app_tests(name, tests)
         if answer.get("status") != "running":
             return answer
         time.sleep(0.2)
@@ -91,6 +97,61 @@ def test_a_command_the_preview_would_run_is_accepted(text):
     '[tests]\nrun = ["pytest"]\n[tests.environment]\nPATH = "x"\n'])
 def test_anything_else_goes_to_it(text):
     assert "invalid" in declared(text), text
+
+
+def test_some_is_optional_and_follows_the_rules_of_run():
+    assert declared('[tests]\nrun = ["pytest"]\n')["some"] is None
+    assert declared('[tests]\nrun = ["pytest"]\nsome = ["python", "tools/test.py", "--"]\n')["some"] == \
+        ["python", "tools/test.py", "--"]
+    for some in ('["pip", "install", "--"]', '["python", "-c", "x", "--"]', '"pytest"', '["pytest", "{port}", "--"]',
+                 '["pytest", "&&", "--"]', '["runner.py", "--"]', "[]", '["pytest"]', '["pytest", "-c"]'):
+        found = declared(f'[tests]\nrun = ["pytest"]\nsome = {some}\n')
+        assert "invalid" in found and found["invalid"].startswith("[tests] some"), some
+
+
+# --- some test files only --------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("tests", [
+    ["../x.py"], ["/abs.py"], ["-k"], ["tests/x.txt"], ["tests/../x.py"], ["tests/-k.py"], ["tests/.hidden.py"],
+    ["tests\\x.py"], ["C:/tests/x.py"], ["tests/x.py::test_a"], ["tests/x .py"], ["tests/x.py", "-x"], ["x.py"],
+    ["tests/"], [""], [1], "tests/x.py", [], [f"tests/test_{n}.py" for n in range(51)]])
+def test_only_test_files_of_the_project_can_be_named(tests):
+    assert app_tests.selection_problem(tests), tests
+
+
+def test_a_selection_of_the_right_shape_passes():
+    assert app_tests.selection_problem(["tests/test_orders.py", "tests/web/test-screens_2.py"]) is None
+    assert app_tests.selection_problem([f"tests/test_{n}.py" for n in range(50)]) is None
+
+
+def test_a_selection_where_the_project_declares_no_some_is_refused(signed_in, workspaces, tests_on):
+    name = project_with_tests(signed_in)
+    answer = tools.app_tests(name, ["tests/test_orders.py"])
+    assert answer["status"] == "selection_not_declared" and "whole suite" in answer["user_message"], answer
+    assert "without tests" in answer["reason"]
+
+
+def test_a_selection_of_the_wrong_shape_runs_nothing(signed_in, workspaces, tests_on):
+    name = project_with_tests(signed_in, some=True)
+    answer = tools.app_tests(name, ["tests/test_orders.py", "--co"])
+    assert answer["status"] == "selection_refused" and "'--co'" in answer["reason"], answer
+    assert preview._key(name) not in app_tests._runs
+
+
+def test_a_selection_must_be_files_of_the_version_that_runs(signed_in, workspaces, tests_on, monkeypatch):
+    monkeypatch.setattr(deps, "audit", lambda folder: {"verdict": "allowed", "files": [], "packages": 0, "blocked": [],
+                                                       "not_pinned": [], "without_hashes": []})
+    name = project_with_tests(signed_in, some=True)
+    (gitops.folder(name) / "tests" / "test_unsaved.py").write_bytes(b"")  # on the computer, not in what is saved
+    answer = run(name, ["tests/test_orders.py", "tests/test_missing.py", "tests/test_unsaved.py", "tests/web.py"])
+    assert answer["status"] == "selection_refused", answer
+    assert answer["reason"].endswith("tests/test_missing.py, tests/test_unsaved.py, tests/web.py")
+
+
+def test_the_specialist_is_told_whether_some_files_can_run(signed_in, workspaces, tests_on):
+    assert tools._specialist_settings(project_with_tests(signed_in))["tests"] == {"available": True, "some": False}
+    assert tools._specialist_settings(project_with_tests(signed_in, some=True))["tests"] == {"available": True,
+                                                                                             "some": True}
 
 
 def test_off_unless_its_own_key_is_on(signed_in, workspaces, monkeypatch):
@@ -141,10 +202,27 @@ def test_a_summary_reaches_the_model_and_the_log_stays_on_the_computer(signed_in
 @pytest.mark.preview
 @needs_uv
 def test_tests_that_pass_say_so(signed_in, workspaces, tests_on):
-    name = project_with_tests(signed_in, RUNNER_FAILURES="0")
+    name = project_with_tests(signed_in, some=True, RUNNER_FAILURES="0")
     answer = run(name)
     assert answer["status"] == "done" and answer["passed"] is True and answer["failures"] == [], answer
     assert answer["counts"] == {"passed": 3, "skipped": 1}
+    assert "selection" not in answer and answer["user_message"].startswith("The tests passed")
+    log = Path(answer["log"]).read_text(encoding="utf-8")
+    assert "ARGS=[]" in log and "Only some test files" not in log, "without tests, run runs as it did"
+
+
+@pytest.mark.preview
+@needs_uv
+def test_a_selection_runs_only_those_files_and_says_so(signed_in, workspaces, tests_on):
+    name = project_with_tests(signed_in, some=True, RUNNER_FAILURES="0")
+    answer = run(name, ["tests/web/test_screens.py", "tests/test_orders.py", "tests/test_orders.py"])
+    assert answer["status"] == "done" and answer["passed"] is True, answer
+    assert answer["selection"] == ["tests/test_orders.py", "tests/web/test_screens.py"]
+    assert answer["user_message"].startswith("The 2 chosen test files passed on your computer.")
+    log = Path(answer["log"]).read_text(encoding="utf-8")
+    assert log.startswith("Only some test files ran, not the whole suite: "
+                          "tests/test_orders.py, tests/web/test_screens.py\n")
+    assert 'ARGS=["--", "tests/test_orders.py", "tests/web/test_screens.py"]' in log
 
 
 @pytest.mark.preview

@@ -146,6 +146,10 @@ reviewed, the person's rights, the same [barriers](barriers.md#the-preview-on-th
 tests use one the computer has, as the project's declaration names it. The specialist reads counts and at most ten
 failures; the whole output stays on the computer, in `<data>\tests`, for IT.
 
+Where the project also declares `some`, the specialist runs only the test files of what it just built, while
+building, and the whole suite once before it delivers. Such a run says so: its answer carries `selection`, and its
+log for IT starts with the files that ran.
+
 ## Sign-in providers
 
 Each entry under `providers` is one OAuth 2.0 authorization-code client with PKCE.
