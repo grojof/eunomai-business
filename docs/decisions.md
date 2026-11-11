@@ -337,8 +337,9 @@ How each part holds against misuse is in the template's and the agent's pages, a
 
 - **Consequence:** the brand's variables use daisyUI's names, not shadcn's; how they map for a React application of
   IT's is settled with that application.
-- **Consequence:** there is no update mechanism: when the base improves, an application compares versions and takes
-  what it wants.
+- **Consequence:** an application takes a newer version of its organization's template with the base's
+  `tools/update_application.py`: the template's change merged into it on a branch, its own changes kept, a conflict
+  left for a person, and the pull request deciding. (Until 2026-11, there was no such mechanism.)
 - **Consequence:** generating the stylesheet in Cowork needs the sandbox to download the executable, under the
   organization's network settings, and has been shown on one sandbox only. Where it cannot, a developer's computer
   or CI generates it, as a case for IT ([decision 6](#6--the-user-never-resolves-a-technical-problem)).

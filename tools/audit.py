@@ -1,7 +1,9 @@
 """The connector's dependency audit of a folder, as IT's configuration decides it: what a person's computer will
 answer for that project. Run it on a template before publishing it, and on a project after changing what it installs.
 
-    python tools/audit.py <folder> [--config config.local.json]
+    uv run --project connector --frozen python tools/audit.py <folder> [--config config.local.json]
+
+It needs the connector's packages, so it runs in the connector's environment, as the line above does.
 
 Ends with 0 when the audit allows the folder, 1 when it blocks it.
 """

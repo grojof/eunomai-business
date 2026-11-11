@@ -67,8 +67,8 @@ An organization does not install its layer: it clones it.
 | A project plugin | IT, per project | The project's tools and rules ([decision 11](decisions.md#11--project-plugins-from-a-template-a-project-declares-its-own-development)) |
 
 A component is one macro, written only with the theme's colours. Components are not a package: each clone carries
-its own copy, so there is nothing to publish and no version to follow. When the base improves, an application
-compares versions and takes what it wants. Where a project allows code, the first screens a user tries are built on
+its own copy, so there is nothing to publish and no version to follow. When the base improves, the organization's
+template is made again, and an application takes it with `tools/update_application.py`, on a branch a person reviews. Where a project allows code, the first screens a user tries are built on
 its clone. A prototype, where it does not, comes before any clone, so its look comes from the organization's skills
 (`organization_skills`, [configuration](configuration.md)).
 

@@ -1,4 +1,4 @@
-"""Daily dependency maintenance: the newest versions the project's own rules allow, nothing else.
+"""Weekly dependency maintenance: the newest versions the project's own rules allow, nothing else.
 
     uv run --project connector --frozen python tools/update_dependencies.py --summary summary.md --problems problems.md
 
