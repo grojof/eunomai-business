@@ -18,8 +18,11 @@ one call; a search by words can miss them. A search that finds nothing is not a 
 with the exact names, and say the connector is not answering only when a call to one of its tools fails.
 
 1. **Sign-in:** `whoami("git")`. If not signed in, `sign_in_start("git")`, tell the user in one line to finish
-   signing in in the browser that opened, then `sign_in_status("git")` until it is no longer `waiting`. If it ends
-   `failed` or `expired`, say so in one line and offer to try again.
+   signing in in the browser that opened, then `sign_in_status("git")` until it is no longer `waiting`, **in the
+   same turn**: each call waits up to 40 seconds for the browser, and the sign-in lives only as long as this turn, so
+   call it again without replying and without asking them to tell you when they are done. If it ends `failed` or
+   `expired`, say so in one line and offer to try again. `idle` means it was lost with an earlier turn: start it
+   again, saying so in those words.
 2. **Workspace.** The folder selected in this task must be a workspace: compare it with the paths from
    `workspace_list`, and use that workspace's name (not its path) in every call. If it is not one, ask which
    project they mean (one listed, or the repository address IT gave them) and `workspace_clone` it if it is not on
