@@ -156,7 +156,22 @@ def version_send(workspace: str) -> dict:
     return _safe(_send, workspace)
 
 
-def _checks(audit: dict) -> str:
+def _tests_line(workspace: str, head: str) -> str:
+    """The last whole-suite run on the person's computer, as the connector recorded it, for this commit or not."""
+    if settings.load()["app_tests"] is not True:
+        return "- Tests on the person's computer: not turned on in this organization"
+    run = project_tests.last_whole_run(workspace)
+    if run is None:
+        return "- Tests on the person's computer: the whole suite was not run"
+    counts = ", ".join(f"{number} {word}" for word, number in sorted(run.get("counts", {}).items())) or "no counts read"
+    verdict = "passed" if run.get("passed") is True else "did not pass"
+    if run["version"] != head:
+        return (f"- Tests on the person's computer: the last whole run ({verdict}, {counts}) was for commit "
+                f"`{run['version'][:12]}`, **not this one**")
+    return f"- Tests on the person's computer, whole suite: **{verdict}**, {counts}, {run.get('at', '')}, for this commit"
+
+
+def _checks(audit: dict, workspace: str = "") -> str:
     """The connector's own checks, appended to every pull request: what IT reads there was not written by Claude, and
     it answers for the commit the server holds, which it names."""
     listed = ", ".join(audit["files"]) or "no pinned list"
@@ -164,6 +179,8 @@ def _checks(audit: dict) -> str:
              f"`{audit['head'][:12]}`"]
     if audit["without_hashes"]:
         lines.append(f"  - without hashes: {', '.join(audit['without_hashes'])}")
+    if workspace:
+        lines.append(_tests_line(workspace, audit["head"]))
     return "\n\n---\n**Checks by the connector** (not written by the assistant)\n\n" + "\n".join(lines) + "\n"
 
 
@@ -179,7 +196,7 @@ def _propose(workspace: str, title: str, description: str) -> dict:
     if not main:
         return _main_missing(workspace)
     audit, refused = _audit_gate(workspace, main, held)
-    return refused or gitops.pull_request(workspace, title, description + _checks(audit))
+    return refused or gitops.pull_request(workspace, title, description + _checks(audit, workspace))
 
 
 @mcp.tool()

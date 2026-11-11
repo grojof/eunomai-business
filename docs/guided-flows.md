@@ -91,8 +91,9 @@ beyond sending the prepared request. How IT creates it: [project practices](proj
 Every pull request opens with the same short summary: the goal, what was built mapped to the requirements, the
 test of each scenario, what is **not settled** (unconfirmed assumptions, rules without a source, open questions),
 what was skipped, the skills used besides the specialist and any conflict with its rules, lines proposed for the
-project's context, and course changes that matter. Below it, the connector appends its own checks (the dependency
-audit), which the model does not write, and a version the audit does not allow is not sent at all
+project's context, and course changes that matter. Below it, the connector appends its own checks, which the model does not write: the dependency
+audit, and the last whole-suite run of `app_tests` as the connector recorded it (passed or not, its counts, and
+whether it was for the commit proposed or another), and a version the audit does not allow is not sent at all
 ([barriers](barriers.md#dependencies)). Gaps are visible instead of hidden, and the reviewer can take
 any of them straight back to the user. The template is in
 [`specialist-deliver`](../plugin/skills/specialist-deliver/SKILL.md).

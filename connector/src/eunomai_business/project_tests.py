@@ -11,8 +11,10 @@ What the model names is held to a narrow shape and must be a file of the version
 model chooses which of the project's test files run, not how.
 """
 
+import json
 import re
 import threading
+import time
 from pathlib import Path
 
 from . import data_dir, gitops, preview, settings, support
@@ -58,6 +60,25 @@ def _log_file(workspace: str) -> Path:
     folder = data_dir() / "tests"
     folder.mkdir(parents=True, exist_ok=True)
     return folder / f"{preview._state_file(workspace).stem}.log"
+
+
+def _record_file(workspace: str) -> Path:
+    return _log_file(workspace).with_suffix(".json")
+
+
+def remember(workspace: str, head: str, passed: bool, counts: dict) -> None:
+    """The last whole-suite run, as the connector saw it: its exit code's verdict, the counts and the commit, so a
+    proposal can say so in the connector's own words. A run of some files is not the whole suite and is not kept."""
+    record = {"version": head, "passed": passed, "counts": counts, "at": time.strftime("%Y-%m-%d %H:%M %z")}
+    _record_file(workspace).write_text(json.dumps(record), encoding="utf-8")
+
+
+def last_whole_run(workspace: str) -> dict | None:
+    try:
+        record = json.loads(_record_file(workspace).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return record if isinstance(record, dict) and isinstance(record.get("version"), str) else None
 
 
 def summary(text: str) -> dict:
@@ -159,6 +180,8 @@ def _prepare(current: _Run, declared: dict) -> dict:
         raise current.failed("tests: they could not start")
     read = summary(printed)
     passed = answer.get("code") == 0
+    if not current.selection:
+        remember(current.workspace, current.head, passed, read["counts"])
     counts = ", ".join(f"{number} {word}" for word, number in read["counts"].items())
     verdict = f"{tests} passed on your computer." if passed else \
         f"{tests} did not pass on your computer (exit code {answer.get('code')})."
