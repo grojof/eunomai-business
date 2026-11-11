@@ -12,6 +12,7 @@ How to work in this repository, for people and AI assistants alike. What the pro
 | `tools/build.py` | Builds the plugin from IT's configuration (standard library only) |
 | `docs/` | How it works and why; [decisions](docs/decisions.md), [sources](docs/sources.md), [validation](docs/validation/hypotheses.md) |
 | `research/` | Spikes behind decisions; not shipped |
+| `openspec/`, `.claude/` | Optional spec-first changes with [OpenSpec](https://github.com/Fission-AI/OpenSpec): its configuration, specs, changes, and its skills and `/opsx:*` commands for Claude Code |
 
 ## Directions that do not change without a new decision
 
@@ -54,6 +55,9 @@ How to work in this repository, for people and AI assistants alike. What the pro
 ## Every change
 
 - Branch from `main`; never stack a pull request on a branch that will be deleted.
+- Spec-first is optional: whoever wants it starts a non-trivial change with OpenSpec (`/opsx:propose`, or
+  `openspec/changes/<name>/` by hand: proposal, specs, tasks) and archives it when merged. The rest of this list holds
+  either way.
 - Tests: while working, `python tools/test.py --affected` (what the changes against main can break, by the rules in
   the script); before merging, `python tools/test.py` (every suite: the connector's in parallel, the previews four at a
   time, then the tests marked `serial`, which wait on the clock, two at a time), `python tools/build.py` on the example configuration, and the docs check. GitHub's workflow runs

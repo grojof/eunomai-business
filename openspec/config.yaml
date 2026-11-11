@@ -1,0 +1,28 @@
+schema: spec-driven
+
+# Optional: a change may start here (proposal, specs, tasks) or go straight to a branch, as AGENTS.md says.
+
+context: |
+  eunomai-business: a Claude plugin (Cowork and Claude Code) that lets business people build internal applications
+  with an assistant, and IT review and ship them. Parts: plugin/ (skills, hook templates), connector/ (a local MCP
+  server in Python 3.12, run by uv, and the guard), templates/ (project-plugin template, test-environment agent),
+  tools/ (build, tests, new_project, audit; standard library only).
+  Language: English in code, docs, specs and commits. No names of people anywhere.
+  Sources of truth: AGENTS.md (how to work, directions that need a new decision), docs/decisions.md (why),
+  docs/architecture.md, docs/barriers.md, docs/sources.md (facts about Claude, Cowork and plugins, with dates).
+  Principles: nothing runs on a business user's computer except what IT turns on; configuration at build time by
+  IT; no secrets in a build; a fact about Claude or Cowork is read in the official page and recorded in
+  docs/sources.md before relying on it.
+
+rules:
+  proposal:
+    - Say which direction of AGENTS.md the change touches; a change to one needs a new entry in docs/decisions.md.
+    - Say what was measured or observed that calls for it (a Cowork test, a failure, a source), with its date.
+  tasks:
+    - Each task names its tests; before merging, python tools/test.py and python tools/build.py, as AGENTS.md says.
+    - Docs and CHANGELOG.md change in the same pull request as the behaviour.
+
+operations:
+  archive:
+    guidance:
+      - The affected page of docs/ already says how it works now; the change's story goes to the pull request.
