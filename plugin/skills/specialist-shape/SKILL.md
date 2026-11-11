@@ -18,6 +18,10 @@ trying it first avoids building the wrong thing.
 
 Build them before tests and the full specification: the point is to agree on the real thing early.
 
+- **First, `dependency_audit(workspace)` on the project as it came,** before adding anything. If it is already
+  blocked, the template brought it and only IT can lift it: tell the user now, in one line, with the `it_report` as
+  a prepared email, that seeing it on their computer waits for that. Keep building in the sandbox meanwhile. Found
+  after an hour of work, the same answer leaves them with nothing to look at.
 - On the project's own base: its layout, components and theme, never a separate page.
 - Only the screens and the main path needed to agree. An unfinished screen is not polished: no edge cases, no
   refinements, nothing the user has not asked to see. Time spent here on what may change is wasted.
