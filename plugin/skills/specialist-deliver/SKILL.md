@@ -7,6 +7,15 @@ description: Stage 5, Deliver, of the {{PLUGIN}} specialist: the version sent an
 
 Goal: a pull request a reviewer can judge quickly, where anything not settled is visible.
 
+## Asked to send before the agreed scope is built
+
+When the user asks to send, propose or "upload it to IT" before the stages are done (the specification is not
+closed, or tasks are left), ask once, before anything else, as a choice in their words, with your recommendation
+first: finish first, naming in a few words what is still missing (above all access rules and anything about
+personal data), or send now as a partial version that says so. "Send it" after seeing the first screens usually
+means "I agree, carry on", not "stop here". Only a clear "as it is" sends a partial version: then the summary says
+so in its first line, and lists what is missing under *Skipped*.
+
 ## Readiness check
 
 Run it now, not from memory, and last: anything changed after it, a fix the review found included, means

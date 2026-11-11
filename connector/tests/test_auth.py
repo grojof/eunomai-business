@@ -105,3 +105,36 @@ def test_a_network_outage_asks_the_user_to_check_the_network(signed_in, monkeypa
 
     monkeypatch.setattr(auth, "http_client", down)
     assert tools._safe(auth.whoami, "git")["status"] == "unreachable"
+
+
+def test_the_status_waits_for_the_browser_and_answers_when_it_changes(monkeypatch):
+    """In Cowork a sign-in left waiting at the end of a turn was lost: one call now covers a person in the browser."""
+    import threading
+    import time
+
+    monkeypatch.setitem(auth._flows, "slow", {"status": "waiting", "started_at": time.time()})
+
+    def browser():
+        time.sleep(0.6)
+        with auth._lock:
+            auth._flows["slow"].update(status="signed_in", login="someone")
+
+    threading.Thread(target=browser).start()
+    start = time.monotonic()
+    answer = auth.status("slow", wait=10)
+    assert answer["status"] == "signed_in" and answer["login"] == "someone"
+    assert 0.5 < time.monotonic() - start < 5
+
+
+def test_the_status_stops_waiting_at_its_limit(monkeypatch):
+    import time
+
+    monkeypatch.setitem(auth._flows, "slow", {"status": "waiting", "started_at": time.time()})
+    start = time.monotonic()
+    assert auth.status("slow", wait=0.5)["status"] == "waiting"
+    assert time.monotonic() - start < 3
+
+
+def test_a_lost_sign_in_says_so():
+    answer = auth.status("never-started")
+    assert answer["status"] == "idle" and "earlier turn" in answer["note"]

@@ -31,10 +31,15 @@ def sign_in_start(provider: str) -> dict:
     return _safe(auth.start, provider, True)
 
 
+SIGN_IN_WAIT = 40.0
+"""Under the 60 s Cowork gives a tool call, as app_tests' answer."""
+
+
 @mcp.tool()
 def sign_in_status(provider: str) -> dict:
-    """State of the sign-in started with sign_in_start: idle, waiting, signed_in, failed or expired."""
-    return _safe(auth.status, provider)
+    """State of the sign-in started with sign_in_start: idle, waiting, signed_in, failed or expired. While it is
+    waiting, it waits up to 40 seconds for the browser before it answers: call it again, in the same turn."""
+    return _safe(auth.status, provider, SIGN_IN_WAIT)
 
 
 @mcp.tool()
