@@ -73,7 +73,8 @@ class Connector:
 
     def __init__(self, environment: dict, job: int = 0, entry: tuple[str, ...] = ()):
         arguments = json.loads(TEMPLATE.read_text(encoding="utf-8"))["mcpServers"]["{{PLUGIN}}"]["args"]
-        arguments = [str(CONNECTOR) if word == "{{CONNECTOR}}" else word for word in arguments]
+        arguments = [word.replace("{{CONNECTOR}}", str(CONNECTOR)).replace("{{PLUGIN}}", "eunomai-business")
+                     for word in arguments]
         uv = os.environ.get("UV") or shutil.which("uv")
         if entry:  # the same command, with a limit a test can wait for
             arguments = [*arguments[:-1], "python", *entry]
@@ -143,7 +144,7 @@ def computer(tmp_path, server, connector_environment, monkeypatch) -> dict:
     environment = {**os.environ, "LOCALAPPDATA": str(data), "EUNOMAI_WORKSPACES_ROOT": str(tmp_path / "workspaces"),
                    "EUNOMAI_PROVIDERS": json.dumps({"git": server.provider()}),
                    "EUNOMAI_SPECIALIST": json.dumps({"app_preview": True}),
-                   "UV_PROJECT_ENVIRONMENT": str(connector_environment), "BROWSER": "true", "NO_PROXY": "*",
+                   "EUNOMAI_CONNECTOR_ENVIRONMENT": str(connector_environment), "BROWSER": "true", "NO_PROXY": "*",
                    # no browser opens in a test
                    "PYTHONPATH": str(Path(__file__).parent), "PYTHON_KEYRING_BACKEND": "preview_keyring.FileBackend"}
     environment.pop("VIRTUAL_ENV", None)

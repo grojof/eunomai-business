@@ -28,6 +28,8 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     assert all(len(entries) == 1 for entries in hooks.values())
     guard_command = 'eunomai-business-guard --plugin eunomai-business --policy "${CLAUDE_PLUGIN_ROOT}/policy.json"'
     assert all(e[0]["hooks"][0]["command"].endswith(guard_command) for e in hooks.values())
+    assert all('"${CLAUDE_PLUGIN_ROOT}/connector/start.py" eunomai-business eunomai-business-guard' in
+               e[0]["hooks"][0]["command"] and "--project" not in e[0]["hooks"][0]["command"] for e in hooks.values())
     guard = hooks["PreToolUse"][0]
     assert "Write" in guard["matcher"] and "mcp__workspace__bash" in guard["matcher"]
     assert guard["hooks"][0]["onFailure"] == "block"  # a guard that cannot run stops the write
@@ -38,9 +40,10 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
     assert mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_DIAGNOSTICS"] == "0"
     args = mcp["mcpServers"]["eunomai-business"]["args"]
-    assert args[:2] == ["run", "--frozen"] and "--no-config" in args and "--system-certs" in args
+    assert args[:2] == ["run", "--no-project"] and "--no-config" in args and "--system-certs" in args
     assert "--managed-python" in args  # uv's own Python, never whatever the computer has
-    assert args[args.index("--project") + 1] == "${CLAUDE_PLUGIN_ROOT}/connector"
+    assert args[-3:] == ["${CLAUDE_PLUGIN_ROOT}/connector/start.py", "eunomai-business", "eunomai-business"]
+    assert "connector/start.py" in names
     assert "connector/uv.lock" in names and "connector/sbom.cdx.json" in names
 
 
@@ -53,13 +56,13 @@ def hook_command(cfg: dict, tmp_path) -> str:
 
 
 def test_hook_command_is_bare_so_every_shell_runs_it(tmp_path):
-    assert hook_command(dict(EXAMPLE, diagnostics=True), tmp_path).startswith("uv run --frozen ")
+    assert hook_command(dict(EXAMPLE, diagnostics=True), tmp_path).startswith("uv run --no-project ")
     assert (tmp_path / "eunomai-business" / "skills" / "validate-setup" / "SKILL.md").exists()
 
 
 def test_a_uv_path_with_spaces_is_quoted(tmp_path):
     cfg = dict(EXAMPLE, diagnostics=True, uv=r"C:\Users\Some One\.local\bin\uv.exe")
-    assert hook_command(cfg, tmp_path).startswith('"C:/Users/Some One/.local/bin/uv.exe" run --frozen ')
+    assert hook_command(cfg, tmp_path).startswith('"C:/Users/Some One/.local/bin/uv.exe" run --no-project ')
 
 
 def test_built_text_files_use_lf(tmp_path):
