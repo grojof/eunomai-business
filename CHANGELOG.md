@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 (2026-11-11)
+
+- **The uv that runs the connector is checked.** The audit read every package a project pins, but not the uv that ran it all: a computer with an old uv, or one an advisory names, went unnoticed. The connector now reads its uv's version; `uv_minimum`, IT's validated version, is said to the person at the start of a session, with an e-mail for IT, when the uv is older; and a uv with a known vulnerability, looked up in OSV as `pypi:uv`, blocks the audit as a vulnerable package does.
+
 ## 0.1.0 (2026-11-11)
 
 The first version: business people build internal applications with Claude Cowork, and IT reviews and ships them.

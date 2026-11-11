@@ -789,6 +789,13 @@ def audit(folder: Path) -> dict:
 
     with ThreadPoolExecutor(_AT_ONCE) as pool:
         blocked = [found for found in pool.map(judged, sorted(pins.items())) if found]
+    from . import runtime  # it uses this module's lookup
+
+    running = runtime.vulnerable_uv()
+    if running:  # not the project's, but what would run it: a known vulnerability is never excepted
+        blocked.append({"ecosystem": "pypi", "package": "uv", "version": running[0],
+                        "files": ["the uv that runs the connector on this computer"],
+                        "reasons": [f"known vulnerabilities: {', '.join(running[1])}"]})
     loose += _left_out_of_lists(folder, names_by_folder)
     undeclared = _unpinned_folders(folder, files)
     if not undeclared and not installs and not loose and _declares_packages(folder):
@@ -804,7 +811,7 @@ def audit(folder: Path) -> dict:
         result["reasons"] = ["packages are declared but not pinned, each folder needs requirements*.txt, "
                              f"package-lock.json or uv.lock: {', '.join(undeclared[:10])}"]
         result["unpinned_files"] = undeclared
-    elif not files and not loose:
+    elif not files and not loose and not blocked:
         result.update(verdict="allowed", note="the project installs no packages: nothing to check")
     return result
 

@@ -28,7 +28,7 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov")
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies",
                    "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests",
-                   "message_style"}
+                   "message_style", "uv_minimum"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers", "deny", "plugin_name", "plugin_description", "platform"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -93,6 +93,9 @@ def validate_specialist(cfg: dict) -> list[str]:
             or not (isinstance(font, str) and STYLE_FONT.match(font)):
         errors.append('message_style takes "accent" (a colour such as #1f4e79) and "font" (font names separated by '
                       'commas), both optional')
+    minimum = cfg.get("uv_minimum", "")
+    if not isinstance(minimum, str) or (minimum and not re.fullmatch(r"\d+\.\d+\.\d+", minimum)):
+        errors.append('uv_minimum must be a version such as "0.13.5", or empty')
     exceptions = cfg.get("dependency_exceptions", [])
     if not isinstance(exceptions, list):
         errors.append("dependency_exceptions must be a list")

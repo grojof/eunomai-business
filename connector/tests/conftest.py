@@ -147,6 +147,14 @@ def nothing_of_a_run_stays():
     assert not left, f"a test left previews behind: {sorted(p.name for p in left)}"
 
 
+@pytest.fixture(autouse=True)
+def uv_not_asked(monkeypatch):
+    """The uv that runs the tests is not looked up: every audit would ask OSV about it. test_runtime.py checks it."""
+    from eunomai_business import runtime
+
+    monkeypatch.setattr(runtime, "uv_version", lambda: None)
+
+
 def free_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
