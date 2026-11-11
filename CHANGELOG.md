@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The IT guide tells IT to warn whoever runs endpoint protection**: each plugin version's first start writes and runs a new Python environment in the plugin's data folder, which behaviour-based protection flagged as suspicious once, on the first start of a plugin built under another name.
 - **One guide for IT, in order** ([Setting it up, for IT](docs/it-guide.md)): IT's computer and people's, the git server, the sign-in clients, building and publishing the plugin, the organization's template and its audit, a project from a request, what to check in a proposal, deployment, keeping it up to date and uninstalling, each step pointing to the page with the detail. A read of the docs against the tools found what it fills: IT's own prerequisites, the git server's organization, policy and token, how a new plugin version reaches people, and a reviewer's checklist.
 - **`tools/new_project.py` sets a merged pull request's branch to be deleted**, which the docs recommended and the tool did not do; and the docs no longer say to copy the template's protection, which the tool sets itself.
 - **A proposal says which tests the connector saw.** In the Cowork tests the result of `app_tests` reached IT only as the specialist's words in the summary. The connector now records the last whole-suite run of a workspace (the exit code's verdict, the counts, the commit) and appends it to the pull request with the dependency audit: for this commit, for another one, not run, or not turned on. A run of some files is not the whole suite and is not recorded.
