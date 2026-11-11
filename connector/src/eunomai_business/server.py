@@ -7,7 +7,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
 from . import (auth, deps, gitops, hook, hosting, plugin_name, preview, probe, project_request as requests_for_it,
-               project_tests, settings, support)
+               project_tests, runtime, settings, support)
 
 mcp = MCPServer(plugin_name(), instructions=(
     "The user is not technical. When a tool result has a `user_message`, show that message, in the user's "
@@ -44,8 +44,12 @@ def sign_in_status(provider: str) -> dict:
 
 @mcp.tool()
 def whoami(provider: str) -> dict:
-    """Who the stored sign-in for a provider belongs to; refreshes the token if it expired. Never returns tokens."""
-    return _safe(auth.whoami, provider)
+    """Who the stored sign-in for a provider belongs to; refreshes the token if it expired. Never returns tokens.
+    `uv_problem`, when present, is what the person and IT should know about this computer's uv: show its
+    `user_message`, with `email_link` for IT, once in the session."""
+    answer = _safe(auth.whoami, provider)
+    uv = runtime.problem()
+    return {**answer, "uv_problem": uv} if uv else answer
 
 
 @mcp.tool()

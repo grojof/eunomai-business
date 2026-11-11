@@ -248,3 +248,9 @@ def test_a_plugin_name_that_is_not_plain_is_refused(name):
 def test_a_plugin_description_must_be_short_text(description):
     errors = build.validate(dict(EXAMPLE, plugin_description=description))
     assert "plugin_description must be text of at most 300 characters" in errors
+
+
+@pytest.mark.parametrize(("minimum", "fine"), [("0.13.5", True), ("", True), ("0.13", False), ("latest", False), (13, False)])
+def test_the_uv_minimum_is_a_version(minimum, fine):
+    errors = build.validate_specialist(dict(EXAMPLE, uv_minimum=minimum))
+    assert (not any("uv_minimum" in e for e in errors)) is fine
