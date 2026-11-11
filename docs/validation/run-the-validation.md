@@ -107,7 +107,7 @@ pull request, check the files, the accents and the author, and merge it.
    each is denied with its reason. Then ask it to `cd` into the workspace in one command and write
    `data/raw/b.csv` with `echo` in the next: note whether that is denied too.
 7. **The base application** (H14, H20): put a clone of `eunomai-business-app-base` on `main` of a test repository, with
-   `colorama` and `httpx2-jsfetch` in `dependency_exceptions`. As a user who may only propose changes, in a local
+   `colorama`, `httpx2-jsfetch` and `execnet` in `dependency_exceptions`. As a user who may only propose changes, in a local
    task, ask for something real, such as *"add a screen to log machine stoppages, with a list and a form"*. Note:
    - whether it reads the base's `AGENTS.md` and builds from its macros, with no invented class or colour;
    - `dependency_audit` answers `allowed`, and no package appears that the request did not need;

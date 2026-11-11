@@ -14,7 +14,7 @@ uninstalling. Paths are for Windows; *measured* means observed on a real compute
 
 **`<data>`** below is the connector's folder, `%LOCALAPPDATA%\<plugin_name>` (`eunomai-business` by default). Claude Desktop installed as a
 Windows package (MSIX, as from the Microsoft Store) redirects *new* folders under `AppData\Local` to
-`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\eunomai-business` (measured 2026-10-24,
+`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\<plugin_name>` (measured 2026-10-24,
 `Claude_pzs8sxrjxfjjc`); if the folder already exists in the real location, for example from an earlier run
 outside Claude Desktop, it is used there, new files inside it included (measured 2026-10-26; Windows
 [redirects new files and folders](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes#appdata-operations-on-windows-10-version-1903-and-later), and allows changing existing ones).
@@ -25,7 +25,7 @@ Look in both. Folders outside
 
 | What | Where | Content | Sensitive | Left after uninstalling the plugin |
 |---|---|---|---|---|
-| The plugin | Managed by Claude Desktop (measured 2026-10-24: `%LOCALAPPDATA%\Claude-Data\claude_<id>\rpm\...\plugin_<id>`) | The zip's files: skills, connector source, the file guard hook, and measurement hooks when diagnostics are on | No | Claude Desktop's business; not yet measured |
+| The plugin | Managed by Claude Desktop (measured 2026-10-24: `%LOCALAPPDATA%\Claude-Data\claude_<id>\rpm\...\plugin_<id>`) | The zip's files: skills, connector source, the file guard hook, and measurement hooks when diagnostics are on | No | No: Claude Desktop removes the folder, also while the connector runs, since the connector's environment lives in `<data>` (measured 2026-11-11). Before that it stayed while the connector ran |
 | Sign-in records | `<data>\signin-<hash>.dpapi`, one per provider (measured; the hash comes from the provider name and client ID) | Access token, refresh token, expiry times. Encrypted with DPAPI for that Windows user | **Yes** | **Yes**: delete them (below) |
 | Workspace registry | `<data>\workspaces.json` | Each workspace's folder, repository address and main branch, so the connector protects them | No | **Yes** |
 | Project requests | `<data>\project-requests\<request>.json` | A request for a new project: the suggested name, what it is for, who will use it, how it is done today, the first version, open questions, the message for IT and its dates; once its project is cloned, `done` with the workspace and repository, or `withdrawn` when the person no longer wants it. Kept, not deleted | Low: what the person told the assistant about their work | **Yes** |

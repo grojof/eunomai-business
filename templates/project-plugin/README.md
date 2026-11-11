@@ -68,7 +68,7 @@ From decision 10, checked by IT before every publish:
 `settings` in the configuration reach the tools as `config["settings"]`: addresses and names, never a secret. The
 server's dependencies are locked like eunomai-business's connector (`uv.lock`, nothing younger than two weeks).
 Before adding one, check it with eunomai-business's `dependency_check`; after locking, the exported list must pass
-`dependency_audit`. eunomai-business's daily dependency workflow keeps only its own connector current: when it
+`dependency_audit`. eunomai-business's weekly dependency workflow keeps only its own connector current: when it
 upgrades `mcp`, upgrade it here too.
 
 ```powershell
