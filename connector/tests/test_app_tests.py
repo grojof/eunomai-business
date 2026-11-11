@@ -209,6 +209,9 @@ def test_tests_that_pass_say_so(signed_in, workspaces, tests_on):
     assert "selection" not in answer and answer["user_message"].startswith("The tests passed")
     log = Path(answer["log"]).read_text(encoding="utf-8")
     assert "ARGS=[]" in log and "Only some test files" not in log, "without tests, run runs as it did"
+    record = app_tests.last_whole_run(name)
+    assert record["passed"] is True and record["counts"] == {"passed": 3, "skipped": 1}
+    assert record["version"].startswith(answer["version"]), "a proposal compares it with the commit it holds"
 
 
 @pytest.mark.preview
@@ -223,6 +226,7 @@ def test_a_selection_runs_only_those_files_and_says_so(signed_in, workspaces, te
     assert log.startswith("Only some test files ran, not the whole suite: "
                           "tests/test_orders.py, tests/web/test_screens.py\n")
     assert 'ARGS=["--", "tests/test_orders.py", "tests/web/test_screens.py"]' in log
+    assert app_tests.last_whole_run(name) is None, "some files are not the whole suite"
 
 
 @pytest.mark.preview

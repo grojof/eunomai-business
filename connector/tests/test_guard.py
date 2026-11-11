@@ -462,3 +462,30 @@ def test_a_plugins_guard_protects_its_own_workspaces_and_not_another_plugins(mon
         assert bool(out.strip()) is guarded, plugin
         if guarded:
             assert json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"].startswith("acme-apps: ")
+
+
+def test_the_proposal_says_the_tests_the_connector_saw_for_that_commit(signed_in, workspaces, monkeypatch):
+    """The specialist's word that the tests passed was all IT had: the connector now says what it recorded."""
+    import json
+
+    from eunomai_business import deps, project_tests, server
+
+    name, ws = workspace_with_context(signed_in)
+    (ws / "index.html").write_bytes(b"<p>Hello</p>")
+    gitops.save(name, "Page")
+    gitops.push(name, gitops.project_files(name)["tip"])
+    head = gitops.server_head(name)
+    monkeypatch.setattr(deps, "_get", lambda url: None)
+    monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"app_tests": True}))
+
+    def body() -> str:
+        server.version_propose(name, "Page", "Summary.")
+        return signed_in.pulls[-1]["body"]
+
+    assert "the whole suite was not run" in body()
+    project_tests.remember(name, head, True, {"passed": 12, "skipped": 1})
+    assert "whole suite: **passed**, 12 passed, 1 skipped" in body() and "for this commit" in body()
+    project_tests.remember(name, "0" * 40, False, {"failed": 1})
+    assert "was for commit `000000000000`, **not this one**" in body()
+    monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"app_tests": False}))
+    assert "not turned on in this organization" in body()

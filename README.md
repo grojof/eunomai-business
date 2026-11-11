@@ -105,3 +105,7 @@ python tools\sbom.py
   [good practices](docs/project-practices.md), not impositions.
 - **Barriers that hold:** enforced in the connector's code and by the servers, not only by instructions to the
   model.
+
+## Licence
+
+[MIT](LICENSE). To report a security problem: [security policy](SECURITY.md).

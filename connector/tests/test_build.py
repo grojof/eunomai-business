@@ -219,7 +219,7 @@ def test_an_organization_names_its_plugin_everywhere_the_plugin_is_named(tmp_pat
     assert (tmp_path / "acme-apps.zip").is_file()
     manifest = json.loads((folder / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
     assert manifest == {"name": "acme-apps", "version": manifest["version"],
-                        "description": "Applications made from the organization's template."}
+                        "description": "Applications made from the organization's template.", "license": "MIT"}
     server = json.loads((folder / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     assert list(server) == ["acme-apps"]
     assert server["acme-apps"]["args"][-1] == "eunomai-business", "the program keeps its name; the plugin changes"
