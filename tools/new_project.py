@@ -162,7 +162,7 @@ class Platform:
     can act on. A new platform is one more class that implements every one, tested against a real server."""
 
     OPERATIONS = ("check", "generate", "read_file", "commit_files", "protect", "grant_write", "turn_off_actions",
-                  "is_protected", "can_write")
+                  "delete_merged_branches", "is_protected", "can_write")
 
     def check(self, config: Config, request: Request) -> None:
         """What must hold before anything is created: the template exists and is one, the target does not."""
@@ -188,6 +188,10 @@ class Platform:
         raise NotImplementedError
 
     def turn_off_actions(self, owner: str, name: str) -> None:
+        raise NotImplementedError
+
+    def delete_merged_branches(self, owner: str, name: str) -> None:
+        """A pull request's branch goes when it is merged, so finished versions do not pile up on the server."""
         raise NotImplementedError
 
     def is_protected(self, owner: str, name: str, branch: str) -> bool:
@@ -300,6 +304,11 @@ class Gitea(Platform):
         if status != 200:
             raise Refused(f"Actions could not be turned off ({status}) {_message(answer)}".strip())
 
+    def delete_merged_branches(self, owner: str, name: str) -> None:
+        status, answer = self.call("PATCH", f"/repos/{owner}/{name}", {"default_delete_branch_after_merge": True})
+        if status != 200:
+            raise Refused(f"merged branches could not be set to go ({status}) {_message(answer)}".strip())
+
     def is_protected(self, owner: str, name: str, branch: str) -> bool:
         status, answer = self.call("GET", f"/repos/{owner}/{name}/branches/{urllib.parse.quote(branch)}")
         return status == 200 and isinstance(answer, dict) and bool(answer.get("protected"))
@@ -356,6 +365,9 @@ def create(platform: Platform, config: Config, request: Request, title: str, don
 
     platform.grant_write(owner, name, request.requester)
     done.append(f"gave {request.requester} write access")
+
+    platform.delete_merged_branches(owner, name)
+    done.append("set a pull request's branch to be deleted when it is merged")
 
     if not config.actions:
         platform.turn_off_actions(owner, name)
