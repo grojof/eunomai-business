@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 (2026-11-11)
+
+The first version: business people build internal applications with Claude Cowork, and IT reviews and ships them.
+What it holds, change by change:
 
 - **The IT guide tells IT to warn whoever runs endpoint protection**: each plugin version's first start writes and runs a new Python environment in the plugin's data folder, which behaviour-based protection flagged as suspicious once, on the first start of a plugin built under another name.
 - **One guide for IT, in order** ([Setting it up, for IT](docs/it-guide.md)): IT's computer and people's, the git server, the sign-in clients, building and publishing the plugin, the organization's template and its audit, a project from a request, what to check in a proposal, deployment, keeping it up to date and uninstalling, each step pointing to the page with the detail. A read of the docs against the tools found what it fills: IT's own prerequisites, the git server's organization, policy and token, how a new plugin version reaches people, and a reviewer's checklist.
