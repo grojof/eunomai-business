@@ -3,7 +3,7 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-hook --plugin {{PLUGIN}}", "timeout": 60, "onFailure": "continue" }
+          { "type": "command", "command": "{{UV_COMMAND}} run --no-project --no-config --system-certs --managed-python --python 3.12 \"{{CONNECTOR}}/start.py\" {{PLUGIN}} eunomai-business-hook --plugin {{PLUGIN}}", "timeout": 60, "onFailure": "continue" }
         ]
       }
     ],
@@ -11,7 +11,7 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "{{UV_COMMAND}} run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12 --project \"{{CONNECTOR}}\" eunomai-business-hook --plugin {{PLUGIN}}", "timeout": 30, "onFailure": "continue" }
+          { "type": "command", "command": "{{UV_COMMAND}} run --no-project --no-config --system-certs --managed-python --python 3.12 \"{{CONNECTOR}}/start.py\" {{PLUGIN}} eunomai-business-hook --plugin {{PLUGIN}}", "timeout": 30, "onFailure": "continue" }
         ]
       }
     ]
