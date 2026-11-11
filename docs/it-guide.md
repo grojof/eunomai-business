@@ -63,6 +63,12 @@ The applications themselves never sign people in: their identity proxy does (ste
 4. **A new version:** build again and publish the new zip in its place. On each computer the connector's Python
    environment lives in `%LOCALAPPDATA%\<plugin_name>\environments`, outside the plugin's folder, so Claude
    Desktop can replace or remove the plugin while the connector runs ([data on computers](data-on-computers.md)).
+5. **Tell whoever runs the computers' endpoint protection.** The first start of each plugin version writes a new
+   Python environment, `python.exe` included, under `%LOCALAPPDATA%\<plugin_name>\environments\` (with Claude
+   Desktop installed as a Windows package, under `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\`), and runs
+   it at once, started by `uv` from a hook or from Claude Desktop. Behaviour-based protection can flag that as
+   suspicious. Where it does, an exclusion for that folder and uv's cache, or a rule for uv's own signed executable,
+   is that team's decision; the folder holds only the locked packages the audit allows.
 
 ## 5. The organization's template
 
