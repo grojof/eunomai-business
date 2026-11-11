@@ -214,11 +214,25 @@ def start(provider: str, open_browser: bool = True) -> dict:
     return {"provider": provider, "status": "waiting", "url": url, "browser_opened": opened}
 
 
-def status(provider: str) -> dict:
+LOST = ("No sign-in is in progress in this connector. Cowork starts the connector again for each turn, and a "
+        "sign-in started in an earlier turn ended with it: start a new one, and wait for it in the same turn.")
+
+
+def status(provider: str, wait: float = 0.0) -> dict:
+    """The sign-in's state. While it is `waiting`, waits up to `wait` seconds for it to change, so one call covers the
+    time a person takes in the browser: the sign-in lives only as long as the connector that started it."""
     keep = ("status", "login", "error", "stored_bytes", "token_bytes")
-    with _lock:
-        flow = _flows.get(provider, {"status": "idle"})
-        return {"provider": provider, **{k: v for k, v in flow.items() if k in keep}}
+    deadline = time.monotonic() + wait
+    while True:
+        with _lock:
+            flow = dict(_flows.get(provider, {"status": "idle"}))
+        if flow["status"] != "waiting" or time.monotonic() >= deadline:
+            break
+        time.sleep(0.25)
+    answer = {"provider": provider, **{k: v for k, v in flow.items() if k in keep}}
+    if flow["status"] == "idle":
+        answer["note"] = LOST
+    return answer
 
 
 # --- using the stored sign-in -----------------------------------------------------------------------------
