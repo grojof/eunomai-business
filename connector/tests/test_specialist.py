@@ -386,6 +386,39 @@ def test_the_source_check_never_probes_the_users_network(host):
     assert REAL_EXISTS(f"https://{host}/repo") is None
 
 
+class _Answers:
+    """An http client that answers each request with the next status of a list."""
+
+    def __init__(self, statuses):
+        self.statuses, self.asked = list(statuses), 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+    def stream(self, *_args, **_kwargs):
+        self.asked += 1
+        self.status_code = self.statuses.pop(0)
+        return self
+
+
+@pytest.mark.parametrize(("statuses", "answer", "asked"), [
+    ([200], True, 1), ([301], True, 1), ([404], False, 1), ([410], False, 1),
+    ([429, 200], True, 2), ([503, 404], False, 2), ([429, 429], None, 2), ([500, 502], None, 2),
+    ([403], None, 1), ([401], None, 1)])
+def test_only_not_found_says_a_source_does_not_exist(monkeypatch, statuses, answer, asked):
+    """A host that limits how often it is asked answered 429 for a repository that exists, in the middle of an audit
+    of 56 packages, and the version was refused as if its source were made up."""
+    client = _Answers(statuses)
+    monkeypatch.setattr(deps, "_public", lambda host: True)
+    monkeypatch.setattr(deps.auth, "http_client", lambda: client)
+    monkeypatch.setattr(deps, "_RETRY_AFTER_SECONDS", 0)
+    assert REAL_EXISTS("https://github.com/someone/something") is answer
+    assert client.asked == asked
+
+
 def test_the_audit_reads_npm_lockfiles(monkeypatch, tmp_path):
     registry(monkeypatch, {"left-pad": {"1.3.0": 100}, "@scope/tool": {"2.0.0": 5, "1.9.0": 100}})
     (tmp_path / "package-lock.json").write_text(json.dumps({"lockfileVersion": 3, "packages": {
