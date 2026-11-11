@@ -34,9 +34,9 @@ Look in both. Folders outside
 | Workspaces | `workspaces_root`, default `%USERPROFILE%\eunomai-business-workspaces\<name>` (measured) | Clones of the repositories: the user's work, versions not yet sent included | **As sensitive as the repositories** | **Yes, on purpose**: it is the user's work |
 | Backups before an update | Inside each workspace's `.git`, as `refs/eunomai/backup/<time>/<branch>` | Where each branch was before `workspace_update` moved it | As the workspace | With the workspace |
 | uv | `%USERPROFILE%\.local\bin\uv.exe`, `uvx.exe`, `uvw.exe`; `%LOCALAPPDATA%\uv\uv-receipt.json`; user `PATH` entry (measured) | The uv program, installed per user | No | Yes; it is a separate program |
-| The connector's environment | `connector\.venv` inside the plugin's folder | The locked packages, installed from uv's cache | No | Not yet measured |
-| uv cache | `%LOCALAPPDATA%\uv\cache` (measured) | Built connector versions and their dependencies (`mcp`, `httpx`, `dulwich`, ...) | No | Yes; shared with any other use of uv |
-| Python, if the computer has none | `%APPDATA%\uv\python` (uv's documented default; not measured, the test computer had Python) | A Python runtime downloaded by uv | No | Yes |
+| The connector's environment | `<data>\environments\<hash>`, one for each connector folder and set of locked packages, and `<hash>.used` beside it (measured 2026-11-11). `connector/start.py` sets it; never inside the plugin's folder, which Windows would then not let go while the connector runs | The locked packages, installed from uv's cache: about 60 MB | No | **Yes**: removed with `<data>` (step 5). While the plugin is installed, one nobody started for a week is removed once nothing runs from it |
+| uv cache | `%LOCALAPPDATA%\uv\cache`; with Claude Desktop installed as a Windows package, the uv the app starts writes to `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\uv\cache` instead (measured 2026-11-11: 54 MB, several copies of the connector) | Built connector versions and their dependencies (`mcp`, `httpx`, `dulwich`, ...) | No | Yes; the first is shared with any other use of uv, the second holds what the app's processes downloaded |
+| Python | `%APPDATA%\uv\python` (measured 2026-11-11, not redirected) | The connector starts with `--managed-python`, so uv always uses a Python it downloaded itself, whatever the computer has | No | Yes; shared with any other use of uv's Python |
 | A preview (only with `app_preview`) | `%TEMP%\eunomai-preview-<random>`: `app`, a copy of the saved version; `environment`, its packages; `home`, `temp`, and `preview.log` | The application's files, its example data and its output, for as long as it runs | **As sensitive as the repository**, and whatever the application writes | No: it stays while the preview runs, even with Claude Desktop closed, and goes when it stops, at the latest after 60 minutes. If its watcher is killed, the next preview removes it. What the application wrote elsewhere stays: it runs as the person |
 | A workspace's kept preview data (only with `app_preview`) | `%TEMP%\eunomai-preview-keep-<hash>`: `data`, what the application writes where the declaration says `{data}`; `environment`, its installed packages | What the person entered in the application, and its packages | **As sensitive as what they entered** | No: removed on stop, at the time limit and by the sweep after two hours unused; kept across new versions |
 | The tests' last output (only with `app_tests`) | `<data>\tests\<hash>.log`, one a workspace, replaced by its next run | Everything the tests printed, up to 5 MB: names, values, whatever they show; for a run of some test files, which ones first | As sensitive as the repository | No: kept for IT, until the next run |
@@ -87,8 +87,10 @@ To leave nothing behind, in this order:
 5. **Delete** the connector's folder, `<data>` above: `%LOCALAPPDATA%\<plugin_name>` and, with Claude Desktop
    installed as a Windows package, `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\<plugin_name>`.
    Check both.
-6. **Clean uv's cache** of the connector: `uv cache clean eunomai-business`. If uv is used for nothing else,
-   remove uv itself following uv's uninstall guide.
+6. **Clean uv's cache** of the connector: `uv cache clean eunomai-business`, and, with Claude Desktop installed as a
+   Windows package, delete `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Local\uv\cache`: that command does not
+   reach it, and only the app's processes use it. If uv is used for nothing else, remove uv itself, and its Python,
+   following uv's uninstall guide.
 7. **Delete the workspaces** folder if the work is no longer needed.
 
 If step 2 is skipped, step 5 still removes the tokens from the computer.
