@@ -66,6 +66,7 @@ _SKIP_FOLDERS = {".git", ".venv", "venv", "node_modules", "__pycache__"}
 _UNREADABLE = (ValueError, UnicodeDecodeError, TypeError, AttributeError, KeyError, RecursionError)
 _AT_ONCE = 8  # packages checked at the same time: the audit runs before every send
 _NOT_VERIFIED = "the published source repository could not be reached to verify it: "
+_RETRY_AFTER_SECONDS = 2
 
 
 def _get(url: str) -> dict | None:
@@ -140,19 +141,31 @@ def _public(host: str) -> bool:
 
 def _exists(url: str) -> bool | None:
     """Whether the source repository's web address answers (None: it could not be reached). A signal of origin, not
-    proof: only https, only public hosts, no redirect followed (a redirect counts as an answer), body never read."""
+    proof: only https, only public hosts, no redirect followed (a redirect counts as an answer), body never read.
+    Only "not found" and "gone" say it does not exist. A host that is busy or limits how often it is asked (429, 5xx)
+    is asked once more, and then it could not be reached: an audit asks one host for many packages in a row."""
     address = _web_address(url)
     if not address:
         return False
     host = urlsplit(address).hostname or ""
     if not _public(host):
         return None
-    try:
-        with auth.http_client() as client:
-            with client.stream("GET", address, follow_redirects=False, timeout=10) as response:
-                return response.status_code < 400
-    except Exception:
+    for attempt in range(2):
+        try:
+            with auth.http_client() as client:
+                with client.stream("GET", address, follow_redirects=False, timeout=10) as response:
+                    status = response.status_code
+        except Exception:
+            return None
+        if status < 400:
+            return True
+        if status in (404, 410):
+            return False
+        if attempt == 0 and (status == 429 or status >= 500):
+            time.sleep(_RETRY_AFTER_SECONDS)
+            continue
         return None
+    return None
 
 
 def _pypi(name: str) -> dict | None:

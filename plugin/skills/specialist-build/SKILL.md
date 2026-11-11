@@ -110,6 +110,18 @@ your sandbox.
   `audit_unavailable` are as in `specialist-deliver`. It never replaces Deliver: production always takes IT's review.
 - Something unclear means going back to Specify and asking; never guess.
 
+## Tests in the sandbox
+
+- **As the project runs them:** the command of `[tests]` in `.eunomai/project.toml`, with the files to run after it
+  (in the organization's base, `uv run --frozen python tools/test.py -- tests/test_orders.py`), not `pytest` typed by
+  hand. The project's command shares the tests out as its own tests expect; another way of sharing them out can
+  fail tests that are right.
+- **By files, not the whole suite.** A sandbox command ends after a few minutes whatever it was doing. Run the files
+  of what changed, and the rest in groups of files that fit. The whole suite belongs to `app_tests`.
+- **Nothing left in the workspace.** The sandbox cannot delete a file there. Send caches elsewhere
+  (`RUFF_CACHE_DIR`, `MYPY_CACHE_DIR`, pytest's `-p no:cacheprovider`), and write a file under its final name:
+  to remove one, the user is asked.
+
 ## Done
 
 Every task is ticked, every scenario has a passing test, and you have just run the whole suite and the
