@@ -195,6 +195,7 @@ def test_the_whole_project_is_made_in_its_order_and_the_reply_is_in_the_requests
     assert f"{target}:main" in gitea.protected
     assert gitea.collaborators[target] == {"ana.it": "write"}
     assert gitea.repos[target]["has_actions"] is False
+    assert gitea.repos[target]["default_delete_branch_after_merge"] is True
     steps = [f"{method} {path.split('?')[0]}" for method, path in gitea.calls]
     named = steps.index(f"POST /api/v1/repos/{target}/contents")
     assert steps.index("POST /api/v1/repos/acme/template/generate") < named

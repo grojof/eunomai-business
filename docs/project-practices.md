@@ -77,12 +77,12 @@ Every call to a server goes through one interface, `Platform` in the tool, whose
 
 ```json
 {"owner": "projects", "name": "alta-de-pedidos", "private": true,
- "git_content": true, "protected_branch": true, "labels": true,
+ "git_content": true, "labels": true,
  "webhooks": false, "git_hooks": false}
 ```
 
-Generate with `protected_branch` so that `main`'s protection is copied, and leave out what the template should not
-hand to every project: `git_hooks` copies hooks that run on the server. A `.gitea/template` file in the template
+`tools/new_project.py` protects `main` itself, with the rules of its configuration, so the template's own protection
+need not be copied; leave out what the template should not hand to every project: `git_hooks` copies hooks that run on the server. A `.gitea/template` file in the template
 lists the files where `$REPO_NAME` and other variables are replaced; by default none are, and that file is not
 copied.
 
@@ -103,8 +103,9 @@ ruleset for all repositories covers a repository created later, so check it on t
 - **Create the repository with a `main` branch** (a README is enough). eunomai-business refuses to create
   versions in an empty repository.
 - **Protect `main` on the server:** no direct pushes, changes through pull requests. Decide how many approvals.
-- **Delete branches after merging** (Gitea: the repository's *Delete pull request branch after merge by
-  default*; GitHub: *Automatically delete head branches*), so the server does not pile up finished versions.
+- **Delete branches after merging,** so the server does not pile up finished versions: `tools/new_project.py` sets
+  it (Gitea's *Delete pull request branch after merge by default*); by hand on GitHub, *Automatically delete head
+  branches*.
 - **Give users write access** to the repository: they send versions and open pull requests; they cannot change
   `main` directly once it is protected.
 
