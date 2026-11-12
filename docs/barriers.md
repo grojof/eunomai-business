@@ -52,6 +52,7 @@ project and its git server. See [project-practices.md](project-practices.md).
 | 2 · Fetch | The server's branches are read; nothing local moves yet |
 | 3 · Back up | Before anything moves, the branch's position is kept as `refs/eunomai/backup/<time>/<branch>`; files changed during the update stop it instead of being replaced |
 | 4 · Decide | A version with nothing saved: moves to the latest main branch. Accepted version (in the main branch, or its pull request merged): back to the main branch, the version retired. A proposal closed without merging: noted, the version kept. Open version behind the main branch: combined only if no file was changed on both sides, checked before touching any file; lines of the same file are never merged automatically. On the main branch: fast-forward only |
+| Tell | When something came in, `arrived` lists the titles of what was accepted into the project (IT's updates, others' proposals), and the specialist tells the person |
 | Stop | The same file changed on both sides, a version changed elsewhere, a main branch that diverged or missing, files in the way: nothing changes, and IT is told |
 
 ## Dependencies

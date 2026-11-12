@@ -101,6 +101,33 @@ def test_main_moved_on_and_combines_cleanly(signed_in, workspaces):
         assert len(repo[repo.head()].parents) == 2
 
 
+def test_bringing_the_latest_says_what_arrived(signed_in, workspaces):
+    """In a Cowork test IT updated an application's look while the person was working: the update was combined, and
+    the person was never told why the application looked different."""
+    ws = joined(signed_in, "arrived")
+    gitops.branch("arrived", "draft/mine")
+    (ws / "mine.md").write_bytes(b"mine\n")
+    gitops.save("arrived", "Mine")
+    signed_in.server_commit("arrived", "main", {"theme.css": b"a\n"}, message="New look from IT\n\nThe details.")
+    signed_in.server_commit("arrived", "main", {"other.md": b"b\n"}, message="Another accepted proposal")
+    result = gitops.update("arrived")
+    assert result["status"] == "updated"
+    assert result["arrived"] == ["Another accepted proposal", "New look from IT"]
+    assert result["user_message"].endswith("What arrived: Another accepted proposal; New look from IT.")
+    assert "Mine" not in result["arrived"]  # the person's own work is not news to them
+    assert gitops.update("arrived")["status"] == "up_to_date"
+
+
+def test_on_the_main_branch_and_on_an_empty_version_it_also_says_what_arrived(signed_in, workspaces):
+    joined(signed_in, "arrived-main")
+    signed_in.server_commit("arrived-main", "main", {"a.md": b"a\n"}, message="Fix the totals")
+    assert gitops.update("arrived-main")["arrived"] == ["Fix the totals"]
+    joined(signed_in, "arrived-empty")
+    gitops.branch("arrived-empty", "draft/idea")
+    signed_in.server_commit("arrived-empty", "main", {"b.md": b"b\n"}, message="New report")
+    assert gitops.update("arrived-empty")["arrived"] == ["New report"]
+
+
 def test_a_conflict_stops_without_touching_anything(signed_in, workspaces, monkeypatch):
     monkeypatch.setenv("EUNOMAI_SUPPORT_EMAIL", "it@example.test")
     ws = joined(signed_in, "conflict")

@@ -12,9 +12,9 @@
   ],
   "component": {
    "type": "library",
-   "bom-ref": "eunomai-business-1@0.1.0",
+   "bom-ref": "eunomai-business-1@0.1.3",
    "name": "eunomai-business",
-   "version": "0.1.0",
+   "version": "0.1.3",
    "properties": [
     {
      "name": "uv:package:is_project_root",
@@ -5314,7 +5314,7 @@
    ]
   },
   {
-   "ref": "eunomai-business-1@0.1.0",
+   "ref": "eunomai-business-1@0.1.3",
    "dependsOn": [
     "dulwich-9@1.2.17",
     "httpx-13@0.28.1",

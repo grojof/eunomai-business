@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3 (2026-11-12)
+
+Three findings of a Cowork test in which IT updated an application's look while the person was working on it.
+
+- **Saved means a copy on the server.** A save stayed on the person's computer until the version was proposed, and the specialist called it "saved": the person took it for safe and only learned otherwise by asking. The specialist now sends the version after each turn in which it saved (a copy, not a proposal; IT does not review it), and says "saved on this computer only", with the reason, while it is not sent.
+- **Bringing the latest says what arrived.** The connector combined IT's update into the person's version and the specialist said nothing, so the application looked different with no reason given. `workspace_update` now returns `arrived`, the titles of what was accepted into the project, and the specialist tells the person, and does not call the work tested until the tests run again.
+- **The plugin's version is eunomai-business's.** Every build said 0.1.0, so two plugins could not be told apart, and Claude keeps an installed plugin by its version. It is now `connector/pyproject.toml`'s version, or the build's `plugin_version` when only IT's settings change.
+
 ## 0.1.2 (2026-11-12)
 
 - **When the connector cannot start, the specialist says what to do.** In a Cowork test it said "the connector does not answer, tell IT", then that it could not be forced, and a moment later it answered. It now says, in plain words and naming no program, that the assistant could not start, to close Claude Desktop completely and open it again, and, if it stays the same, to write to IT at the build's `support_email`, which the build now writes into the skills (`{{SUPPORT_EMAIL}}`).

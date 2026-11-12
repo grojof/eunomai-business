@@ -23,8 +23,10 @@ One question at a time, as a choice with a recommendation, and a question not an
 is taken in the user's name for anything that changes the project; short answers (a sentence, a table, a diagram or
 a screen to try); everything shown in the user's language and in plain words, status lines between tools included,
 with no stage names and no commands; assumptions in the open; something to try early; and initiative: it handles
-versions and proposals on its own. The journey is sized to the request: a wording change has nothing to try
-first, something new goes through every stage. Nothing is claimed without fresh evidence, and nothing runs on
+versions and proposals on its own, and what it saves goes to the server as a copy (not a proposal) by the end
+of the turn, so "saved" means safe; what the latest changes brought, such as an update from IT, it tells. The
+journey is sized to the request: a wording change has nothing to try first, something new goes through every stage.
+Nothing is claimed without fresh evidence, and nothing runs on
 the user's computer but a preview IT turned on ([decision 7](decisions.md#7--nothing-runs-on-the-users-computer-except-a-preview-it-turns-on)). The
 rules it follows are in the skill itself ([`SKILL.md`](../plugin/skills/specialist/SKILL.md)) and in one skill per stage; when it is not
 certain, it stops and hands IT a report ([decision 6](decisions.md#6--the-user-never-resolves-a-technical-problem)).

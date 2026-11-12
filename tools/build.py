@@ -22,6 +22,16 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
+VERSION = re.compile(r"\d+\.\d+\.\d+")
+
+
+def eunomai_version() -> str:
+    """eunomai-business's version, from the connector's pyproject.toml: the one place it is written."""
+    found = re.search(r'^version = "([^"]+)"', (ROOT / "connector" / "pyproject.toml").read_text(encoding="utf-8"),
+                      re.MULTILINE)
+    if not found:
+        raise SystemExit("connector/pyproject.toml has no version")
+    return found[1]
 PLUGIN_SRC = ROOT / "plugin"
 CONNECTOR_SRC = ROOT / "connector"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache",
@@ -30,7 +40,7 @@ SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowe
                    "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests",
                    "message_style", "uv_minimum"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
-        "providers", "deny", "plugin_name", "plugin_description", "platform"} | SPECIALIST_KEYS
+        "providers", "deny", "plugin_name", "plugin_description", "plugin_version", "platform"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 PLUGIN_NAME = VARIANT  # as connector/src/eunomai_business/__init__.py reads it
 DEFAULT_PLUGIN = "eunomai-business"
@@ -93,6 +103,9 @@ def validate_specialist(cfg: dict) -> list[str]:
             or not (isinstance(font, str) and STYLE_FONT.match(font)):
         errors.append('message_style takes "accent" (a colour such as #1f4e79) and "font" (font names separated by '
                       'commas), both optional')
+    own = cfg.get("plugin_version", "")
+    if not isinstance(own, str) or (own and not VERSION.fullmatch(own)):
+        errors.append('plugin_version must be a version such as "0.1.3", or empty for eunomai-business\'s')
     minimum = cfg.get("uv_minimum", "")
     if not isinstance(minimum, str) or (minimum and not re.fullmatch(r"\d+\.\d+\.\d+", minimum)):
         errors.append('uv_minimum must be a version such as "0.13.5", or empty')
@@ -223,6 +236,8 @@ def build(cfg: dict, out_dir: Path) -> Path:
         "PLUGIN": plugin,
         "PLATFORM": cfg.get("platform") or PLATFORMS[0],
         "PLUGIN_DESCRIPTION": cfg.get("plugin_description") or DEFAULT_DESCRIPTION,
+        # Claude keeps an installed plugin by its version: each release, and each change of IT's settings, needs its own
+        "PLUGIN_VERSION": cfg.get("plugin_version") or eunomai_version(),
         "DIAGNOSTICS": "1" if diagnostics else "0",
         "BUILD": _build_id(),
         "SPECIALIST": json.dumps({k: cfg[k] for k in sorted(SPECIALIST_KEYS) if k in cfg}, separators=(",", ":"),

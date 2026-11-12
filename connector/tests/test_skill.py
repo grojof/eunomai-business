@@ -199,3 +199,15 @@ def test_the_application_is_documented_and_its_template_is_not_left_in_the_readm
     deliver = plain(reference("deliver"))
     assert "the README describes this application, not its template" in deliver
 
+
+def test_saved_means_a_copy_on_the_server():
+    """People take "saved" to mean safe: a version only on the laptop is lost with it."""
+    rule = SPECIALIST[SPECIALIST.index("**Saved means a copy on the server.**"):]
+    rule = rule[:rule.index("\n- **")]
+    assert "`version_send(workspace)`" in rule and "on this computer only" in rule and "not a proposal" in rule
+
+
+def test_what_arrived_with_the_latest_is_told():
+    step = SPECIALIST[SPECIALIST.index("3. **Latest changes:**"):SPECIALIST.index("4. **Settings:**")]
+    assert "`arrived`" in step and "their work is kept" in step and "tests run after it" in step
+
