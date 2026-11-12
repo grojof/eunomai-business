@@ -236,11 +236,14 @@ def build(cfg: dict, out_dir: Path) -> Path:
         json.loads(text)  # fail here, not in Claude, if the result is not valid JSON
         template.with_suffix("").write_text(text, encoding="utf-8", newline="\n")  # LF on every OS
         template.unlink()
-    # The skills name the plugin's own tools and skills by one placeholder, and nothing else of theirs is replaced
+    # The skills name the plugin's own tools and skills, and IT's address for when the connector cannot start (they
+    # cannot ask it then), by placeholders; nothing else of theirs is replaced
+    support = cfg.get("support_email") or "IT"
     for skill in (out / "skills").rglob("*.md"):
         markdown = skill.read_text(encoding="utf-8")
-        if "{{PLUGIN}}" in markdown:
-            skill.write_text(markdown.replace("{{PLUGIN}}", plugin), encoding="utf-8", newline="\n")
+        if "{{PLUGIN}}" in markdown or "{{SUPPORT_EMAIL}}" in markdown:
+            markdown = markdown.replace("{{PLUGIN}}", plugin).replace("{{SUPPORT_EMAIL}}", support)
+            skill.write_text(markdown, encoding="utf-8", newline="\n")
 
     policy = json.dumps({"deny": cfg.get("deny", [])}, indent=2, ensure_ascii=False) + "\n"
     (out / "policy.json").write_text(policy, encoding="utf-8", newline="\n")  # the guard's deny rules

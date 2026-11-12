@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **When the connector cannot start, the specialist says what to do.** In a Cowork test it said "the connector does not answer, tell IT", then that it could not be forced, and a moment later it answered. It now says, in plain words and naming no program, that the assistant could not start, to close Claude Desktop completely and open it again, and, if it stays the same, to write to IT at the build's `support_email`, which the build now writes into the skills (`{{SUPPORT_EMAIL}}`).
+
 ## 0.1.1 (2026-11-11)
 
 - **The uv that runs the connector is checked.** The audit read every package a project pins, but not the uv that ran it all: a computer with an old uv, or one an advisory names, went unnoticed. The connector now reads its uv's version; `uv_minimum`, IT's validated version, is said to the person at the start of a session, with an e-mail for IT, when the uv is older; and a uv with a known vulnerability, looked up in OSV as `pypi:uv`, blocks the audit as a vulnerable package does.
