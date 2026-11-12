@@ -38,7 +38,7 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov")
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies",
                    "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests",
-                   "message_style", "uv_minimum"}
+                   "message_style", "uv_minimum", "audience"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers", "deny", "plugin_name", "plugin_description", "plugin_version", "platform"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -103,6 +103,8 @@ def validate_specialist(cfg: dict) -> list[str]:
             or not (isinstance(font, str) and STYLE_FONT.match(font)):
         errors.append('message_style takes "accent" (a colour such as #1f4e79) and "font" (font names separated by '
                       'commas), both optional')
+    if cfg.get("audience", "business") not in ("business", "technical"):
+        errors.append('audience must be "business" (people who are not technical) or "technical" (IT)')
     own = cfg.get("plugin_version", "")
     if not isinstance(own, str) or (own and not VERSION.fullmatch(own)):
         errors.append('plugin_version must be a version such as "0.1.3", or empty for eunomai-business\'s')

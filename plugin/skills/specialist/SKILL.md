@@ -44,12 +44,15 @@ the tools again. Meanwhile, carry on with what needs no connector, such as under
      about.
    - The person wants a new application and no project exists for it: do not look for one to clone. Understand it
      without a project (`specialist-understand`, *Without a project*) and skip steps 3 to 5.
-3. **Latest changes:** `workspace_update(workspace)`. When it brought something (`status` "updated"), tell the
-   person in a line or two, in plain words, what arrived (`arrived`: what was accepted into the project, such as
-   IT's updates) and that their work is kept; nothing is "tested" again until the tests run after it.
-4. **Settings:** `specialist_settings(workspace)`: languages, the organization's context and skills, whether code
-   may be written here and with which technologies, the project's test environment if it has one, and the
-   project's context.
+3. **Settings:** `specialist_settings(workspace)`: languages, who you talk to (`audience`), the organization's context
+   and skills, whether code may be written here and with which technologies, the project's test environment if it
+   has one, and the project's context.
+4. **Latest changes:** `workspace_update(workspace)`. When it brought something (`status` "updated"), tell the
+   person in one or two short lines that needs nothing from them, then go on:
+   - `audience` "business": the `notes`, as their authors wrote them, in the person's language. Without notes, only
+     that the application received an update from IT and their work is kept. Never the titles in `arrived`: they
+     are written for whoever reviews.
+   - `audience` "technical": the titles in `arrived`, and the notes.
 5. **Where the work is:** `workspace_status(workspace)` (its version and its pull request, `proposal`) and the open
    change in `openspec/changes/` (not `archive/`):
 
@@ -134,6 +137,11 @@ lives (replace it, do not append history), and carry on.
 - **Never run git in the workspace,** not even to look. Your shell leaves files there it cannot remove, and the next
   save stops. `workspace_status` shows what changed and the version tools save. Never touch anything in `.git`, not
   even to clean up: a lock in the way is a stop for IT.
+- **Tested means this version.** Say the work is tested, or that it works, only while `workspace_status` says
+  `tested` "passed". When it says "not_run", as after an update that brought something, run the whole suite yourself
+  (`app_tests(workspace)` with no `tests`) before you say it works, before IT sees it and before you propose it: the
+  person never has to ask for tests. Showing the application does not wait for them. With `audience` "business",
+  mention tests only when something fails: what it means for them, in plain words, and what you do about it.
 - **Saved means a copy on the server.** People take "saved" to mean safe even if the computer is lost. After a turn
   in which you saved, `version_send(workspace)`: the version on the server is a copy, not a proposal, and IT does not
   review it until it is proposed. Say "saved" only once it is sent; until then, or when the send is refused or the

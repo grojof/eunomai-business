@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.4 (2026-11-12)
+
+Two findings of a Cowork test in which IT updated an application's look while a person in a business department was
+working on it.
+
+- **What arrived is told in its author's words, for whoever reads it.** The person was told "up to date with the
+  template", a title written for IT. `workspace_update` now also returns `notes`: each `Note-for-people:` line in what
+  arrived, written by whoever made the change. The new `audience` setting says who the specialist talks to: to
+  `"business"` (the default) it tells the notes, or a plain sentence without them, never the titles; to `"technical"`
+  the titles too.
+- **Tested means this version.** Right after the update, the specialist called the application "built and tested".
+  `workspace_status` now returns `tested`: whether the whole suite passed on this very version, as the connector
+  recorded it. The specialist calls the work tested only then, runs the suite itself otherwise before saying it works
+  or proposing it, and mentions tests to business people only when something fails.
+
 ## 0.1.3 (2026-11-12)
 
 Three findings of a Cowork test in which IT updated an application's look while the person was working on it.

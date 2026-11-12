@@ -24,7 +24,7 @@ is taken in the user's name for anything that changes the project; short answers
 a screen to try); everything shown in the user's language and in plain words, status lines between tools included,
 with no stage names and no commands; assumptions in the open; something to try early; and initiative: it handles
 versions and proposals on its own, and what it saves goes to the server as a copy (not a proposal) by the end
-of the turn, so "saved" means safe; what the latest changes brought, such as an update from IT, it tells. The
+of the turn, so "saved" means safe; what the latest changes brought, such as an update from IT, it tells in the words its author wrote for them. It calls the work tested only when the whole suite passed on this very version, and runs it itself when it did not: the person never has to ask for tests. The
 journey is sized to the request: a wording change has nothing to try first, something new goes through every stage.
 Nothing is claimed without fresh evidence, and nothing runs on
 the user's computer but a preview IT turned on ([decision 7](decisions.md#7--nothing-runs-on-the-users-computer-except-a-preview-it-turns-on)). The
