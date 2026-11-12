@@ -2,6 +2,7 @@
 
 import copy
 import json
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -263,3 +264,20 @@ def test_the_specialist_says_where_to_write_when_the_connector_cannot_start(tmp_
     assert "close Claude Desktop completely" in text and "{{" not in text
     unset = built(tmp_path / "other", "acme-web", support_email="")
     assert "write to IT at\nIT" in (unset / "skills" / "specialist" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_the_plugins_version_is_eunomai_business_or_it_says_its_own(tmp_path):
+    """Every build said 0.1.0, whatever its eunomai-business: two plugins could not be told apart, and Claude keeps an
+    installed plugin by its version."""
+    def version(folder):
+        return json.loads((folder / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
+    assert version(built(tmp_path, "acme-apps")) == build.eunomai_version()
+    assert version(built(tmp_path / "own", "acme-apps", plugin_version="0.1.9")) == "0.1.9"
+    assert "plugin_version" in " ".join(build.validate(dict(EXAMPLE, plugin_version="next")))
+
+
+def test_the_version_in_pyproject_is_the_changelogs_latest():
+    """One place for the version (connector/pyproject.toml); a release names it in the changelog too."""
+    root = Path(build.__file__).resolve().parent.parent
+    heading = re.search(r"^## (\S+)", (root / "CHANGELOG.md").read_text(encoding="utf-8"), re.MULTILINE)[1]
+    assert heading == "Unreleased" or heading == build.eunomai_version()

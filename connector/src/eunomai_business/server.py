@@ -99,7 +99,8 @@ def workspace_status(workspace: str) -> dict:
 def workspace_update(workspace: str) -> dict:
     """Bring the latest changes of the project into the workspace, on its own and without losing anything. Call it
     before starting new work and after a proposal is accepted. It saves unsaved changes first, keeps a backup, and
-    only combines changes that combine cleanly; anything else it leaves untouched and reports."""
+    only combines changes that combine cleanly; anything else it leaves untouched and reports. With `status`
+    "updated", `arrived` lists what came in (the titles of what was accepted into the project): tell the person."""
     return _safe(gitops.update, workspace)
 
 
@@ -112,7 +113,8 @@ def version_create(workspace: str, name: str) -> dict:
 
 @mcp.tool()
 def version_save(workspace: str, message: str) -> dict:
-    """Save point (commit) of every change in the workspace, as the signed-in git user. Never on the main branch."""
+    """Save point (commit) of every change in the workspace, as the signed-in git user. Never on the main branch.
+    It stays on this computer: at the end of the turn, `version_send` puts a copy on the server."""
     return _safe(gitops.save, workspace, message)
 
 

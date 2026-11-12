@@ -1,6 +1,6 @@
 {
   "name": "{{PLUGIN}}",
-  "version": "0.1.0",
+  "version": "{{PLUGIN_VERSION}}",
   "description": "{{PLUGIN_DESCRIPTION}}",
   "license": "MIT"
 }

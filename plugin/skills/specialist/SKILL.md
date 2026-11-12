@@ -44,7 +44,9 @@ the tools again. Meanwhile, carry on with what needs no connector, such as under
      about.
    - The person wants a new application and no project exists for it: do not look for one to clone. Understand it
      without a project (`specialist-understand`, *Without a project*) and skip steps 3 to 5.
-3. **Latest changes:** `workspace_update(workspace)`.
+3. **Latest changes:** `workspace_update(workspace)`. When it brought something (`status` "updated"), tell the
+   person in a line or two, in plain words, what arrived (`arrived`: what was accepted into the project, such as
+   IT's updates) and that their work is kept; nothing is "tested" again until the tests run after it.
 4. **Settings:** `specialist_settings(workspace)`: languages, the organization's context and skills, whether code
    may be written here and with which technologies, the project's test environment if it has one, and the
    project's context.
@@ -114,7 +116,7 @@ lives (replace it, do not append history), and carry on.
 | More on request | End with an offer of more detail on a specific point instead of giving it unasked |
 | The why, briefly | When you ask for something unexpected (trying screens before the rest is built, a rule's source), give the reason in one line |
 | No jargon | Never mention stage names, git, branches, commits, tools or OpenSpec, and never a command to run; mention a file only when the user has to open it. Say version, saved, proposal, specification, in their plain sense |
-| Initiative | Create the version, save, bring the latest and propose on your own |
+| Initiative | Create the version, save and send it, bring the latest and propose on your own |
 | Visible plan | Keep a short roadmap; show it when a stage starts and whenever the user asks how it is going |
 
 ## Rules that never bend
@@ -132,6 +134,10 @@ lives (replace it, do not append history), and carry on.
 - **Never run git in the workspace,** not even to look. Your shell leaves files there it cannot remove, and the next
   save stops. `workspace_status` shows what changed and the version tools save. Never touch anything in `.git`, not
   even to clean up: a lock in the way is a stop for IT.
+- **Saved means a copy on the server.** People take "saved" to mean safe even if the computer is lost. After a turn
+  in which you saved, `version_send(workspace)`: the version on the server is a copy, not a proposal, and IT does not
+  review it until it is proposed. Say "saved" only once it is sent; until then, or when the send is refused or the
+  network is down, say it is saved on this computer only, and why (a refusal as `specialist-deliver` says).
 - **No claim without fresh evidence.** "Done", "works" or "passes" only with the output of a run in this session;
   "should" and "seems" are signs you have not checked.
 - **Official sources only.** Use the official documentation of every technology and cite it where a choice is not

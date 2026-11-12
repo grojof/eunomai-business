@@ -1003,6 +1003,21 @@ def _move(repo: Repo, branch_name: str, target: bytes, workspace: str) -> None:
     repo.refs[ref] = target
 
 
+def _brought(repo, new: bytes, old: bytes | None) -> list[str]:
+    """What the main branch brought: the first line of each commit's message, newest first, at most ten. They are
+    what was accepted into the project (IT's updates, others' proposals), so the person knows why things changed."""
+    titles: list[str] = []
+    for entry in repo.get_walker(include=[new], exclude=[old] if old else None, max_entries=20):
+        title = entry.commit.message.decode("utf-8", "replace").split("\n", 1)[0].strip()
+        if title and title not in titles:
+            titles.append(title)
+    return titles[:10]
+
+
+def _what_arrived(titles: list[str]) -> str:
+    return f"What arrived: {'; '.join(titles)}." if titles else ""
+
+
 @_one_at_a_time
 def update(workspace: str) -> dict:
     """Bring the latest changes from the server without losing anything (see the update tool for the rules)."""
@@ -1053,10 +1068,12 @@ def update(workspace: str) -> dict:
                 raise NeedsIT("This copy of the project differs from the server in a way the connector does not "
                               "resolve on its own. Your work is safe.", "local main branch diverged from the server",
                               _facts(repo, workspace))
+            arrived = _brought(repo, remote_main, local)
             result["backup"] = _backup(repo, name)  # 3. a way back, before anything moves
             _move(repo, name, remote_main, workspace)
-            return {**result, "status": "updated", "branch": name, "head": _head(repo),
-                    "user_message": " ".join(notes + ["The latest changes of the project are here."])}
+            return {**result, "status": "updated", "branch": name, "head": _head(repo), "arrived": arrived,
+                    "user_message": " ".join(notes + ["The latest changes of the project are here.",
+                                                      _what_arrived(arrived)]).strip()}
 
         version_head = repo.refs[f"refs/heads/{name}".encode()]
         local_main = _ref(repo, f"refs/heads/{main}".encode())  # fetching does not move it
@@ -1065,10 +1082,12 @@ def update(workspace: str) -> dict:
             if version_head == remote_main:
                 return {**result, "status": "up_to_date", "branch": name,
                         "user_message": " ".join(notes + ["Everything is up to date."])}
+            arrived = _brought(repo, remote_main, version_head)
             result["backup"] = _backup(repo, name)
             _move(repo, name, remote_main, workspace)
-            return {**result, "status": "updated", "branch": name, "head": _head(repo),
-                    "user_message": " ".join(notes + ["The latest changes of the project are here."])}
+            return {**result, "status": "updated", "branch": name, "head": _head(repo), "arrived": arrived,
+                    "user_message": " ".join(notes + ["The latest changes of the project are here.",
+                                                      _what_arrived(arrived)]).strip()}
         on_server = _ref(repo, f"refs/remotes/origin/{name}".encode())
         proposal = _proposal_for(origin, current, name)
         merged = can_fast_forward(repo, version_head, remote_main) or bool(
@@ -1115,11 +1134,12 @@ def update(workspace: str) -> dict:
         merge.commit_timezone = merge.author_timezone = -time.timezone
         merge.message = f"Bring in the latest changes from {main}\n".encode()
         repo.object_store.add_object(merge)
+        arrived = _brought(repo, remote_main, version_head)
         result["backup"] = _backup(repo, name)
         _move(repo, name, merge.id, workspace)
-        return {**result, "status": "updated", "branch": name, "head": _head(repo),
+        return {**result, "status": "updated", "branch": name, "head": _head(repo), "arrived": arrived,
                 "user_message": " ".join(notes + ["The latest changes of the project were added to your version; "
-                                                  "your work is kept."])}
+                                                  "your work is kept.", _what_arrived(arrived)]).strip()}
 
 
 def current_version(workspace: str, test_branch: str | None) -> str | None:
