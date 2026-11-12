@@ -35,7 +35,7 @@ def test_everything_shown_to_the_user_is_in_their_language_and_plain_words():
 
 
 def test_folder_access_is_requested_in_the_same_task_with_the_old_sentence_as_a_fallback():
-    start = " ".join(SPECIALIST.split("## Start of every session")[1].split("3. **Latest changes")[0].split())
+    start = " ".join(SPECIALIST.split("## Start of every session")[1].split("3. **Settings")[0].split())
     assert "mcp__cowork__request_cowork_directory" in start and "this same task" in start
     assert "not there or it fails" in start and "open a new task" in start
     assert start.index("mcp__cowork__request_cowork_directory") < start.index("open a new task")
@@ -207,7 +207,19 @@ def test_saved_means_a_copy_on_the_server():
     assert "`version_send(workspace)`" in rule and "on this computer only" in rule and "not a proposal" in rule
 
 
-def test_what_arrived_with_the_latest_is_told():
-    step = SPECIALIST[SPECIALIST.index("3. **Latest changes:**"):SPECIALIST.index("4. **Settings:**")]
-    assert "`arrived`" in step and "their work is kept" in step and "tests run after it" in step
+def test_what_arrived_with_the_latest_is_told_for_whoever_reads_it():
+    """A person in sales was told "up to date with the template": a title written for IT."""
+    assert SPECIALIST.index("3. **Settings:**") < SPECIALIST.index("4. **Latest changes:**")  # the audience first
+    step = plain(SPECIALIST[SPECIALIST.index("4. **Latest changes:**"):SPECIALIST.index("5. **")])
+    assert '`audience` "business": the `notes`, as their authors wrote them' in step
+    assert "Never the titles in `arrived`" in step and "their work is kept" in step
+    assert '`audience` "technical": the titles in `arrived`, and the notes' in step
+
+
+def test_tested_means_this_version_and_the_person_never_asks_for_it():
+    """Right after an update, the specialist told a person the application was "built and tested"."""
+    rule = SPECIALIST[SPECIALIST.index("**Tested means this version.**"):]
+    rule = plain(rule[:rule.index("\n- **")])
+    assert '`tested` "passed"' in rule and "`app_tests(workspace)` with no `tests`" in rule
+    assert "the person never has to ask for tests" in rule and "mention tests only when something fails" in rule
 

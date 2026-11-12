@@ -118,6 +118,36 @@ def test_bringing_the_latest_says_what_arrived(signed_in, workspaces):
     assert gitops.update("arrived")["status"] == "up_to_date"
 
 
+def test_a_note_for_people_is_told_in_its_authors_words(signed_in, workspaces):
+    """A title such as "Up to date with the template (25f7f82)" told a person in sales nothing: whoever makes the change
+    writes what it means to them, and that is what reaches them."""
+    ws = joined(signed_in, "noted")
+    gitops.branch("noted", "draft/mine")
+    (ws / "mine.md").write_bytes(b"mine\n")
+    gitops.save("noted", "Mine")
+    note = "Your application has the organization's new look. Nothing to do."
+    signed_in.server_commit("noted", "main", {"theme.css": b"a\n"},
+                            message=f"Up to date with the template (25f7f82) (#2)\n\nDetails for IT.\n\n"
+                                    f"Note-for-people: {note}\nReviewed-on: https://example.test/pulls/2\n")
+    signed_in.server_commit("noted", "main", {"other.md": b"b\n"}, message=f"Same again\n\nNote-for-people: {note}")
+    signed_in.server_commit("noted", "main", {"empty.md": b"c\n"}, message="Fix\n\nNote-for-people:   \n")
+    result = gitops.update("noted")
+    assert result["notes"] == [note]  # once, however many commits carry it; an empty one is no note
+    assert result["arrived"] == ["Fix", "Same again", "Up to date with the template (25f7f82) (#2)"]
+    assert result["user_message"].endswith(f"For you: {note}")
+    assert "25f7f82" not in result["user_message"]
+
+
+def test_a_note_is_cut_and_without_notes_the_titles_are_told(signed_in, workspaces):
+    joined(signed_in, "long-note")
+    signed_in.server_commit("long-note", "main", {"a.md": b"a\n"}, message="Long\n\nNote-for-people: " + "x" * 500)
+    assert gitops.update("long-note")["notes"] == ["x" * gitops.NOTE_LENGTH]
+    joined(signed_in, "no-note")
+    signed_in.server_commit("no-note", "main", {"a.md": b"a\n"}, message="Fix the totals")
+    result = gitops.update("no-note")
+    assert result["notes"] == [] and result["user_message"].endswith("What arrived: Fix the totals.")
+
+
 def test_on_the_main_branch_and_on_an_empty_version_it_also_says_what_arrived(signed_in, workspaces):
     joined(signed_in, "arrived-main")
     signed_in.server_commit("arrived-main", "main", {"a.md": b"a\n"}, message="Fix the totals")

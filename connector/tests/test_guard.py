@@ -485,7 +485,15 @@ def test_the_proposal_says_the_tests_the_connector_saw_for_that_commit(signed_in
     assert "the whole suite was not run" in body()
     project_tests.remember(name, head, True, {"passed": 12, "skipped": 1})
     assert "whole suite: **passed**, 12 passed, 1 skipped" in body() and "for this commit" in body()
+    assert server._status(name)["tested"] == "passed"
+    (ws / "index.html").write_bytes(b"<p>Hello again</p>")
+    assert server._status(name)["tested"] == "not_run"  # what changed since was not tested
+    (ws / "index.html").write_bytes(b"<p>Hello</p>")
     project_tests.remember(name, "0" * 40, False, {"failed": 1})
     assert "was for commit `000000000000`, **not this one**" in body()
+    assert server._status(name)["tested"] == "not_run"  # another version's run says nothing about this one
+    project_tests.remember(name, head, False, {"failed": 1})
+    assert server._status(name)["tested"] == "failed"
     monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"app_tests": False}))
     assert "not turned on in this organization" in body()
+    assert server._status(name)["tested"] == "unavailable"

@@ -128,7 +128,7 @@ headers and roles from groups.
 |---|---|
 | This repository's and the base's dependencies | A weekly workflow opens a pull request; IT reviews and merges it |
 | The organization's template | Step 5 again, from a newer base |
-| An application | From the newer template: `tools/update_application.py --template <template repository> --check`, then without `--check`: a branch with the template's change merged and the application's kept, for a pull request ([updating an application](https://github.com/grojof/eunomai-business-app-base/blob/main/docs/base/specification.md#updating-an-application)) |
+| An application | From the newer template: `tools/update_application.py --template <template repository> --check`, then without `--check`: a branch with the template's change merged and the application's kept, for a pull request. Add to its description a line `Note-for-people: <what it means to them, in their words>`, such as "Your application has the organization's new look. Nothing to do.": merged, it is what the people working on the application are told ([updating an application](https://github.com/grojof/eunomai-business-app-base/blob/main/docs/base/specification.md#updating-an-application)) |
 | The plugin | Step 4 again |
 
 ## 10. Uninstalling

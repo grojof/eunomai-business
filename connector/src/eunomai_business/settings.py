@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 DEFAULTS = {"docs_language": "en", "code_language": "", "free_development": False, "allowed_technologies": [],
             "dependency_exceptions": [], "organization_context": "", "organization_skills": [], "app_preview": False,
-            "app_tests": False, "uv_minimum": ""}
+            "app_tests": False, "uv_minimum": "", "audience": "business"}
 
 
 def load() -> dict:

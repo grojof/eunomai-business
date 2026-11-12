@@ -88,6 +88,13 @@ def test_app_tests_reaches_the_connector_on_its_own(tmp_path, value):
     assert specialist["app_tests"] is value and specialist["app_preview"] is False
 
 
+def test_the_audience_reaches_the_connector_and_is_checked(tmp_path):
+    build.build(dict(EXAMPLE, audience="technical"), tmp_path)
+    mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
+    assert json.loads(mcp["mcpServers"]["eunomai-business"]["env"]["EUNOMAI_SPECIALIST"])["audience"] == "technical"
+    assert any("audience" in error for error in build.validate(dict(EXAMPLE, audience="sales")))
+
+
 def test_the_message_style_reaches_the_connector(tmp_path):
     style = {"accent": "#7a1f5c", "font": "Verdana, sans-serif"}
     build.build(dict(EXAMPLE, message_style=style), tmp_path)
