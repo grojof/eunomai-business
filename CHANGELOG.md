@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 (2026-11-12)
 
 - **When the connector cannot start, the specialist says what to do.** In a Cowork test it said "the connector does not answer, tell IT", then that it could not be forced, and a moment later it answered. It now says, in plain words and naming no program, that the assistant could not start, to close Claude Desktop completely and open it again, and, if it stays the same, to write to IT at the build's `support_email`, which the build now writes into the skills (`{{SUPPORT_EMAIL}}`).
+- **An organization's skill is named as people get it** in `organization_skills`: `plugin:skill` when it comes in a plugin, the bare name when the organization shares it on its own. The docs asked for `plugin:skill` only, which names nothing on a computer that has the skill without the plugin.
 
 ## 0.1.1 (2026-11-11)
 
