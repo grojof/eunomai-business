@@ -17,6 +17,13 @@ loaded first, load them with ToolSearch and `select:` followed by those exact na
 one call; a search by words can miss them. A search that finds nothing is not a lost connection: try `select:`
 with the exact names, and say the connector is not answering only when a call to one of its tools fails.
 
+**When the connector is not there** (the search says the plugin's server failed to connect, or a call to one of its
+tools fails), tell the person once, in their language and these plain terms, naming no program or protocol: the
+assistant for applications could not start on their computer; to fix it, close Claude Desktop completely, also from
+the icon next to the clock, open it again and start a new task; if it stays the same, write to IT at
+{{SUPPORT_EMAIL}}. Do not guess when it will come back or say it cannot be retried: when they say they did it, try
+the tools again. Meanwhile, carry on with what needs no connector, such as understanding what they need.
+
 1. **Sign-in:** `whoami("git")`. If not signed in, `sign_in_start("git")`, tell the user in one line to finish
    signing in in the browser that opened, then `sign_in_status("git")` until it is no longer `waiting`, **in the
    same turn**: each call waits up to 40 seconds for the browser, and the sign-in lives only as long as this turn, so

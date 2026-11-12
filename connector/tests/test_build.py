@@ -254,3 +254,12 @@ def test_a_plugin_description_must_be_short_text(description):
 def test_the_uv_minimum_is_a_version(minimum, fine):
     errors = build.validate_specialist(dict(EXAMPLE, uv_minimum=minimum))
     assert (not any("uv_minimum" in e for e in errors)) is fine
+
+
+def test_the_specialist_says_where_to_write_when_the_connector_cannot_start(tmp_path):
+    folder = built(tmp_path, "acme-apps", support_email="it@example.org")
+    text = (folder / "skills" / "specialist" / "SKILL.md").read_text(encoding="utf-8")
+    assert "write to IT at\nit@example.org" in text or "write to IT at it@example.org" in text
+    assert "close Claude Desktop completely" in text and "{{" not in text
+    unset = built(tmp_path / "other", "acme-web", support_email="")
+    assert "write to IT at\nIT" in (unset / "skills" / "specialist" / "SKILL.md").read_text(encoding="utf-8")
