@@ -85,7 +85,7 @@ def validate_specialist(cfg: dict) -> list[str]:
     if not isinstance(skills, list) or not all(
             isinstance(s, dict) and set(s) == {"skill", "use_for"} and _strings([s["skill"], s["use_for"]])
             for s in skills):
-        errors.append('organization_skills must be a list of {"skill": "<plugin:skill>", "use_for": "<purpose>"}')
+        errors.append('organization_skills must be a list of {"skill": "<name or plugin:skill>", "use_for": "<purpose>"}')
     style = cfg.get("message_style", {})
     accent, font = (style.get("accent", "#000000"), style.get("font", "x")) if isinstance(style, dict) else ("", "")
     if not isinstance(style, dict) or set(style) - {"accent", "font"} \
