@@ -289,7 +289,7 @@ def test_a_failure_carries_what_pytest_wrote_under_it():
     """The summary's line was cut to `assert ['dark color-.../7"]', ...] == []`, and the log lay outside the folders
     the assistant can open: it could not tell which element failed."""
     text = "\n".join([
-        "_______ test_no_detectable_accessibility_failure[/incidents] _______",
+        "_______ test_no_detectable_accessibility_failure[/orders] _______",
         ">       assert run_axe_in_both_themes(page) == []",
         "E       assert ['dark color-.../7\"]', ...] == []",
         "E         ",
@@ -299,11 +299,11 @@ def test_a_failure_carries_what_pytest_wrote_under_it():
         "____________ ERROR at setup of test_db ____________",
         "E       ConnectionRefusedError: [Errno 111]",
         "=========================== short test summary info ============================",
-        "FAILED tests/test_incidents.py::test_no_detectable_accessibility_failure[/incidents] - assert [...] == []",
+        "FAILED tests/test_orders_pages.py::test_no_detectable_accessibility_failure[/orders] - assert [...] == []",
         "FAILED tests/test_orders.py::TestOrders::test_total - assert 3 == 4",
         "ERROR tests/test_db.py::test_db - ConnectionRefusedError: [Errno 111]",
         "FAILED tests/test_quiet.py::test_quiet",
-        "1 failed, 1466 passed, 13 skipped in 41.20s",
+        "3 failed, 120 passed in 41.20s",
     ])
     first, orders, db, quiet = app_tests.summary(text)["failures"]
     assert "first extra item: 'dark color-contrast: [.link]'" in first["detail"]
