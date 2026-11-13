@@ -851,11 +851,12 @@ def _closed_addresses(result: dict) -> list[str]:
     return sorted({urlsplit(_web_address(url) or "").hostname or "" for url in urls} - {""})
 
 
-def refusal(workspace: str, result: dict, outcome: str, behind: bool = False) -> dict:
+def refusal(workspace: str, result: dict, outcome: str, newer: bool = False) -> dict:
     """A tool's answer when the audit of a saved version is not `allowed`: `outcome`, the reasons in plain words, a
     report for IT, and the audit's own findings for Claude. When all that stopped it is a closed network, nothing is
     wrong with the packages, so it is told as the audit that could not run, which it still does not let through.
-    `behind`: the main branch has commits the version lacks, so bringing them in comes first (`behind_main`)."""
+    `newer`: the main branch changed what the project uses since the version parted from it, so bringing that in
+    comes first (`newer_on_main`)."""
     closed = _closed_addresses(result)
     only_closed = closed and not result["not_pinned"] and not result.get("unpinned_files") and all(
         reason.startswith(_NOT_VERIFIED) for item in result["blocked"] for reason in item["reasons"])
@@ -865,12 +866,11 @@ def refusal(workspace: str, result: dict, outcome: str, behind: bool = False) ->
                                          "computer.", Unreachable(", ".join(closed[:5])))
     reasons = _plain_reasons(result)
     message = f"{outcome}, because of what it uses: {'; '.join(reasons[:5])}. Your work is safe on this computer."
-    if behind:
-        message += (" The project has newer changes from IT that this version does not have yet, which may already "
-                    "solve it: bring them in first and try again.")
+    if newer:
+        message += " The project already has newer changes to what it uses, which may solve this."
     details = {"Workspace": workspace, "Version": result["head"][:12], "Packages": "; ".join(
         f"{item['package']} {item['version']}: {', '.join(item['reasons'])}" for item in result["blocked"]),
         "Not pinned": "; ".join(result["not_pinned"]), **({"Cannot reach": ", ".join(closed[:5])} if closed else {})}
     stop = support.report(support.NeedsIT(message, "the dependency audit refused a version", details))
     return {**stop, "status": "audit_refused", "workspace": workspace, "reasons": reasons, "blocked": result["blocked"],
-            "not_pinned": result["not_pinned"], "behind_main": behind}
+            "not_pinned": result["not_pinned"], "newer_on_main": newer}

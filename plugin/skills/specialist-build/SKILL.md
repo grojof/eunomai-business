@@ -96,7 +96,7 @@ your sandbox.
   yes. Then `app_preview(workspace)`; while it says `starting`, call it
   again in the same turn, without replying: if the turn ends first the preparation ends with it, and it starts over.
   If you must reply, say that plainly. With `ready`, show `user_message`, in every turn it is asked for: the same version answers the one running,
-  with the time it has left. `audit_refused` with `behind_main` true: `workspace_update`, then `app_preview` again,
+  with the time it has left. `audit_refused` with `newer_on_main` true: `workspace_update`, then `app_preview` again,
   before offering anything else. Any other answer: show `user_message`, and do not offer it again in this task.
   `app_preview_stop(workspace)` when they say stop, whichever task started it, and show what it says: only `stopped`
   means it stopped. If `unsaved_changes` is true, what they see lacks the latest changes: say so. After a save they

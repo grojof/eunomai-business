@@ -230,7 +230,7 @@ def test_the_specialist_is_loaded_whatever_is_asked_first():
     description = SPECIALIST[:SPECIALIST.index("\n---", 4)]
     assert "see, open, try, test or send" in description and "even only to see it in the browser" in description
     server = (Path(__file__).resolve().parents[1] / "src" / "eunomai_business" / "server.py").read_text(encoding="utf-8")
-    assert ":specialist` skill's: before the first of them, load that skill" in server
+    assert ":specialist` skill's: unless another skill of this plugin already guides" in server
 
 
 def test_a_note_is_told_whenever_something_arrives():
@@ -241,7 +241,9 @@ def test_a_note_is_told_whenever_something_arrives():
 
 def test_a_refusal_with_newer_changes_on_the_server_brings_them_first():
     """The assistant offered to change the lockfile while the main branch already had the safe package."""
-    assert "With `behind_main` true, `workspace_update` first" in reference("deliver")
-    assert "`audit_refused` with `behind_main` true: `workspace_update`, then `app_preview` again" in plain(
+    deliver = plain(reference("deliver"))
+    assert "With `newer_on_main` true, `workspace_update` first" in deliver
+    assert "the whole suite again (`app_tests`), then what was refused again" in deliver
+    assert "`audit_refused` with `newer_on_main` true: `workspace_update`, then `app_preview` again" in plain(
         reference("build"))
 

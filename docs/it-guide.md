@@ -134,15 +134,17 @@ headers and roles from groups.
 ## 10. When the connector writes to IT
 
 The connector stops where going on could lose someone's work or let through what it checks, and the specialist offers
-the person an e-mail to IT with the report already written: the problem, the workspace and its folder, the repository,
-the version, its commit, the files involved, and the connector's version. Before anything moves, it keeps where each
-branch was in `refs/eunomai/backup/<time>/<branch>`.
+the person an e-mail to IT with the report already written: the problem and the facts it needs, such as the workspace
+and its folder, the version and its commit, the files or packages involved, and the connector's version. Before an
+update moves anything, it keeps where each branch was in `refs/eunomai/backup/<time>/<branch>`.
 
 | The report says | What IT does |
 |---|---|
 | The version and the main branch changed the same files | Resolve on the person's computer, in the workspace's folder: a commit on the version that keeps the right content (often what the main branch has, when the person's side was only a side effect). Then the person asks for the latest again |
 | The version on the server has changes this computer does not have, or diverged from its copy on the server | Compare both in the folder; keep the person's work in one of them. Never resolve on the server a version that has saves not sent yet (`git log origin/<version>..<version>` in the folder): the two copies would diverge again |
-| The dependency audit refused a version | If the main branch already has the fix, the person brings the latest (the specialist does it when the answer says `behind_main`). If not, a newer allowed version of the package, from the template or in the application |
+| The dependency audit refused a version | If the main branch already changed what the project uses, the specialist brings it in first (the answer says `newer_on_main`). If not, a newer allowed version of the package, from the template or in the application |
+| A protected or executable file, or a malformed object, in a saved version | Something wrote in the version outside the specialist's saves: look at that commit in the folder before anything else, and never send it as it is |
+| The workspace changed during an update, or its local main branch diverged from the server | The person tries again once. A local main branch with commits the server lacks: keep them on a branch, then move main to the server's |
 | Untracked files in the way | Files on disk the update would overwrite: move them aside, and ask for the latest again |
 | No common history, or a main branch rewritten on the server | The project's history changed on the server: bring the person's commits across on top of the new main branch |
 

@@ -25,7 +25,9 @@ _ANSWER_WAIT = 40.0
 _KEEP_LOG = 5 * 1024 * 1024  # bytes of a run's output kept for IT, from its end
 _MOST_FAILURES = 10
 _MOST_DETAIL = 6  # lines pytest wrote under a failure (its `E` lines): the summary's line is cut to fit
-_SECTION = re.compile(r"_{3,} (.{1,300}?) _{3,}")
+_SECTION = re.compile(r"_{3,} (.{1,1000}?) _{3,}")
+_ERROR_SECTION = re.compile(r"ERROR (?:at (?:setup|teardown) of |collecting )(.+)")
+_RULE = re.compile(r"(?:={3,}|-{3,}) .{0,300}")  # a part of pytest's report, or captured output: a failure's lines end
 # What pytest says of each failure, and at its end. Read from text the application printed: a line can lie, so whether
 # the tests passed is the exit code's, and what is read is bounded and marked.
 _FAILURE = re.compile(r"(FAILED|ERROR) ([^\s]{1,300})(?: - (.*))?")
@@ -83,6 +85,14 @@ def last_whole_run(workspace: str) -> dict | None:
     return record if isinstance(record, dict) and isinstance(record.get("version"), str) else None
 
 
+def _section_name(test: str) -> str:
+    """The name pytest writes above a test's lines, from its id: what follows the file, `::` written `.`, its
+    parameters as they are; a file that could not be collected, its path."""
+    base, bracket, parameters = test.partition("[")
+    path, _, rest = base.partition("::")
+    return rest.replace("::", ".") + bracket + parameters if rest else path
+
+
 def summary(text: str) -> dict:
     """Counts and failures, as pytest prints them with `-rfE`; empty where the text says nothing of the kind. Each
     failure carries its summary's line and, in `detail`, the first lines pytest wrote under it, which the summary cuts:
@@ -95,13 +105,19 @@ def summary(text: str) -> dict:
             for number, word in _COUNT.findall(found.group(1)):
                 counts[{"errors": "error"}.get(word, word)] = int(number)
             break
-    said: dict[str, list[str]] = {}
+    # Each section, by whether it is an error and the name above it, in the order pytest wrote them: two tests of one
+    # name in two files, or a failure and its teardown's error, each keep their own lines.
+    sections: dict[tuple[bool, str], list[list[str]]] = {}
     under = None
     for line in lines:
-        header = _SECTION.fullmatch(line.strip())
+        stripped = line.strip()
+        header = _SECTION.fullmatch(stripped)
         if header:
-            under = said.setdefault(header.group(1).removeprefix("ERROR at setup of ").removeprefix(
-                "ERROR at teardown of "), [])
+            error = _ERROR_SECTION.fullmatch(header.group(1))
+            under = []
+            sections.setdefault((True, error.group(1)) if error else (False, header.group(1)), []).append(under)
+        elif _RULE.fullmatch(stripped):
+            under = None
         elif under is not None and line.startswith("E ") and len(under) < _MOST_DETAIL and line[1:].strip():
             under.append(line[1:].strip())
     failures = []
@@ -109,8 +125,8 @@ def summary(text: str) -> dict:
         found = _FAILURE.fullmatch(line.strip())
         if found and len(failures) < _MOST_FAILURES:
             test = found.group(2)
-            name = test.rsplit("::", 1)[-1]
-            detail = said.get(name) or next((v for k, v in said.items() if k.endswith(f".{name}")), [])
+            waiting = sections.get((found.group(1) == "ERROR", _section_name(test)), [])
+            detail = waiting.pop(0) if waiting else []
             failures.append({"test": support.clean(test, 300),
                              "lines": support.clean(found.group(3) or found.group(1).lower(), 240),
                              "detail": support.clean(" | ".join(detail), 600)})

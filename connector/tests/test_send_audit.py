@@ -71,12 +71,15 @@ def test_a_refusal_says_when_the_main_branch_may_already_have_the_fix(signed_in,
     lockfile itself: bringing the latest comes first."""
     name, _ = project(signed_in)
     audit_answers(monkeypatch, BLOCKED)
-    assert tools.version_send(name)["behind_main"] is False
+    assert tools.version_send(name)["newer_on_main"] is False
+    signed_in.server_commit(name, "main", {"README.md": b"other\n"}, message="Something else")
+    assert tools.version_send(name)["newer_on_main"] is False  # a change to anything else says nothing about it
     signed_in.server_commit(name, "main", {"uv.lock": b"fixed\n"}, message="Safe package")
-    gitops._audits.clear()
     result = tools.version_send(name)
-    assert result["status"] == "audit_refused" and result["behind_main"] is True
-    assert "newer changes" in result["user_message"] and "bring them in first" in result["user_message"]
+    assert result["status"] == "audit_refused" and result["newer_on_main"] is True
+    assert "newer changes to what it uses" in result["user_message"]
+    assert gitops.newer_on_main(name, None, files=["uv.lock"]) is False
+    assert gitops.newer_on_main(name, "f" * 40, files=["uv.lock"]) is False  # a commit this computer does not have
 
 
 def test_an_allowed_audit_lets_the_send_through(signed_in, workspaces, monkeypatch):

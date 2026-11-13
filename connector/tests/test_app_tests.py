@@ -312,3 +312,39 @@ def test_a_failure_carries_what_pytest_wrote_under_it():
     many = "\n".join(["___ test_x ___"] + [f"E   {'y' * 300}" for _ in range(20)] + ["FAILED t.py::test_x - y"])
     assert len(app_tests.summary(many)["failures"][0]["detail"]) <= 600
 
+
+def test_each_failure_keeps_its_own_lines():
+    """Names repeat across files and classes, a test can fail and then err at teardown, a file can fail to import:
+    a wrong `detail` would send the assistant to fix the wrong code."""
+    text = "\n".join([
+        "==================================== ERRORS ====================================",
+        "_______________________ ERROR collecting tests/test_c.py _______________________",
+        "E   ModuleNotFoundError: No module named 'app.missing'",
+        "_________________________ ERROR at teardown of test_x __________________________",
+        "E       RuntimeError: teardown boom",
+        "=================================== FAILURES ===================================",
+        "__________________________________ test_total __________________________________",
+        "E       assert 1 == 2",
+        "__________________________________ test_total __________________________________",
+        "E       assert 30 == 40",
+        "______________________________ TestOther.test_list ______________________________",
+        "E       assert 'b' == 'c'",
+        "____________________________________ test_x ____________________________________",
+        "E       assert 5 == 6",
+        "----------------------------- Captured stdout call -----------------------------",
+        "E   not pytest's: printed by the test",
+        "_______________________________ test_param[x::y] _______________________________",
+        "E       assert 7 == 8",
+        "=========================== short test summary info ============================",
+        "FAILED tests/test_a.py::test_total - assert 1 == 2",
+        "FAILED tests/test_b.py::test_total - assert 30 == 40",
+        "FAILED tests/test_b.py::TestOther::test_list - assert 'b' == 'c'",
+        "FAILED tests/test_d.py::test_x - assert 5 == 6",
+        "FAILED tests/test_e.py::test_param[x::y] - assert 7 == 8",
+        "ERROR tests/test_d.py::test_x - RuntimeError: teardown boom",
+        "ERROR tests/test_c.py",
+    ])
+    details = [failure["detail"] for failure in app_tests.summary(text)["failures"]]
+    assert details == ["assert 1 == 2", "assert 30 == 40", "assert 'b' == 'c'", "assert 5 == 6", "assert 7 == 8",
+                       "RuntimeError: teardown boom", "ModuleNotFoundError: No module named 'app.missing'"]
+

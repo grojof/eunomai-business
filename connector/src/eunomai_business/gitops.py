@@ -1028,9 +1028,8 @@ def _brought(repo, new: bytes, old: bytes | None) -> dict:
 
 
 def _what_arrived(brought: dict) -> str:
-    if brought["notes"]:
-        return f"For you: {' '.join(brought['notes'])}"
-    return f"What arrived: {'; '.join(brought['arrived'])}." if brought["arrived"] else ""
+    """The notes, for the person; never the titles, which are written for whoever reviews (they stay in `arrived`)."""
+    return f"For you: {' '.join(brought['notes'])}" if brought["notes"] else ""
 
 
 @_one_at_a_time
@@ -1224,15 +1223,28 @@ def export_saved(workspace: str, target: Path, main: str, head: str | None = Non
 _audits: dict[str, tuple[bytes, float, dict]] = {}  # workspace: its tree, when, and the `allowed` answer
 
 
-def behind_main(workspace: str, main: str | None, head: str | None = None) -> bool:
-    """Whether the version, or `head`, leaves out commits of the main branch at `main`, a commit already fetched: what
-    IT accepted since may already solve what stopped it, such as a package the audit refuses."""
-    if not main:
+def newer_on_main(workspace: str, main: str | None, head: str | None = None, files: list[str] = ()) -> bool:
+    """Whether the main branch at `main`, a commit already fetched, changed any of `files` since the version, or
+    `head`, parted from it: what was accepted since may already solve what the audit refused in them. Any other
+    change on the main branch says nothing about it."""
+    if not main or not files:
         return False
     with _repo(workspace) as repo:
         commit = head.encode() if head else _ref(repo, b"HEAD")
         try:
-            return commit is not None and not can_fast_forward(repo, main.encode(), commit)
+            if commit is None or can_fast_forward(repo, main.encode(), commit):
+                return False
+            bases = find_merge_base(repo, [main.encode(), commit])
+            if not bases:
+                return False
+
+            def blob(commit_id: bytes, path: str) -> bytes | None:
+                try:
+                    return repo[repo[commit_id].tree].lookup_path(repo.object_store.__getitem__, path.encode())[1]
+                except (KeyError, NotTreeError):
+                    return None
+
+            return any(blob(bases[0], path) != blob(main.encode(), path) for path in files)
         except KeyError:  # an object this computer does not have: nothing to say
             return False
 
