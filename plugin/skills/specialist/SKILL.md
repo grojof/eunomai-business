@@ -93,20 +93,24 @@ changed; never append history. Unless the project's context names other homes:
 |---|---|---|
 | Who uses it, how the work is done today, the systems it touches, what is left out or for later | `docs/context.md` | `explanation`, `context` |
 | A word of the business and what it means here; a document or regulation the rules cite | `docs/glossary.md`, one row, in alphabetical order | `reference`, `glossary` |
-| A choice between options: what was chosen, why, what was rejected, which role decided | `docs/decisions.md`, one heading per subject; a new choice on the same subject replaces it | `decision`, `decision` |
+| A choice between options, of the business or technical: what was chosen, why, what was rejected, which role decided | `docs/decisions.md`, one heading per subject; a new choice on the same subject replaces it | `decision`, `decision` |
 | A question nobody answered yet, and the assumption built meanwhile | `docs/open-questions.md`, one row; answered, the row goes and the answer moves to its home | `reference`, `open-question` |
 | What the application must do, each rule with its source | `openspec/specs/` | none |
 
-What it is, for whom and why stay in the README, whose index reaches every page. A page exists once it has something
-to say. Past about 8,000 characters a page becomes a folder of the same name: one subject, process or area per page,
-named after it (never a number), same `type` and tag, and an index page the README links. A long list of open
-questions is not split: it is told to IT. Roles, never people's names; nothing that not everyone who can open the
-project may read.
+Each page starts with frontmatter, its keys in English: `type`, `title` and `description` (what a search finds), and
+`tags: [context]` on one line, the kind's tag first, lowercase ASCII words joined by hyphens. What it is, for whom and
+why stay in the README, whose index reaches every page. A page exists once it has something to say; one left with
+nothing keeps its frontmatter and says so in one line. Past about 8,000 characters, and once the project's own
+documentation checks accept folders, a page becomes the index of a folder of the same name (`docs/decisions.md` and
+`docs/decisions/<subject>.md`): one subject, process or area per page, named after it (never a number), same `type`
+and tag. A long list of open questions is not split: it is told to IT. Roles, never people's names; nothing that not
+everyone who can open the project may read.
 
 **Find before you read.** Start at the README's index. To find a page, search the `description:` and `tags:` lines of
 `docs/`, not `docs/base/`; to find a rule, the `### Requirement:` lines of `openspec/specs/`; then read that section,
-not the file. Never a whole page of `docs/base/`, never `openspec/changes/archive/`: what is true now is in `docs/`
-and `openspec/specs/`.
+not the file. Of the base's reference in `docs/base/`, read what the project's context says to read, as it says;
+anything else by the page and section a link names, never the whole of it. Never `openspec/changes/archive/`: what
+is true now is in `docs/` and `openspec/specs/`.
 
 ## The journey
 

@@ -255,8 +255,9 @@ def test_what_the_person_explains_is_filed_by_kind_and_found_before_it_is_read()
     for tag in ("`context`", "`glossary`", "`decision`", "`open-question`"):
         assert tag in knows, tag
     assert "never append history" in knows and "never a number" in knows and "Roles, never people's names" in knows
-    assert "**Find before you read.**" in knows and "never `openspec/changes/archive/`" in knows
-    assert "Never a whole page of `docs/base/`" in knows
+    assert "**Find before you read.**" in knows and "Never `openspec/changes/archive/`" in knows
+    assert "read what the project's context says to read, as it says" in knows  # its standards are read whole
+    assert "`tags: [context]` on one line" in knows and "becomes the index of a folder of the same name" in knows
     assert "`proposal.md` links to them and repeats none" in plain(reference("understand"))
     specify = reference("specify")
     assert "**Source:** <a role" in specify and "the line says `assumption`" in plain(specify)

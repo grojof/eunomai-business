@@ -46,7 +46,8 @@ user's own words, before proposing anything.
    `## Impact` (headings in English, content in `docs_language`). It fits on one screen. What is in this version is
    stated once, in `## What Changes`, and kept true until delivery. Write the same table where each line lives: goal
    and users in the README's first lines; today's way of working, the systems and what is left out or for later in
-   the context page; new words in the glossary; assumptions and open questions in the open questions page.
+   the context page; new words in the glossary; assumptions and open questions in the open questions page. An
+   assumption the user confirms is not open: it is written where it belongs, with the user's role as its source.
    `proposal.md` links to them and repeats none.
 3. `version_save(workspace, <one-line message>)`.
 4. Tell the user what comes next in one line: something to try early.
@@ -77,9 +78,9 @@ exists, in this task or a new one:
 1. `workspace_clone` it (ask for the address IT gave them only if they did not say it), request its folder, and take
    steps 3 and 4 of the start of a session.
 2. On the main branch, `version_create(workspace, <the request's name>)`, and create the change as in *When the user
-   confirms*, step 2, from the request: `## Why` from `purpose`, `users` and `today`; `## What Changes` from
-   `first_version`; the context and open questions pages from `users`, `today`, `out_of_scope` and
-   `open_questions`. Understand is not asked again: show
+   confirms*, step 2, from the request: `## Why` from `purpose`; `## What Changes` from `first_version`; the README's
+   first lines from `purpose` and `users`; the context page from `users`, `today` and `out_of_scope`; the open
+   questions page from `open_questions`. Understand is not asked again: show
    the summary as one table and ask only whether anything changed.
 3. `version_save(workspace, <one-line message>)`.
 4. `project_request_done` with the request and the workspace: the request is kept, marked done, and no longer listed.

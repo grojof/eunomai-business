@@ -34,8 +34,8 @@ running it again. Each line holds, or goes into the summary under *Not settled* 
   difference (noted is not agreed);
 - the history has one save per task;
 - assumptions confirmed by the user; every assumption the code is built on is a row of the open questions page and
-  every answered row is gone; nothing in `proposal.md` or `design.md` is missing from its home (what is for later, a
-  decision and its reason): the archive is history nobody reads;
+  every answered or confirmed row is gone; nothing in `proposal.md` or `design.md` is missing from its home (what is
+  for later, a decision and its reason, technical ones too): the archive is history nobody reads;
 - no secrets, no external resources, no dead code, no debugging leftovers, nothing meant to run on the user's
   computer.
 

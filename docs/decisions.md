@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, one recommended stack, its visual layer with a base application to clone, and new projects that IT creates from a request."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, one recommended stack, its visual layer with a base application to clone, new projects that IT creates from a request, and an application's knowledge kept in its repository, by kind."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md, sources.md]
@@ -397,9 +397,10 @@ metadata.
 | An open question and the assumption built meanwhile | `docs/open-questions.md`, one row | `type: reference`, tag `open-question` |
 | What the application must do | `openspec/specs/`, each requirement with a `**Source:**` line (a role, a document, or `assumption`) | Its path |
 
-A page exists once it has something to say. Past about 8,000 characters it becomes a folder of the same name, one
-subject, process or area per page, named after it, with an index page the README links; open questions are never
-split, a long list is told to IT. The project's `AGENTS.md` may name other homes, and then it wins. The specialist
+A page exists once it has something to say. Past about 8,000 characters it becomes the index of a folder of the same
+name, one subject, process or area per page, named after it; open questions are never split, a long list is told to
+IT. These are the specialist's defaults, not rules the plugin imposes ([decision 5](#5--the-plugin-manages-no-project-rules)):
+the project's `AGENTS.md` may name other homes, and then it wins. The specialist
 finds things through the README, the `description:` and `tags:` lines and the requirements' headings, and reads a
 section, not a file.
 

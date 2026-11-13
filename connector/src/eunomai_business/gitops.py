@@ -672,8 +672,21 @@ def _is_ancestor(repo: Repo, ancestor: bytes, commit: bytes) -> bool:
 def _merge_bases(repo: Repo, first: bytes, second: bytes) -> list[bytes]:
     """The best common ancestors of two commits, exactly: the common ancestors that no other common ancestor has as a
     parent. One, as a rule; two or more where histories crossed. dulwich's find_merge_base orders by time, as above."""
-    common = _reachable(repo, first) & _reachable(repo, second)
-    parents = {parent for commit in common for parent in repo.get_parents(commit)}
+    known: dict[bytes, list[bytes]] = {}
+
+    def ancestors(start: bytes) -> set[bytes]:
+        found, stack = set(), [start]
+        while stack:
+            commit = stack.pop()
+            if commit not in found:
+                found.add(commit)
+                if commit not in known:
+                    known[commit] = repo.get_parents(commit)
+                stack += known[commit]
+        return found
+
+    common = ancestors(first) & ancestors(second)
+    parents = {parent for commit in common for parent in known[commit]}
     return sorted(common - parents)
 
 
@@ -1264,7 +1277,7 @@ def newer_on_main(workspace: str, main: str | None, head: str | None = None, fil
                 except (KeyError, NotTreeError):
                     return None
 
-            return any(blob(bases[0], path) != blob(main.encode(), path) for path in files)
+            return any(blob(base, path) != blob(main.encode(), path) for base in bases for path in files)
         except KeyError:  # an object this computer does not have: nothing to say
             return False
 

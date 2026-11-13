@@ -18,7 +18,7 @@ OpenSpec files directly, exactly in this format; no command-line tool is needed.
 
   ### Requirement: <name>
   The system SHALL <one sentence>.
-  **Source:** <a role, or a document as the glossary names it; or "assumption">
+  **Source:** <a role, or a document as the glossary names it; or assumption>
 
   #### Scenario: <name>
   - **WHEN** <situation, with concrete sample values from what the user tried>
@@ -31,8 +31,8 @@ OpenSpec files directly, exactly in this format; no command-line tool is needed.
   scenarios it makes pass; include the tests and the documentation.
 - `design.md` only when there is a real technical decision to record; otherwise none.
 
-The structure and its keywords (`Requirement`, `Scenario`, `WHEN`, `THEN`, `SHALL`, the headings) stay in English;
-the content is in `docs_language`.
+The structure and its keywords (`Requirement`, `Scenario`, `WHEN`, `THEN`, `SHALL`, `**Source:**`, `assumption`, the
+headings) stay in English; the content is in `docs_language`.
 
 ## Rules
 
@@ -51,7 +51,8 @@ the content is in `docs_language`.
 
 Read `proposal.md`, the agreed screens or the prototype, the specs and the tasks side by side. Every screen and
 button the user tried has a requirement; every requirement has a task; the scope in `## What Changes` matches;
-no requirement answers an open question; nothing contradicts the project's context. Fix what does not agree before the user sees it.
+no requirement settles an open question as fact (one built on an assumption says so in its `**Source:**` line);
+nothing contradicts the project's context. Fix what does not agree before the user sees it.
 
 ## With the user
 

@@ -55,7 +55,7 @@ flowchart LR
 |---|---|---|---|
 | **1 Understand** | A few questions, then "what I understood" in a short table, and a roadmap | Latest changes brought, a version created and named after the goal | The user confirms the summary |
 | **2 Shape** | The first real screens with example data, tried on their computer or in the test environment; a diagram of the flow | Unfinished screens on the project's own base, saved, listed in `proposal.md` as the contract for Build | The user approves what they tried |
-| **3 Specify** | Requirements and examples of expected behaviour, in plain language | A short OpenSpec change: proposal, specs with scenarios, tasks. Business rules cite their source or are marked open; what was tried, proposal, specs and tasks checked against each other | Every requirement has a scenario; open questions are listed |
+| **3 Specify** | Requirements and examples of expected behaviour, in plain language | A short OpenSpec change: proposal, specs with scenarios, tasks. Each business rule has a `Source` line, or `assumption` and a row in the open questions page; what was tried, proposal, specs and tasks checked against each other | Every requirement has a scenario; open questions are listed |
 | **4 Build** | Progress along the roadmap, and the application as it grows, on their computer, in the test environment or in screenshots from the sandbox | Tests first from the scenarios, never bent to the code; the whole dependency tree pinned and audited; a save point per task | Every scenario has a passing test, shown by a fresh run |
 | **5 Deliver** | "Sent for review" | A readiness check run now (tests, dependency audit, a review of its own changes, docs true to the code), the version sent, the pull request opened with the reviewer's summary | The pull request is open |
 
@@ -91,7 +91,7 @@ beyond sending the prepared request. How IT creates it: [project practices](proj
 ## What the reviewer receives
 
 Every pull request opens with the same short summary: the goal, what was built mapped to the requirements, the
-test of each scenario, what is **not settled** (unconfirmed assumptions, rules without a source, open questions),
+test of each scenario, what is **not settled** (the open questions page, and the rules whose source is an assumption),
 what was skipped, the skills used besides the specialist and any conflict with its rules, lines proposed for the
 project's context, and course changes that matter. Below it, the connector appends its own checks, which the model does not write: the dependency
 audit, and the last whole-suite run of `app_tests` as the connector recorded it (passed or not, its counts, and
