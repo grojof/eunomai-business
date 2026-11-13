@@ -583,6 +583,7 @@ def test_history_is_read_from_the_commits_whatever_dulwich_would_believe(signed_
         assert find_merge_base(plain, [main, forged.encode()]) == [forged.encode()]
     with gitops._repo(name) as repo:
         assert find_merge_base(repo, [main, forged.encode()]) != [forged.encode()]
+        assert gitops._merge_bases(repo, main, forged.encode()) != [forged.encode()]  # the connector's own, too
         assert repo.object_store.get_commit_graph() is None
         assert repo.get_parents(main) == repo[main].parents
 

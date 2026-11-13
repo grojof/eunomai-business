@@ -1,6 +1,6 @@
 ---
 name: specialist-build
-description: Stage 4, Build, of the {{PLUGIN}} specialist: the code, its tests and the dependency checks, shown to the user with fresh evidence. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+description: Stage 4, Build, of the {{PLUGIN}} specialist. Load it only when the specialist skill reaches this stage.
 ---
 
 # 4 · Build
@@ -70,9 +70,12 @@ your sandbox.
     `docs/`. Replace whatever the project's template left there to fill in; never leave a project's README
     describing the template or its base.
   - A page in `docs/` for what the README cannot hold in a few lines: the screens and what each person can do, the
-    data and its rules, the settings, a decision worth keeping. It starts with frontmatter: `type` (one of
+    data and its rules, the settings; a decision worth keeping goes to the decisions page. It starts with
+    frontmatter: `type` (one of
     `tutorial`, `how-to`, `reference`, `explanation`, `decision`, in English), `title` and `description`; one page,
-    one kind. It describes only what the code does.
+    one kind. A page about the application (screens, data, settings) says only what the code does; the pages of
+    context, glossary, decisions and open questions say what was said and decided, carry their tag in `tags`, and
+    never promise behaviour.
   - One fact, one home: link to what another page or the project's own reference (for example the base's
     documentation a template brings, which is never edited) already says, instead of restating it.
   - When behaviour changes, the README index and the affected page change in the same save. The project's own

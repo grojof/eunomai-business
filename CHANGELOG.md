@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.6 (2026-11-13)
+
+What a business person explains while building becomes the organization's knowledge, kept in the application's
+repository and found without reading whole files; an update no longer stops for IT when commits share a second.
+
+- **An application's knowledge, by kind** ([decision 16](docs/decisions.md#16--an-applications-knowledge-lives-in-its-repository-by-kind)).
+  The assumptions, open questions and decisions an application was built on lived only in its change, which delivery
+  archives. The specialist now files each fact once, as it comes up: who uses it and today's process in
+  `docs/context.md`, the business's words in `docs/glossary.md`, choices with their reason and what was rejected in
+  `docs/decisions.md`, open questions with the assumption built meanwhile in `docs/open-questions.md`, each marked by
+  `type` and a tag (`context`, `glossary`, `decision`, `open-question`); each requirement in `openspec/specs/` has a
+  `**Source:**` line (a role, a document, or `assumption`). A page that grows becomes a folder, named by subject.
+  Delivery checks nothing is left only in the change, and an answer from the review closes its question.
+- **Find before you read.** The specialist starts at the README's index and searches the pages' `description:` and
+  `tags:` lines and the requirements' headings, then reads a section: never a whole page of the base's reference
+  (up to about 26,000 tokens) nor the archived changes.
+- **Shorter tool descriptions and stage descriptions.** Each field is described once, in the tool; what it means for
+  the person is in the skill. The five tools with the longest descriptions go from 4,807 to 3,465 characters, the
+  stage skills' descriptions from 1,219 to 529, so a session carries about the same as before with the new section.
+- **History is walked exactly.** dulwich's `can_fast_forward` and `find_merge_base` order history by commit time:
+  with commits made in the same second they could find two common ancestors, and an update stopped for IT with
+  nothing to resolve. The connector walks the parents itself, as the commits state them. Two tests that failed one
+  run in three are fixed with it, and the fake server refuses two repositories of one name.
+- **One TLS context per connector.** Building the operating system's certificate store took about 50 ms on every
+  HTTP or git call.
+- **Faster tests.** The state reader of a preview is checked field by field directly, with two live previews left;
+  the serial pass goes from 80 tests in 263 s to 60 in 152 s.
+
 ## 0.1.5 (2026-11-13)
 
 Findings of two Cowork tasks in which a person in a business department went back to an application after IT updated

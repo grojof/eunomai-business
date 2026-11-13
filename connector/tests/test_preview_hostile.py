@@ -128,13 +128,34 @@ def test_an_address_rewritten_in_the_state_is_never_opened_or_told(signed_in, wo
     assert all(url.startswith("http://127.0.0.1:") and url.endswith("/") for url in browser)
 
 
-@pytest.mark.preview
-@needs_uv
-@pytest.mark.parametrize("fields", [
+BROKEN = [
     {"port": "x"}, {"port": 80}, {"port": 70000}, {"port": True}, {"port": 1.5}, {"head": 5}, {"head": "not hex"},
     {"deadline": "x"}, {"deadline": -1}, {"began": "x"}, {"began": 9e12}, {"phase": "other"}, {"groups": ["x"]},
     {"groups": [0]}, {"watcher": -1}, {"watcher": "x"}, {"token": 1}, {"token": "short"}, {"keeps_running": "yes"},
-    {"folder": "C:/Users"}, {"workspace": "another"}, {"declaration": 1}], ids=str)
+    {"folder": "C:/Users"}, {"workspace": "another"}, {"declaration": 1}, {"image": 5}, {"created": 0}]
+"""What the application, running as the person, can write in its state file: each must make it a broken state."""
+GOOD_STATE = {"workspace": "hostile", "folder": f"C:/tmp/{preview._PREFIX}x", "token": "a" * 32, "head": "b" * 40,
+              "declaration": "c" * 16, "phase": "ready", "keeps_running": False, "began": 1.0, "deadline": 2.0,
+              "port": 50000, "groups": [1234], "watcher": 1234, "image": "python", "created": None}
+
+
+@pytest.mark.parametrize("fields", BROKEN, ids=str)
+def test_the_reader_refuses_every_field_out_of_type_or_range(workspaces, fields):
+    """The reader itself, field by field; that a broken state ends its preview is shown live below, twice."""
+    path = preview._state_file("hostile")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    good = GOOD_STATE
+    path.write_text(json.dumps(good))
+    assert preview._preview_state(path) == good
+    path.write_text(json.dumps({**good, **fields}))
+    assert preview._preview_state(path) == {}
+    path.write_text(json.dumps({key: value for key, value in good.items() if key not in fields}))
+    assert preview._preview_state(path) == {}  # a field left out is broken too
+
+
+@pytest.mark.preview
+@needs_uv
+@pytest.mark.parametrize("fields", [{"port": "x"}, {"workspace": "another"}], ids=str)
 def test_a_state_that_does_not_pass_the_reader_ends_that_preview(signed_in, workspaces, turned_on, browser, pids, fields):
     name, _, first, numbers = ready(signed_in, pids)
     pids.unlink()

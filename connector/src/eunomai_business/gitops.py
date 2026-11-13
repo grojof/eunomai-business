@@ -13,7 +13,6 @@ import os
 import re
 import shutil
 import socket
-import ssl
 import stat
 import tempfile
 import threading
@@ -23,14 +22,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import truststore
 import urllib3
 from dulwich import porcelain
 from dulwich.client import HTTPUnauthorized, get_transport_and_path
 from dulwich.config import ConfigFile, StackedConfig
 from dulwich.diff_tree import tree_changes
 from dulwich.errors import GitProtocolError, HangupException, NotGitRepository, NotTreeError, ObjectFormatException
-from dulwich.graph import can_fast_forward, find_merge_base
 from dulwich.index import validate_path, validate_path_element_default, validate_path_element_ntfs
 from dulwich.merge import recursive_merge
 from dulwich.object_store import iter_tree_contents
@@ -239,7 +236,7 @@ def _check_host(url: str, current: dict) -> None:
 
 def _remote(current: dict) -> dict:
     """Arguments for dulwich's HTTP client: OS certificate store, basic auth with the OAuth token."""
-    pool = urllib3.PoolManager(ssl_context=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=30)
+    pool = urllib3.PoolManager(ssl_context=auth.tls_context(), timeout=30)
     login = str(current["user"].get(current["cfg"]["login_field"], "oauth"))
     return {"username": login, "password": current["record"]["access_token"], "pool_manager": pool}
 
@@ -657,6 +654,42 @@ def _reachable(repo: Repo, start: bytes, stop: set[bytes] = frozenset()) -> set[
     return found
 
 
+def _is_ancestor(repo: Repo, ancestor: bytes, commit: bytes) -> bool:
+    """Whether `ancestor` is `commit` or one of its ancestors, by walking the history. dulwich's can_fast_forward
+    orders by commit time and stops early: with commits made in the same second, or clocks that disagree, it can say
+    no, and an update then stopped for IT with nothing to resolve."""
+    seen, stack = set(), [commit]
+    while stack:
+        current = stack.pop()
+        if current == ancestor:
+            return True
+        if current not in seen:
+            seen.add(current)
+            stack += repo.get_parents(current)
+    return False
+
+
+def _merge_bases(repo: Repo, first: bytes, second: bytes) -> list[bytes]:
+    """The best common ancestors of two commits, exactly: the common ancestors that no other common ancestor has as a
+    parent. One, as a rule; two or more where histories crossed. dulwich's find_merge_base orders by time, as above."""
+    known: dict[bytes, list[bytes]] = {}
+
+    def ancestors(start: bytes) -> set[bytes]:
+        found, stack = set(), [start]
+        while stack:
+            commit = stack.pop()
+            if commit not in found:
+                found.add(commit)
+                if commit not in known:
+                    known[commit] = repo.get_parents(commit)
+                stack += known[commit]
+        return found
+
+    common = ancestors(first) & ancestors(second)
+    parents = {parent for commit in common for parent in known[commit]}
+    return sorted(common - parents)
+
+
 def _trees_under(repo: Repo, tree: bytes) -> set[bytes]:
     found, stack = set(), [tree]
     while stack:
@@ -714,7 +747,7 @@ def _check_changes(repo: Repo, workspace: str, commit: bytes, main: str) -> None
     version_save neither leaves the computer nor runs on it, on the way or at the end. Send, proposal, test environment
     and preview all pass through here, before anything reads the files. What is on the main branch is not judged."""
     tip = main.encode()
-    bases = find_merge_base(repo, [tip, commit])
+    bases = _merge_bases(repo, tip, commit)
     if not bases:
         raise NeedsIT("This version no longer shares its history with the project, which was rewritten on the server, "
                       "so it went no further. Your work is safe on this computer; IT can bring it across.",
@@ -823,7 +856,7 @@ def to_test(workspace: str, test_branch: str, expected: str | None = None) -> di
         head = expected.encode() if expected else repo.head()
         if repo.head() != head:
             raise PermissionError("the version changed while it was being checked; try again")
-        if not can_fast_forward(repo, tip, head):  # the test environment would lose others' work
+        if not _is_ancestor(repo, tip, head):  # the test environment would lose others' work
             return {"workspace": workspace, "status": "behind_main",
                     "user_message": "The project has changes your version does not have yet. Bring them in first "
                                     "(workspace_update), save, and try again."}
@@ -1078,7 +1111,7 @@ def update(workspace: str) -> dict:
             if local == remote_main:
                 return {**result, "status": "up_to_date", "branch": name,
                         "user_message": " ".join(notes + ["Everything is up to date."])}
-            if local is not None and not can_fast_forward(repo, local, remote_main):
+            if local is not None and not _is_ancestor(repo, local, remote_main):
                 raise NeedsIT("This copy of the project differs from the server in a way the connector does not "
                               "resolve on its own. Your work is safe.", "local main branch diverged from the server",
                               _facts(repo, workspace))
@@ -1091,7 +1124,7 @@ def update(workspace: str) -> dict:
 
         version_head = repo.refs[f"refs/heads/{name}".encode()]
         local_main = _ref(repo, f"refs/heads/{main}".encode())  # fetching does not move it
-        if local_main is not None and can_fast_forward(repo, version_head, local_main):
+        if local_main is not None and _is_ancestor(repo, version_head, local_main):
             # nothing saved in the version yet: it is not a proposal, it just moves to the latest main branch
             if version_head == remote_main:
                 return {**result, "status": "up_to_date", "branch": name,
@@ -1104,7 +1137,7 @@ def update(workspace: str) -> dict:
                                                       _what_arrived(brought)]).strip()}
         on_server = _ref(repo, f"refs/remotes/origin/{name}".encode())
         proposal = _proposal_for(origin, current, name)
-        merged = can_fast_forward(repo, version_head, remote_main) or bool(
+        merged = _is_ancestor(repo, version_head, remote_main) or bool(
             proposal and proposal["merged"] and proposal["head"] == version_head.decode())
         if merged:  # 4b. the version is in the main branch: back to it, retire the version
             result["backup"] = _backup(repo, name, main)
@@ -1114,21 +1147,21 @@ def update(workspace: str) -> dict:
             return {**result, "status": "updated", "branch": main, "head": _head(repo), "retired_version": name,
                     "user_message": " ".join(notes + ["Your proposal was accepted. You now have the latest version "
                                                       "of the project; start a new version for your next change."])}
-        if on_server is not None and on_server != version_head and not can_fast_forward(repo, on_server,
+        if on_server is not None and on_server != version_head and not _is_ancestor(repo, on_server,
                                                                                           version_head):
             raise NeedsIT("This version was changed on the server from somewhere else. Your work is safe; IT can "
                           "combine both.", "version diverged from its copy on the server",
                           _facts(repo, workspace))
         if proposal and proposal["state"] == "closed" and not proposal["merged"]:
             notes.append("Your last proposal was closed without being accepted; your version is kept.")
-        if can_fast_forward(repo, remote_main, version_head):  # the version already has everything
+        if _is_ancestor(repo, remote_main, version_head):  # the version already has everything
             return {**result, "status": "up_to_date", "branch": name,
                     "user_message": " ".join(notes + ["Everything is up to date."])}
 
         # 4c. the main branch moved on: combine it into the version, only when no file was changed on both sides.
         # Lines of the same file are never merged automatically: two edits that do not collide as text can still
         # break each other, and that is not a call to make on the user's behalf.
-        bases = find_merge_base(repo, [version_head, remote_main])
+        bases = _merge_bases(repo, version_head, remote_main)
         shared = _changed_on_both_sides(repo, bases, version_head, remote_main)
         if shared:
             raise NeedsIT("The latest changes of the project touch the same files as your version, so they are not "
@@ -1232,9 +1265,9 @@ def newer_on_main(workspace: str, main: str | None, head: str | None = None, fil
     with _repo(workspace) as repo:
         commit = head.encode() if head else _ref(repo, b"HEAD")
         try:
-            if commit is None or can_fast_forward(repo, main.encode(), commit):
+            if commit is None or _is_ancestor(repo, main.encode(), commit):
                 return False
-            bases = find_merge_base(repo, [main.encode(), commit])
+            bases = _merge_bases(repo, main.encode(), commit)
             if not bases:
                 return False
 
@@ -1244,7 +1277,7 @@ def newer_on_main(workspace: str, main: str | None, head: str | None = None, fil
                 except (KeyError, NotTreeError):
                     return None
 
-            return any(blob(bases[0], path) != blob(main.encode(), path) for path in files)
+            return any(blob(base, path) != blob(main.encode(), path) for base in bases for path in files)
         except KeyError:  # an object this computer does not have: nothing to say
             return False
 

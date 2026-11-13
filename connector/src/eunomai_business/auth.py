@@ -9,6 +9,7 @@ redirect_uri, userinfo_url, login_field}}, set by the plugin.
 """
 
 import base64
+import functools
 import hashlib
 import json
 import os
@@ -67,9 +68,16 @@ def _config(provider: str) -> dict:
     return cfg
 
 
+@functools.cache
+def tls_context() -> ssl.SSLContext:
+    """The operating system's certificate store (internal CAs included), made once: building it took about 50 ms on
+    every call. Each connection still checks the server's certificate against the store."""
+    return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+
 def http_client() -> httpx.Client:
     """HTTP client that trusts the operating system's certificate store (internal CAs included)."""
-    return httpx.Client(verify=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=15)
+    return httpx.Client(verify=tls_context(), timeout=15)
 
 
 def _b64url(data: bytes) -> str:

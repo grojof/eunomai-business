@@ -311,7 +311,7 @@ def test_the_status_brings_the_changes_reviewers_ask_for(signed_in, workspaces):
 
 def test_a_long_review_note_reaches_the_specialist_whole(signed_in, workspaces):
     note = "Point. " * 1200  # a long review, as IT writes them
-    result = review_of(signed_in, "long-note", [review(1, "it", "REQUEST_CHANGES", note)])
+    result = review_of(signed_in, "long-review", [review(1, "it", "REQUEST_CHANGES", note)])
     assert result["requests"][0]["text"] == note[:10_000] and len(note) > 8_000
 
 
@@ -379,3 +379,35 @@ def test_an_edit_during_the_update_is_never_overwritten(signed_in, workspaces, m
     with pytest.raises(NeedsIT, match="changed during an update"):
         gitops.update("during")
     assert (ws / "README.md").read_bytes() == b"# Sandbox\n\nEdited meanwhile.\n"
+
+
+def test_history_is_walked_exactly_whatever_the_commits_times(tmp_path):
+    """Five commits made in the same second: dulwich, which orders history by time, could find two common ancestors
+    and the update stopped for IT with nothing to resolve. The connector walks the history itself."""
+    from dulwich.objects import Commit, Tree
+    from dulwich.repo import Repo
+
+    for salt in range(24):  # the commits' ids, and so their order, change with their content
+        repo = Repo.init(str(tmp_path / f"r{salt}"), mkdir=True)
+        tree = Tree()
+        repo.object_store.add_object(tree)
+
+        def commit(message: str, *parents: bytes) -> bytes:
+            made = Commit()
+            made.tree, made.parents, made.message = tree.id, list(parents), f"{message} {salt}".encode()
+            made.author = made.committer = b"A <a@example.test>"
+            made.author_time = made.commit_time = 1_800_000_000
+            made.author_timezone = made.commit_timezone = 0
+            repo.object_store.add_object(made)
+            return made.id
+
+        first = commit("Init")
+        mine, look = commit("Mine", first), commit("New look", first)
+        another = commit("Another", look)
+        merge = commit("Merge", mine, another)
+        assert gitops._is_ancestor(repo, another, merge) and not gitops._is_ancestor(repo, merge, another)
+        assert gitops._merge_bases(repo, merge, another) == [another]
+        crossed = sorted([commit("X", mine, look), commit("Y", look, mine)])
+        assert gitops._merge_bases(repo, *crossed) == sorted([mine, look])  # histories that crossed: two
+        repo.close()
+
