@@ -17,7 +17,7 @@ repository and found without reading whole files; an update no longer stops for 
   `tags:` lines and the requirements' headings, then reads a section: never a whole page of the base's reference
   (up to about 26,000 tokens) nor the archived changes.
 - **Shorter tool descriptions and stage descriptions.** Each field is described once, in the tool; what it means for
-  the person is in the skill. The five tools with the longest descriptions go from 4,807 to 3,238 characters, the
+  the person is in the skill. The five tools with the longest descriptions go from 4,807 to 3,465 characters, the
   stage skills' descriptions from 1,219 to 529, so a session carries about the same as before with the new section.
 - **History is walked exactly.** dulwich's `can_fast_forward` and `find_merge_base` order history by commit time:
   with commits made in the same second they could find two common ancestors, and an update stopped for IT with
