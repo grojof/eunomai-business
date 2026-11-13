@@ -166,8 +166,10 @@ Real permissions live on the git server, not on the user's computer:
 
 ## The project's context
 
-Put an `AGENTS.md` at the root of `main`: what the project is for, who uses it, the domain's words, the systems it
-touches, rules with their source, and what is out of bounds. The specialist reads it from the server at the start
+Put an `AGENTS.md` at the root of `main`: what the project is for, how to work in it, and what is out of bounds. The
+domain's words, the systems it touches, the decisions and the rules with their source live in the application's own
+pages and specs ([decision 16](decisions.md#16--an-applications-knowledge-lives-in-its-repository-by-kind)), which the
+specialist keeps. The specialist reads it from the server at the start
 of every session, before anything personal in the user's session. Keep it short (it is cut at 20,000 characters);
 when the specialist proposes lines for it in a pull request, IT decides.
 

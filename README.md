@@ -10,6 +10,11 @@ once, managing the work so that an application built by a business user takes th
 It advises, asks what is missing, and keeps everything specified, tested and documented, so that whoever reviews
 the result receives work that is refined and ready to review, not a first draft.
 
+What people explain while building (who needs what and why, the rules and their source, the decisions and their
+reasons, the open questions, the vocabulary) stays in each application's repository as short pages that a person or
+an assistant finds through the README and each page's metadata. IT reviews it with the code and owns it, so every
+application adds to what the organization knows about its own business.
+
 | Part | What it does | Status |
 |---|---|---|
 | **Base plugin** (this repository), for every business user | A local connector that signs in through the organization and handles workspaces, versions, save points and pull requests on the organization's git server, without Git installed; and the barriers around it | Built |
@@ -20,7 +25,7 @@ the result receives work that is refined and ready to review, not a first draft.
 It is the counterpart of [eunomai](https://github.com/grojof/eunomai): eunomai is flexible, for developers in
 Claude Code; eunomai-business is deliberately strict, for business users in Cowork.
 
-**Status:** in development (0.1.5). The base is built, tested against a fake git server and validated on a real
+**Status:** in development (0.1.6). The base is built, tested against a fake git server and validated on a real
 installation; some checks are still partial or pending ([validation](docs/validation/hypotheses.md)).
 
 ## How it works

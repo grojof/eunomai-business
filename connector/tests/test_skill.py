@@ -247,3 +247,20 @@ def test_a_refusal_with_newer_changes_on_the_server_brings_them_first():
     assert "`audit_refused` with `newer_on_main` true: `workspace_update`, then `app_preview` again" in plain(
         reference("build"))
 
+
+def test_what_the_person_explains_is_filed_by_kind_and_found_before_it_is_read():
+    """The assumptions and open questions an application was built on were left in a change that delivery archives,
+    out of sight of the next session and the next person; and an assistant read a reference of 26,000 tokens whole."""
+    knows = plain(SPECIALIST[SPECIALIST.index("## What the application knows, and where"):SPECIALIST.index("## The journey")])
+    for tag in ("`context`", "`glossary`", "`decision`", "`open-question`"):
+        assert tag in knows, tag
+    assert "never append history" in knows and "never a number" in knows and "Roles, never people's names" in knows
+    assert "**Find before you read.**" in knows and "never `openspec/changes/archive/`" in knows
+    assert "Never a whole page of `docs/base/`" in knows
+    assert "`proposal.md` links to them and repeats none" in plain(reference("understand"))
+    specify = reference("specify")
+    assert "**Source:** <a role" in specify and "the line says `assumption`" in plain(specify)
+    assert "never promise behaviour" in plain(reference("build"))
+    deliver = plain(reference("deliver"))
+    assert "the archive is history nobody reads" in deliver and "An answer from the review closes its row" in deliver
+

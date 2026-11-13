@@ -1,6 +1,6 @@
 ---
 name: specialist-specify
-description: Stage 3, Specify, of the {{PLUGIN}} specialist: requirements with scenarios, design and tasks, confirmed by the user. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+description: Stage 3, Specify, of the {{PLUGIN}} specialist. Load it only when the specialist skill reaches this stage.
 ---
 
 # 3 · Specify
@@ -18,6 +18,7 @@ OpenSpec files directly, exactly in this format; no command-line tool is needed.
 
   ### Requirement: <name>
   The system SHALL <one sentence>.
+  **Source:** <a role, or a document as the glossary names it; or "assumption">
 
   #### Scenario: <name>
   - **WHEN** <situation, with concrete sample values from what the user tried>
@@ -39,9 +40,11 @@ the content is in `docs_language`.
 - Cover the edges a reviewer will ask about (who may do it and who may not, nobody on their own record, wrong or
   missing input, limits, the same action twice) as scenarios, or as requirements of their own when a requirement
   would pass three.
-- A business rule cites its source. Without one, it goes to `## Open questions` in `proposal.md`; never invent it.
-- State the current decision only. When the user changes their mind, rewrite; add a one-line note only if the
-  reason matters to whoever reviews.
+- A business rule cites its source in its `**Source:**` line, right after the SHALL sentence. Without one it is
+  built as the most restrictive assumption: the line says `assumption` and the question is a row of the open
+  questions page, naming the requirement; never invent it.
+- State the current decision only. When the user changes their mind, rewrite. A choice between options whose reason
+  matters to whoever comes later is an entry in the decisions page.
 - If a section adds nothing, remove it.
 
 ## Before showing it: do the pieces agree?

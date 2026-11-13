@@ -382,3 +382,45 @@ the organization's template; the person comes back, the specialist clones it and
 - **Consequence:** the subject always starts with the plugin's name (`eunomai-business:` by default), whatever the language, so a mailbox rule can
   recognise a request; the person's own words are never translated.
 - **Consequence:** without `support_email` the person copies the text and sends it to IT as they usually do.
+
+## 16 · An application's knowledge lives in its repository, by kind
+
+What a person explains while building is the organization's knowledge, and it stays where IT reviews and owns it: in
+the application's repository, found the way eunomai's documentation is, through the README's map and each page's
+metadata.
+
+| Kind | Starts in | Identified by |
+|---|---|---|
+| Who uses it, today's process, the systems it touches, what is left out or for later | `docs/context.md` | `type: explanation`, tag `context` |
+| The business's words, and the documents or regulations the rules cite | `docs/glossary.md` | `type: reference`, tag `glossary` |
+| A choice between options: chosen, why, rejected, which role decided | `docs/decisions.md`, one heading per subject | `type: decision`, tag `decision` |
+| An open question and the assumption built meanwhile | `docs/open-questions.md`, one row | `type: reference`, tag `open-question` |
+| What the application must do | `openspec/specs/`, each requirement with a `**Source:**` line (a role, a document, or `assumption`) | Its path |
+
+A page exists once it has something to say. Past about 8,000 characters it becomes a folder of the same name, one
+subject, process or area per page, named after it, with an index page the README links; open questions are never
+split, a long list is told to IT. The project's `AGENTS.md` may name other homes, and then it wins. The specialist
+finds things through the README, the `description:` and `tags:` lines and the requirements' headings, and reads a
+section, not a file.
+
+**Why.**
+
+| Reason | Evidence |
+|---|---|
+| A change is archived on delivery | Assumptions, open questions and decisions written only in `proposal.md` were out of sight of the next session and the next person |
+| Kinds, not paths, are what stays the same | A small application keeps four pages; a large one splits them, and both are found by `type` and tag |
+| Finding by metadata costs little | A page's `description:` and `tags:` lines are a few dozen tokens; a whole reference page can be thousands |
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| The change's files | Archived on delivery: a pile of logs nobody reads |
+| `AGENTS.md` | IT's ([decision 8](#8--the-projects-context-belongs-to-it)), and loaded in every session |
+| Fixed paths only | A large project ends with pages too long to read |
+| New frontmatter keys or types | The base and eunomai check five types; a tag says the kind |
+| Numbered decision files | Two versions made at once would take the same number |
+| A store outside the repository | Out of IT's review, and away from the code it explains |
+
+**Consequence:** the organization's closed vocabulary of tags (departments, processes, systems), set by IT at build
+time, and a check by the connector reported in the pull request, come with 0.2.0.

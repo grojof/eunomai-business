@@ -1,6 +1,6 @@
 ---
 name: specialist-deliver
-description: Stage 5, Deliver, of the {{PLUGIN}} specialist: the version sent and proposed to IT as a pull request, and what follows the review. Load it only when the specialist skill reaches this stage; it is not a starting point on its own.
+description: Stage 5, Deliver, of the {{PLUGIN}} specialist. Load it only when the specialist skill reaches this stage.
 ---
 
 # 5 · Deliver
@@ -27,13 +27,15 @@ running it again. Each line holds, or goes into the summary under *Not settled* 
 - review your own changes with two lenses, as a reviewer would: does it do what the specs say, no more and no less;
   and does it meet the table in `specialist-build`. If the organization provides a code or security review skill, run it
   too;
-- the README, `design.md`, `proposal.md` and `docs/` say what the code does (scope, settings, how to run it),
-  nothing more: every setting they name exists; the README describes this application, not its template, and its
+- the README, `design.md`, `proposal.md` and the pages about the application say what the code does (scope,
+  settings, how to run it), nothing more: every setting they name exists; the README describes this application, not its template, and its
   index reaches every page of `docs/` (as `specialist-build` says);
 - the application matches the agreed screens or the approved prototype, and the specs, or the user agreed each
   difference (noted is not agreed);
 - the history has one save per task;
-- assumptions confirmed by the user; open questions listed;
+- assumptions confirmed by the user; every assumption the code is built on is a row of the open questions page and
+  every answered row is gone; nothing in `proposal.md` or `design.md` is missing from its home (what is for later, a
+  decision and its reason): the archive is history nobody reads;
 - no secrets, no external resources, no dead code, no debugging leftovers, nothing meant to run on the user's
   computer.
 
@@ -47,7 +49,7 @@ to Propose.
    `# <capability> Specification`, `## Purpose` (one or two sentences) and `## Requirements`. Append `ADDED`
    requirements under `## Requirements`, replace `MODIFIED` ones by name, delete `REMOVED` ones.
 2. Move `openspec/changes/<name>/` to `openspec/changes/archive/<YYYY-MM-DD>-<name>/`, prototype included, and fix
-   any link that pointed to the old place.
+   any link that pointed to the old place; the README's index has a row for `openspec/specs/`.
 3. `version_save(workspace, <message>)`.
 
 ## Propose
@@ -76,7 +78,7 @@ The summary, in `docs_language` (its headings too), has these sections, each sho
 | Goal | What the user wanted, in two lines |
 | Built | What changed, mapped to the requirements |
 | Evidence | The test of each scenario and its result, quoted from the last run; the dependency audit |
-| Not settled | Assumptions not confirmed, rules without a source, open questions |
+| Not settled | The rows of the open questions page, copied; rules whose source is `assumption` |
 | Skipped | What was not built or not validated, and why |
 | Help used | Skills used besides this one, and any conflict with these rules and how it was resolved |
 | For the project's context | Only if the project has none or it fell short: the lines IT could add |
@@ -101,6 +103,7 @@ line that the review could not be read whole and offer to try again later; never
    *questions for others* (offer to draft the message).
 3. Rework in this same version, as a new change `openspec/changes/<name>-review/`: the specs it touches as
    `MODIFIED` or `ADDED` against `openspec/specs/`, its tasks, then Build and Deliver as for a small fix. The
-   archived change stays as it was.
+   archived change stays as it was. An answer from the review closes its row: the requirement's source becomes the
+   reviewer's role, and a choice between options gets its entry in the decisions page.
 4. Propose again: the pull request is updated. Its summary adds *Review*: each request and what was done, or why
    not.

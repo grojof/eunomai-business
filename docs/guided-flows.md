@@ -103,7 +103,10 @@ any of them straight back to the user. The template is in
 ## Keeping it clean
 
 - **Specifications state the current decision,** not its history. A change of course replaces the text; a
-  one-line note stays only when the reason matters to the reviewer.
+  choice between options whose reason matters later is an entry in the decisions page.
+- **The change holds what changes; what stays true lives in `docs/` and `openspec/specs/`.** Delivery archives the
+  change, so the context, the words, the decisions and the open questions are filed in the application's pages as
+  they come up, each kind with its `type` and tag ([decision 16](decisions.md#16--an-applications-knowledge-lives-in-its-repository-by-kind)).
 - **Early hypotheses are expected** and marked as such; they are refined as the user's thinking settles.
 - **Short by design:** a proposal fits on one screen; a requirement is a sentence plus its scenarios.
 

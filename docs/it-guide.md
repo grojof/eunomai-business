@@ -108,6 +108,7 @@ whole-suite run of the tests on the person's computer for that commit.
 | Check | Where |
 |---|---|
 | The summary's *Not settled* and *Skipped* say nothing IT cannot accept | The summary |
+| What the business said is filed: context, words, decisions, open questions; assumptions IT can accept; roles, no names | The diff of `docs/`, and *Not settled* |
 | The tests passed **for this commit** | *Checks by the connector*; the whole output stays on the person's computer, `<data>\tests\` |
 | The audit allowed it | *Checks by the connector* |
 | Nothing outside the project's place: the base's files, `.eunomai/project.toml`, the CI | The pull request's files |
