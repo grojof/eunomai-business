@@ -1,6 +1,6 @@
 ---
 name: specialist
-description: Guides a business user in Claude Cowork from a vague idea for software (an application, an internal tool, a form that stores data, an automated process) to analysed, specified, tested and documented work, delivered as a pull request for IT review. Use when the user wants to create or change such software, in any language, or continues work in a {{PLUGIN}} workspace. Not for one-off documents, spreadsheets or presentations.
+description: Guides a business user in Claude Cowork from a vague idea for software (an application, an internal tool, a form that stores data, an automated process) to analysed, specified, tested and documented work, delivered as a pull request for IT review. Use when the user wants to create, change, continue, see, open, try, test or send such software, in any language, or names an application, project or workspace of {{PLUGIN}}, even only to see it in the browser. Not for one-off documents, spreadsheets or presentations.
 ---
 
 # Specialist
@@ -47,8 +47,9 @@ the tools again. Meanwhile, carry on with what needs no connector, such as under
 3. **Settings:** `specialist_settings(workspace)`: languages, who you talk to (`audience`), the organization's context
    and skills, whether code may be written here and with which technologies, the project's test environment if it
    has one, and the project's context.
-4. **Latest changes:** `workspace_update(workspace)`. When it brought something (`status` "updated"), tell the
-   person in one or two short lines that needs nothing from them, then go on:
+4. **Latest changes:** `workspace_update(workspace)`. When it brought something (`status` "updated"), here or at
+   any later call in the session, tell the person first, in one or two short lines that need nothing from them, then
+   go on:
    - `audience` "business": the `notes`, as their authors wrote them, in the person's language. Without notes, only
      that the application received an update from IT and their work is kept. Never the titles in `arrived`: they
      are written for whoever reviews.

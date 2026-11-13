@@ -113,7 +113,7 @@ def test_bringing_the_latest_says_what_arrived(signed_in, workspaces):
     result = gitops.update("arrived")
     assert result["status"] == "updated"
     assert result["arrived"] == ["Another accepted proposal", "New look from IT"]
-    assert result["user_message"].endswith("What arrived: Another accepted proposal; New look from IT.")
+    assert "New look from IT" not in result["user_message"]  # a title, for whoever reviews: it stays in `arrived`
     assert "Mine" not in result["arrived"]  # the person's own work is not news to them
     assert gitops.update("arrived")["status"] == "up_to_date"
 
@@ -145,7 +145,7 @@ def test_a_note_is_cut_and_without_notes_the_titles_are_told(signed_in, workspac
     joined(signed_in, "no-note")
     signed_in.server_commit("no-note", "main", {"a.md": b"a\n"}, message="Fix the totals")
     result = gitops.update("no-note")
-    assert result["notes"] == [] and result["user_message"].endswith("What arrived: Fix the totals.")
+    assert result["notes"] == [] and "Fix the totals" not in result["user_message"]
 
 
 def test_on_the_main_branch_and_on_an_empty_version_it_also_says_what_arrived(signed_in, workspaces):

@@ -20,7 +20,7 @@ the result receives work that is refined and ready to review, not a first draft.
 It is the counterpart of [eunomai](https://github.com/grojof/eunomai): eunomai is flexible, for developers in
 Claude Code; eunomai-business is deliberately strict, for business users in Cowork.
 
-**Status:** in development (0.1.4). The base is built, tested against a fake git server and validated on a real
+**Status:** in development (0.1.5). The base is built, tested against a fake git server and validated on a real
 installation; some checks are still partial or pending ([validation](docs/validation/hypotheses.md)).
 
 ## How it works

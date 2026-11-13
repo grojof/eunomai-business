@@ -341,6 +341,9 @@ def test_a_blocked_audit_refuses_and_nothing_runs(signed_in, workspaces, turned_
     answer = show(name)
     assert answer["status"] == "audit_refused" and "evil" in answer["user_message"] and "GHSA" not in answer["user_message"]
     assert not pids.exists() and browser == [] and folders() == []
+    assert answer["newer_on_main"] is False
+    signed_in.server_commit(name, "main", {"uv.lock": b"fixed\n"}, message="Safe package")
+    assert show(name)["newer_on_main"] is True  # the preview's refusal says it too, and app_tests' with it
 
 
 def test_an_audit_that_cannot_run_refuses(signed_in, workspaces, turned_on, browser, pids, monkeypatch):

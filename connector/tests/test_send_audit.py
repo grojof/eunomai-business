@@ -66,6 +66,22 @@ def test_a_blocked_audit_stops_the_send_in_plain_words(signed_in, workspaces, mo
     assert "GHSA" not in message and "uv.lock" not in message and "audit" not in message.lower()
 
 
+def test_a_refusal_says_when_the_main_branch_may_already_have_the_fix(signed_in, workspaces, monkeypatch):
+    """The audit refused a package the main branch had already updated, and the assistant offered to change the
+    lockfile itself: bringing the latest comes first."""
+    name, _ = project(signed_in)
+    audit_answers(monkeypatch, BLOCKED)
+    assert tools.version_send(name)["newer_on_main"] is False
+    signed_in.server_commit(name, "main", {"README.md": b"other\n"}, message="Something else")
+    assert tools.version_send(name)["newer_on_main"] is False  # a change to anything else says nothing about it
+    signed_in.server_commit(name, "main", {"uv.lock": b"fixed\n"}, message="Safe package")
+    result = tools.version_send(name)
+    assert result["status"] == "audit_refused" and result["newer_on_main"] is True
+    assert "newer changes to what it uses" in result["user_message"]
+    assert gitops.newer_on_main(name, None, files=["uv.lock"]) is False
+    assert gitops.newer_on_main(name, "f" * 40, files=["uv.lock"]) is False  # a commit this computer does not have
+
+
 def test_an_allowed_audit_lets_the_send_through(signed_in, workspaces, monkeypatch):
     name, _ = project(signed_in)
     audit_answers(monkeypatch, ALLOWED)

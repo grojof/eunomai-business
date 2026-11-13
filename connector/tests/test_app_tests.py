@@ -283,3 +283,68 @@ def test_what_is_read_is_bounded_and_nothing_else_comes_through():
     read = app_tests.summary(text)
     assert len(read["failures"]) == 10 and all(len(f["lines"]) <= 240 for f in read["failures"])
     assert read["counts"] == {}
+
+
+def test_a_failure_carries_what_pytest_wrote_under_it():
+    """The summary's line was cut to `assert ['dark color-.../7"]', ...] == []`, and the log lay outside the folders
+    the assistant can open: it could not tell which element failed."""
+    text = "\n".join([
+        "_______ test_no_detectable_accessibility_failure[/orders] _______",
+        ">       assert run_axe_in_both_themes(page) == []",
+        "E       assert ['dark color-.../7\"]', ...] == []",
+        "E         ",
+        "E         Left contains 10 more items, first extra item: 'dark color-contrast: [.link]'",
+        "_______________ TestOrders.test_total _______________",
+        "E       assert 3 == 4",
+        "____________ ERROR at setup of test_db ____________",
+        "E       ConnectionRefusedError: [Errno 111]",
+        "=========================== short test summary info ============================",
+        "FAILED tests/test_orders_pages.py::test_no_detectable_accessibility_failure[/orders] - assert [...] == []",
+        "FAILED tests/test_orders.py::TestOrders::test_total - assert 3 == 4",
+        "ERROR tests/test_db.py::test_db - ConnectionRefusedError: [Errno 111]",
+        "FAILED tests/test_quiet.py::test_quiet",
+        "3 failed, 120 passed in 41.20s",
+    ])
+    first, orders, db, quiet = app_tests.summary(text)["failures"]
+    assert "first extra item: 'dark color-contrast: [.link]'" in first["detail"]
+    assert orders["detail"] == "assert 3 == 4" and db["detail"].startswith("ConnectionRefusedError")
+    assert quiet["detail"] == ""
+    many = "\n".join(["___ test_x ___"] + [f"E   {'y' * 300}" for _ in range(20)] + ["FAILED t.py::test_x - y"])
+    assert len(app_tests.summary(many)["failures"][0]["detail"]) <= 600
+
+
+def test_each_failure_keeps_its_own_lines():
+    """Names repeat across files and classes, a test can fail and then err at teardown, a file can fail to import:
+    a wrong `detail` would send the assistant to fix the wrong code."""
+    text = "\n".join([
+        "==================================== ERRORS ====================================",
+        "_______________________ ERROR collecting tests/test_c.py _______________________",
+        "E   ModuleNotFoundError: No module named 'app.missing'",
+        "_________________________ ERROR at teardown of test_x __________________________",
+        "E       RuntimeError: teardown boom",
+        "=================================== FAILURES ===================================",
+        "__________________________________ test_total __________________________________",
+        "E       assert 1 == 2",
+        "__________________________________ test_total __________________________________",
+        "E       assert 30 == 40",
+        "______________________________ TestOther.test_list ______________________________",
+        "E       assert 'b' == 'c'",
+        "____________________________________ test_x ____________________________________",
+        "E       assert 5 == 6",
+        "----------------------------- Captured stdout call -----------------------------",
+        "E   not pytest's: printed by the test",
+        "_______________________________ test_param[x::y] _______________________________",
+        "E       assert 7 == 8",
+        "=========================== short test summary info ============================",
+        "FAILED tests/test_a.py::test_total - assert 1 == 2",
+        "FAILED tests/test_b.py::test_total - assert 30 == 40",
+        "FAILED tests/test_b.py::TestOther::test_list - assert 'b' == 'c'",
+        "FAILED tests/test_d.py::test_x - assert 5 == 6",
+        "FAILED tests/test_e.py::test_param[x::y] - assert 7 == 8",
+        "ERROR tests/test_d.py::test_x - RuntimeError: teardown boom",
+        "ERROR tests/test_c.py",
+    ])
+    details = [failure["detail"] for failure in app_tests.summary(text)["failures"]]
+    assert details == ["assert 1 == 2", "assert 30 == 40", "assert 'b' == 'c'", "assert 5 == 6", "assert 7 == 8",
+                       "RuntimeError: teardown boom", "ModuleNotFoundError: No module named 'app.missing'"]
+

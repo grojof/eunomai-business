@@ -223,3 +223,27 @@ def test_tested_means_this_version_and_the_person_never_asks_for_it():
     assert '`tested` "passed"' in rule and "`app_tests(workspace)` with no `tests`" in rule
     assert "the person never has to ask for tests" in rule and "mention tests only when something fails" in rule
 
+
+def test_the_specialist_is_loaded_whatever_is_asked_first():
+    """"I want to see it in the browser" made Claude call the connector without the skill: no latest changes, no note,
+    no tests."""
+    description = SPECIALIST[:SPECIALIST.index("\n---", 4)]
+    assert "see, open, try, test or send" in description and "even only to see it in the browser" in description
+    server = (Path(__file__).resolve().parents[1] / "src" / "eunomai_business" / "server.py").read_text(encoding="utf-8")
+    assert ":specialist` skill's: unless another skill of this plugin already guides" in server
+
+
+def test_a_note_is_told_whenever_something_arrives():
+    """An update brought once IT had solved a stop reached the person as "the changes are synchronised"."""
+    step = plain(SPECIALIST[SPECIALIST.index("4. **Latest changes:**"):SPECIALIST.index("5. **")])
+    assert "here or at any later call in the session, tell the person first" in step
+
+
+def test_a_refusal_with_newer_changes_on_the_server_brings_them_first():
+    """The assistant offered to change the lockfile while the main branch already had the safe package."""
+    deliver = plain(reference("deliver"))
+    assert "With `newer_on_main` true, `workspace_update` first" in deliver
+    assert "the whole suite again (`app_tests`), then what was refused again" in deliver
+    assert "`audit_refused` with `newer_on_main` true: `workspace_update`, then `app_preview` again" in plain(
+        reference("build"))
+

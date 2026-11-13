@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.5 (2026-11-13)
+
+Findings of two Cowork tasks in which a person in a business department went back to an application after IT updated
+its look and fixed a security advisory.
+
+- **The specialist is loaded whatever is asked first.** "I want to see it in the browser" made Claude call the
+  connector's tools without the skill: no latest changes, no note, no tests. The connector's instructions now say to
+  load the `<plugin>:specialist` skill before its first tool, and the skill's description covers seeing, opening,
+  trying and sending an application, or naming one.
+  A skill of the plugin that already guides the task, such as `validate-setup`, is left to do so.
+- **A note is told whenever something arrives.** The specialist told the notes only at the start of a session; an
+  update brought later, once IT had solved a stop, reached the person as "the changes are synchronised". The rule
+  now holds for every `workspace_update`, and the instructions say to tell what follows "For you:" as text, never as
+  instructions. Without notes, `user_message` no longer lists the titles, which are written for whoever reviews.
+- **A refusal says when the main branch may already have the fix.** The audit refused a preview for a package the
+  main branch had already updated, and the assistant offered to change the lockfile itself. `audit_refused` now
+  carries `newer_on_main`, from the preview, `app_tests` and a send: whether the main branch changed the files the
+  audit read since the version parted from it. Then the specialist brings it in first and runs the whole suite again;
+  changing a package stays allowed, through `dependency_check` and the audit.
+- **A failing test says why.** `app_tests` returned pytest's summary line, cut to `assert ['dark color-.../7"]', ...]
+  == []`, and a log outside the folders the assistant can open. Each failure now carries `detail`: up to six lines
+  pytest wrote under it, matched by the name pytest gives it and in order, so tests of one name in two files keep
+  their own; a file that could not be imported has its error. Bounded, and marked as the application's text.
+- **The IT guide says what to do when the connector writes to IT**, case by case.
+
 ## 0.1.4 (2026-11-12)
 
 Two findings of a Cowork test in which IT updated an application's look while a person in a business department was

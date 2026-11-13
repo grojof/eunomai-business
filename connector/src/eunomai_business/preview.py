@@ -928,7 +928,8 @@ def _gate(current: _Preview, refused: str, kept: bool = False) -> dict | None:
             current.workspace, f"{refused} now: the checks on what it uses could not run. Check the network or VPN and "
                                "try again; your work is safe on this computer.", exc)
     if audit["verdict"] != "allowed":
-        return deps.refusal(current.workspace, audit, refused)
+        return deps.refusal(current.workspace, audit, refused,
+                            gitops.newer_on_main(current.workspace, current.main, current.head, audit["files"]))
     if not (current.app / "uv.lock").is_file():
         return {"workspace": current.workspace, "status": "no_lockfile",
                 "user_message": f"{refused} yet: the list of exactly what it uses has not been made. Your work is safe on "

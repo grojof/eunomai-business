@@ -256,7 +256,8 @@ they do not stop code written to do harm, and a program with the person's rights
   the application's port, and a program that starts a session of its own leaves the process group.
 - **The tests.** `app_tests` runs a project's tests behind the same barriers, its own key and `[tests]`, for up to
   20 minutes, with the development packages too. What returns to the model is counts and at most ten failures, each
-  a test's name and a line, marked as the application's text; whether they passed is the exit code's. The output,
+  a test's name, its summary's line and up to six lines pytest wrote under it (600 characters), marked as the
+  application's text; whether they passed is the exit code's. The output,
   which can say anything, stays on the computer. The model can ask for only some test files, through the command the
   project declares in `some`, which ends in `--`: what it names must be `.py` paths under `tests/` of a narrow shape, each a file of the
   version that runs, at most 50, so it chooses which tests run but never adds an option or a file from elsewhere.
