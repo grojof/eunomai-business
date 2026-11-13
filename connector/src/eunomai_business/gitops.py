@@ -13,7 +13,6 @@ import os
 import re
 import shutil
 import socket
-import ssl
 import stat
 import tempfile
 import threading
@@ -23,7 +22,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import truststore
 import urllib3
 from dulwich import porcelain
 from dulwich.client import HTTPUnauthorized, get_transport_and_path
@@ -238,7 +236,7 @@ def _check_host(url: str, current: dict) -> None:
 
 def _remote(current: dict) -> dict:
     """Arguments for dulwich's HTTP client: OS certificate store, basic auth with the OAuth token."""
-    pool = urllib3.PoolManager(ssl_context=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=30)
+    pool = urllib3.PoolManager(ssl_context=auth.tls_context(), timeout=30)
     login = str(current["user"].get(current["cfg"]["login_field"], "oauth"))
     return {"username": login, "password": current["record"]["access_token"], "pool_manager": pool}
 
