@@ -187,6 +187,8 @@ class FakeServer:
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
     def new_repo(self, name: str, default_branch: str = "main") -> Repo:
+        # The server lives for the whole session: two tests of one name would share a repository and fail by turns.
+        assert name not in self.repos, f"the repository {name} exists already: give the test a name of its own"
         (_SANDBOX / "server").mkdir(exist_ok=True)
         repo = Repo.init_bare(str(_SANDBOX / "server" / f"{name}.git"), mkdir=True)
         repo.refs.set_symbolic_ref(b"HEAD", f"refs/heads/{default_branch}".encode())
