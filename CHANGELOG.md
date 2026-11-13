@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.5 (2026-11-13)
+
+Findings of two Cowork tasks in which a person in a business department went back to an application after IT updated
+its look and fixed a security advisory.
+
+- **The specialist is loaded whatever is asked first.** "I want to see it in the browser" made Claude call the
+  connector's tools without the skill: no latest changes, no note, no tests. The connector's instructions now say to
+  load the `<plugin>:specialist` skill before its first tool, and the skill's description covers seeing, opening,
+  trying and sending an application, or naming one.
+- **A note is told whenever something arrives.** The specialist told the notes only at the start of a session; an
+  update brought later, once IT had solved a stop, reached the person as "the changes are synchronised". The rule
+  now holds for every `workspace_update`, and the instructions say to tell what follows "For you:" whole.
+- **A refusal says when the server already has the fix.** The audit refused a preview for a package the main branch
+  had already updated, and the assistant offered to change the lockfile itself. `audit_refused` now carries
+  `behind_main`, from both the preview and a send, and says to bring the latest first; changing a package stays
+  allowed, through `dependency_check` and the audit.
+- **A failing test says why.** `app_tests` returned pytest's summary line, cut to `assert ['dark color-.../7"]', ...]
+  == []`, and a log outside the folders the assistant can open. Each failure now carries `detail`: up to six lines
+  pytest wrote under it, bounded and marked as the application's text.
+- **The IT guide says what to do when the connector writes to IT**, case by case.
+
 ## 0.1.4 (2026-11-12)
 
 Two findings of a Cowork test in which IT updated an application's look while a person in a business department was

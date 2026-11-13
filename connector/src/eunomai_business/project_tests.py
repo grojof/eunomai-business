@@ -24,6 +24,8 @@ TIME_LIMIT = 20 * 60  # seconds the tests have
 _ANSWER_WAIT = 40.0
 _KEEP_LOG = 5 * 1024 * 1024  # bytes of a run's output kept for IT, from its end
 _MOST_FAILURES = 10
+_MOST_DETAIL = 6  # lines pytest wrote under a failure (its `E` lines): the summary's line is cut to fit
+_SECTION = re.compile(r"_{3,} (.{1,300}?) _{3,}")
 # What pytest says of each failure, and at its end. Read from text the application printed: a line can lie, so whether
 # the tests passed is the exit code's, and what is read is bounded and marked.
 _FAILURE = re.compile(r"(FAILED|ERROR) ([^\s]{1,300})(?: - (.*))?")
@@ -82,7 +84,9 @@ def last_whole_run(workspace: str) -> dict | None:
 
 
 def summary(text: str) -> dict:
-    """Counts and failures, as pytest prints them with `-rfE`; empty where the text says nothing of the kind."""
+    """Counts and failures, as pytest prints them with `-rfE`; empty where the text says nothing of the kind. Each
+    failure carries its summary's line and, in `detail`, the first lines pytest wrote under it, which the summary cuts:
+    an assertion's first differing item, for instance. Bounded, and marked as the application's text."""
     lines = text.splitlines()
     counts: dict[str, int] = {}
     for line in reversed(lines):
@@ -91,12 +95,25 @@ def summary(text: str) -> dict:
             for number, word in _COUNT.findall(found.group(1)):
                 counts[{"errors": "error"}.get(word, word)] = int(number)
             break
+    said: dict[str, list[str]] = {}
+    under = None
+    for line in lines:
+        header = _SECTION.fullmatch(line.strip())
+        if header:
+            under = said.setdefault(header.group(1).removeprefix("ERROR at setup of ").removeprefix(
+                "ERROR at teardown of "), [])
+        elif under is not None and line.startswith("E ") and len(under) < _MOST_DETAIL and line[1:].strip():
+            under.append(line[1:].strip())
     failures = []
     for line in lines:
         found = _FAILURE.fullmatch(line.strip())
         if found and len(failures) < _MOST_FAILURES:
-            failures.append({"test": support.clean(found.group(2), 300),
-                             "lines": support.clean(found.group(3) or found.group(1).lower(), 240)})
+            test = found.group(2)
+            name = test.rsplit("::", 1)[-1]
+            detail = said.get(name) or next((v for k, v in said.items() if k.endswith(f".{name}")), [])
+            failures.append({"test": support.clean(test, 300),
+                             "lines": support.clean(found.group(3) or found.group(1).lower(), 240),
+                             "detail": support.clean(" | ".join(detail), 600)})
     return {"counts": counts, "failures": failures}
 
 

@@ -131,6 +131,21 @@ headers and roles from groups.
 | An application | From the newer template: `tools/update_application.py --template <template repository> --check`, then without `--check`: a branch with the template's change merged and the application's kept, for a pull request. Add to its description a line `Note-for-people: <what it means to them, in their words>`, such as "Your application has the organization's new look. Nothing to do.": merged, it is what the people working on the application are told ([updating an application](https://github.com/grojof/eunomai-business-app-base/blob/main/docs/base/specification.md#updating-an-application)) |
 | The plugin | Step 4 again |
 
-## 10. Uninstalling
+## 10. When the connector writes to IT
+
+The connector stops where going on could lose someone's work or let through what it checks, and the specialist offers
+the person an e-mail to IT with the report already written: the problem, the workspace and its folder, the repository,
+the version, its commit, the files involved, and the connector's version. Before anything moves, it keeps where each
+branch was in `refs/eunomai/backup/<time>/<branch>`.
+
+| The report says | What IT does |
+|---|---|
+| The version and the main branch changed the same files | Resolve on the person's computer, in the workspace's folder: a commit on the version that keeps the right content (often what the main branch has, when the person's side was only a side effect). Then the person asks for the latest again |
+| The version on the server has changes this computer does not have, or diverged from its copy on the server | Compare both in the folder; keep the person's work in one of them. Never resolve on the server a version that has saves not sent yet (`git log origin/<version>..<version>` in the folder): the two copies would diverge again |
+| The dependency audit refused a version | If the main branch already has the fix, the person brings the latest (the specialist does it when the answer says `behind_main`). If not, a newer allowed version of the package, from the template or in the application |
+| Untracked files in the way | Files on disk the update would overwrite: move them aside, and ask for the latest again |
+| No common history, or a main branch rewritten on the server | The project's history changed on the server: bring the person's commits across on top of the new main branch |
+
+## 11. Uninstalling
 
 [Data on computers and servers](data-on-computers.md#uninstalling): what stays on a computer and how to remove it.

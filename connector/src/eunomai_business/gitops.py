@@ -1224,6 +1224,19 @@ def export_saved(workspace: str, target: Path, main: str, head: str | None = Non
 _audits: dict[str, tuple[bytes, float, dict]] = {}  # workspace: its tree, when, and the `allowed` answer
 
 
+def behind_main(workspace: str, main: str | None, head: str | None = None) -> bool:
+    """Whether the version, or `head`, leaves out commits of the main branch at `main`, a commit already fetched: what
+    IT accepted since may already solve what stopped it, such as a package the audit refuses."""
+    if not main:
+        return False
+    with _repo(workspace) as repo:
+        commit = head.encode() if head else _ref(repo, b"HEAD")
+        try:
+            return commit is not None and not can_fast_forward(repo, main.encode(), commit)
+        except KeyError:  # an object this computer does not have: nothing to say
+            return False
+
+
 def audit_saved(workspace: str, main: str, head: str | None = None, copy: Path | None = None, kept=None) -> dict:
     """The dependency audit of what is saved, with the commit it answers for in `head`, once that passes the checks
     against `main`, the main branch's commit. An `allowed` answer is kept for that tree for a while, so a send and the
