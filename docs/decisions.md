@@ -95,9 +95,8 @@ Claude Desktop is closed, and the person is told so. The person keeps it open wh
 the address of the one it replaces, with the data it had, and reloading the page shows it; the hour counts from the
 latest version.
 
-**What changed, and why.** This decision used to have no exception: a person tried a clickable prototype, and saw the
-application through pictures from the sandbox. The product's owner decided that a person can see the real application
-on their own computer, off by default and turned on by IT.
+**Why the exception:** a clickable prototype, and pictures of the application from the sandbox, were not enough for
+a person to judge it; seeing the real application on their own computer is, and IT turns it on.
 
 | Reason | Evidence |
 |---|---|
@@ -340,7 +339,7 @@ How each part holds against misuse is in the template's and the agent's pages, a
   IT's is settled with that application.
 - **Consequence:** an application takes a newer version of its organization's template with the base's
   `tools/update_application.py`: the template's change merged into it on a branch, its own changes kept, a conflict
-  left for a person, and the pull request deciding. (Until 2026-11, there was no such mechanism.)
+  left for a person, and the pull request deciding.
 - **Consequence:** generating the stylesheet in Cowork needs the sandbox to download the executable, under the
   organization's network settings, and has been shown on one sandbox only. Where it cannot, a developer's computer
   or CI generates it, as a case for IT ([decision 6](#6--the-user-never-resolves-a-technical-problem)).
@@ -444,7 +443,7 @@ there; the base keeps its own in its `.python-version`.
 | A version in the *security* stage gets no other fix: a bug the connector meets stays | Python's lifecycle ([devguide](https://devguide.python.org/versions/)): about two years of bug fixes, then three of security fixes only |
 | Each new version is faster and fixes more | Python's release notes for each version |
 | Six months let the compiled packages catch up | A new Python's first weeks: packages with compiled parts (cryptography, pydantic-core, psycopg) publish wheels for it over time; uv installs wheels only ([barriers](barriers.md#dependencies)) |
-| One number in one place | The connector's version was written in ten files: the start, the plugin's commands, the tests and CI |
+| One number in one place | The start, the plugin's commands, the tests and CI all name it: one file keeps them the same |
 
 **Rejected:**
 

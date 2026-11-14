@@ -104,6 +104,8 @@ def test_the_program_runs_with_its_environment_and_its_exit_code(data, monkeypat
     assert seen["env"]["UV_PROJECT_ENVIRONMENT"] == str(start.environment("acme-apps"))
     assert seen["command"][-5:] == ["--project", str(CONNECTOR), "eunomai-business-guard", "--plugin", "acme-apps"]
     assert "--frozen" in seen["command"] and "--managed-python" in seen["command"]
+    python = (CONNECTOR / ".python-version").read_text(encoding="utf-8").strip()
+    assert seen["command"][seen["command"].index("--python") + 1] == python  # one place (decision 17)
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the lock is Windows' own")

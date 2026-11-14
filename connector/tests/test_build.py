@@ -156,11 +156,38 @@ def test_the_organizations_deny_rules_are_packaged_for_the_guard(tmp_path):
     (lambda c: c.update(knowledge_tags=[{"tag": "Sales Dept", "means": "Sales"}]), "not lowercase words joined by -"),
     (lambda c: c.update(knowledge_tags=[{"tag": "glossary", "means": "words"}]), "the kinds' own tags"),
     (lambda c: c.update(knowledge_tags=[{"tag": "erp", "means": "a"}, {"tag": "erp", "means": "b"}]), "each tag once"),
+    (lambda c: c.update(knowledge_tags=[{"tag": f"t{n}", "means": "m"} for n in range(101)]), "at most 100"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "erp", "means": "m" * 121}]), "at most 120 characters"),
 ])
 def test_configuration_errors_are_reported(change, message):
     cfg = copy.deepcopy(EXAMPLE)
     change(cfg)
     assert any(message in error for error in build.validate(cfg)), build.validate(cfg)
+
+
+def test_the_build_and_the_connector_know_the_same_kinds_and_tags():
+    """The build runs on the standard library alone, so it keeps its own copy of what the connector checks."""
+    from eunomai_business import knowledge
+
+    assert build.KNOWLEDGE_KINDS == tuple(knowledge.KINDS) and build.KNOWLEDGE_TAG.pattern == knowledge.TAG.pattern
+
+
+def test_every_command_takes_the_connectors_python_from_one_place(tmp_path, monkeypatch):
+    """A number typed in a template would pass with today's version and fail at the next: an unlikely one finds it."""
+    monkeypatch.setattr(build, "connector_python", lambda: "3.99")
+    build.build(dict(copy.deepcopy(EXAMPLE), diagnostics=True), tmp_path)
+    plugin = tmp_path / "eunomai-business"
+    commands = [json.dumps(json.loads((plugin / ".mcp.json").read_text(encoding="utf-8")))]
+    commands.append((plugin / "hooks" / "hooks.json").read_text(encoding="utf-8"))  # diagnostics' hooks merged in
+    assert all('"--python", "3.99"' in text or "--python 3.99 " in text for text in commands)
+    assert not re.search(r"--python\"?,? \"?3\.(?!99)", "".join(commands))
+
+
+def test_a_python_version_file_that_is_not_one_version_stops_the_build(tmp_path, monkeypatch):
+    (tmp_path / ".python-version").write_text("3.14; calc\n", encoding="utf-8")
+    monkeypatch.setattr(build, "CONNECTOR_SRC", tmp_path)
+    with pytest.raises(SystemExit, match="one version such as 3.14"):
+        build.connector_python()
 
 
 # --- variants: one base configuration, several packages ------------------------------------------------------

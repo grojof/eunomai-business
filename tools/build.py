@@ -85,11 +85,13 @@ KNOWLEDGE_TAG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 
 def _knowledge_tags_problems(items) -> list[str]:
     """The organization's closed vocabulary for the knowledge pages: each tag a lowercase word or words joined by -,
-    once, with what it means, at most 300."""
-    shape = 'knowledge_tags must be a list of {"tag": "<lowercase-words>", "means": "<what it names>"}, at most 300'
-    if not isinstance(items, list) or len(items) > 300 or not all(
+    once, with what it means. The specialist reads it in every session, so it is kept short: at most 100 tags, about
+    as many tokens as the organization's context."""
+    shape = ('knowledge_tags must be a list of at most 100 {"tag": "<lowercase-words>", "means": "<what it names, at '
+             'most 120 characters>"}')
+    if not isinstance(items, list) or len(items) > 100 or not all(
             isinstance(item, dict) and set(item) == {"tag", "means"} and isinstance(item["tag"], str)
-            and isinstance(item["means"], str) and item["means"].strip() and len(item["means"]) <= 200
+            and isinstance(item["means"], str) and item["means"].strip() and len(item["means"]) <= 120
             for item in items):
         return [shape]
     problems = []
@@ -106,9 +108,15 @@ def _knowledge_tags_problems(items) -> list[str]:
     return problems
 
 
+PYTHON_VERSION = re.compile(r"3\.\d{1,2}")
+
+
 def connector_python() -> str:
     """The connector's Python, as connector/.python-version holds it: one place for every command that starts it."""
-    return (CONNECTOR_SRC / ".python-version").read_text(encoding="utf-8").split()[0]
+    text = (CONNECTOR_SRC / ".python-version").read_text(encoding="utf-8").strip()
+    if not PYTHON_VERSION.fullmatch(text):
+        raise SystemExit(f"connector/.python-version must hold one version such as 3.14, not {text!r}")
+    return text
 
 
 def validate_specialist(cfg: dict) -> list[str]:

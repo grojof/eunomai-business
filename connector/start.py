@@ -32,7 +32,9 @@ OVERRIDE = "EUNOMAI_CONNECTOR_ENVIRONMENT"
 PLUGIN_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,39}\Z")  # as eunomai_business.PLUGIN_NAME
 UNUSED_FOR = 7 * 24 * 3600
 USED = ".used"
-PYTHON = (HERE / ".python-version").read_text(encoding="utf-8").split()[0]
+PYTHON = (HERE / ".python-version").read_text(encoding="utf-8").strip()
+if not re.fullmatch(r"3\.\d{1,2}", PYTHON):  # it goes into uv's command line
+    raise SystemExit(f"{HERE / '.python-version'} must hold one version such as 3.14")
 """The connector's Python, in one place for the build, this file and the tests (docs/decisions.md, decision 17)."""
 UV_ARGUMENTS = ["run", "--frozen", "--no-dev", "--no-config", "--system-certs", "--managed-python", "--python", PYTHON]
 

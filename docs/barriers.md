@@ -135,7 +135,7 @@ reason to send what nobody audited, and the code in a test environment runs too.
 
 | Case | What happens |
 |---|---|
-| `allowed` | It goes, and the result is appended to the pull request, for the commit it names, so what IT reads there was not written by the model |
+| `allowed` | It goes, and the result is appended to the pull request, for the commit it names, so what IT reads there was not written by the model; what that block quotes from the pages is shown as short code, and a summary cannot use its heading |
 | `blocked` | Nothing is sent; the user reads why in plain words, and IT gets a report |
 | The audit cannot run (no network, a registry that does not answer) | Nothing is sent: deny by default, like the rest of the audit |
 | A version with no packages | `allowed`, without asking the network |

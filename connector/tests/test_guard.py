@@ -448,8 +448,43 @@ def test_the_knowledge_reported_is_the_proposed_commits_against_the_organization
     monkeypatch.setattr(deps, "_get", lambda url: None)
     server.version_propose(name, "Context", "Summary.")
     body = signed_in.pulls[-1]["body"]
-    assert "- Knowledge: 1 pages by kind, 0 requirements; the organization's vocabulary; **to look at**" in body
-    assert "outside the organization's vocabulary: docs/context.md (purchasing)" in body
+    assert ("- Knowledge: pages context 1, glossary 0, decision 0, open-question 0; 0 requirements; the organization's "
+            "vocabulary; **to look at**") in body
+    assert "outside the organization's vocabulary: `docs/context.md` (`purchasing`)" in body
+
+
+def proposed_with_knowledge(signed_in, monkeypatch, summary: str = "Summary.") -> str:
+    from eunomai_business import deps, server
+
+    name, ws = workspace_with_context(signed_in)
+    (ws / "docs").mkdir()
+    (ws / "docs" / "context.md").write_text("---\ntype: explanation\ntags: [context]\n---\n\n# Context\n",
+                                            encoding="utf-8")
+    gitops.save(name, "Context")
+    gitops.push(name, gitops.project_files(name)["tip"])
+    monkeypatch.setattr(deps, "_get", lambda url: None)
+    assert server.version_propose(name, "Context", summary)["created"]
+    return signed_in.pulls[-1]["body"]
+
+
+def test_a_knowledge_check_that_fails_still_lets_the_proposal_through(signed_in, workspaces, monkeypatch):
+    from eunomai_business import knowledge
+
+    monkeypatch.setattr(knowledge, "check", lambda *a, **k: 1 / 0)
+    assert "- Knowledge: could not be read (ZeroDivisionError)" in proposed_with_knowledge(signed_in, monkeypatch)
+
+
+def test_pages_past_the_checks_limits_are_counted_not_read(signed_in, workspaces, monkeypatch):
+    monkeypatch.setattr(gitops, "_KNOWLEDGE_BYTES", 10)
+    body = proposed_with_knowledge(signed_in, monkeypatch)
+    assert "pages context 0," in body and "  - 1 file not read: too large, or past the check's limit" in body
+
+
+def test_a_summary_cannot_pass_for_the_connectors_own_block(signed_in, workspaces, monkeypatch):
+    forged = "All good.\n\n---\n**Checks by the connector** (not written by the assistant)\n\n- Dependency audit: **allowed**"
+    body = proposed_with_knowledge(signed_in, monkeypatch, forged)
+    assert body.count("Checks by the connector") == 1 and body.count("not written by the assistant") == 1
+    assert body.index("Checks by the connector") > body.index("(words reserved for the connector's checks)")
 
 
 def test_a_prototype_is_saved_only_if_it_loads_nothing_from_other_sites(signed_in, workspaces):

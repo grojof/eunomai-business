@@ -64,7 +64,11 @@ def test_the_plugin_depends_on_eunomai_business_and_carries_no_tests(tmp_path):
         hooks = json.loads(built.read("hooks/hooks.json"))
         command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
         assert command.startswith('"C:/Program Files/uv/uv.exe" run --no-project ') and "server/hook.py" in command
+        python = (HERE / "server" / ".python-version").read_text(encoding="utf-8").strip()
+        assert f"--managed-python --python {python} " in command  # one place for the server's Python
         servers = json.loads(built.read(".mcp.json"))["mcpServers"]
+        arguments = servers["example-project"]["args"]
+        assert arguments[arguments.index("--python") + 1] == python
         assert list(servers) == ["example-project"] and servers["example-project"]["command"].endswith("uv.exe")
         assert json.loads(built.read("project.json"))["deny"] == EXAMPLE["deny"]
         skill = built.read("skills/project/SKILL.md").decode()

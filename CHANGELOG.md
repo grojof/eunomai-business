@@ -7,19 +7,24 @@ them; the connector runs on the newest Python with full support, named in one pl
 
 - **The organization's vocabulary for knowledge** ([decision 16](docs/decisions.md#16--an-applications-knowledge-lives-in-its-repository-by-kind)).
   A new setting, `knowledge_tags`, holds the organization's closed list of tags (its departments, processes,
-  systems), each with what it means; the build refuses a malformed one, a repeated one or a kind's own tag.
-  `specialist_settings` returns it as `organization.tags`, and the specialist tags each page of knowledge with its
-  kind and the tags that apply, never one outside the list.
+  systems), each with what it means: at most 100, since the specialist reads it in every session. The build refuses a
+  malformed tag, a repeated one or a kind's own. `specialist_settings` returns it as `organization.tags`, and the
+  specialist tags each page of knowledge with its kind and the tags that apply, never one outside the list.
 - **Knowledge in the connector's checks.** Every pull request now reports, below the dependency audit and the tests,
-  the application's pages by kind and its requirements, read from the commit the server holds: tags outside the
-  vocabulary, a kind's tag on another `type` or two kinds on one page, and requirements without a `**Source:**` line.
-  It reports and never refuses.
+  what the application knows, read from the commit the server holds: the pages of each kind, the requirements in force
+  and those still in a change, and what to look at: tags outside the vocabulary (with none set, any tag beyond the
+  kind's), a kind's tag on another `type` or two kinds on one page, requirements with no source line, requirements
+  built on an assumption, and files the check did not read. It reports and never refuses, and a check that cannot run
+  says so. What it quotes from the pages was written by the assistant, so it is shown as short code spans, without
+  control characters; and a summary can no longer use the heading of the connector's block.
 - **Python 3.14** ([decision 17](docs/decisions.md#17--the-newest-python-with-full-support)). The connector moves
   from 3.12, which since its bug-fix stage ended receives security fixes only, to 3.14, the newest version with every
   fix that has been out long enough for every compiled package it locks to publish wheels for it. The version is
-  written once, in `connector/.python-version`: the build writes it into the plugin's commands, and the connector's
-  start and the tests read it there. The lock changes only its wheels; no package changes version. The
-  project-plugin template moves with it. IT deploys 3.14 instead of 3.12 where it pre-installs uv's Python.
+  written once, in `connector/.python-version`, checked by the build: the build writes it into the plugin's commands,
+  and the connector's start and the tests read it there. The lock changes only its wheels; no package changes
+  version. The project-plugin template does the same with `server/.python-version`. Where IT pre-installs uv's Python
+  on people's computers, it deploys 3.14 before publishing the new plugin, and keeps 3.13 while applications still
+  declare it.
 - **Status lines without version numbers** in the README and the extensions page: the changelog says what each
   version brought.
 

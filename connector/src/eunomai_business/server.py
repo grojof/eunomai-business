@@ -2,6 +2,7 @@
 organization's build enables them (EUNOMAI_DIAGNOSTICS=1)."""
 
 import os
+import re
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
@@ -206,11 +207,11 @@ def _knowledge_lines(workspace: str, head: str) -> list[str]:
     """What the application knows, by kind and tag, against the organization's vocabulary. Never a refusal: a check
     that cannot run says so."""
     try:
-        files = gitops.knowledge_files(workspace, head)
+        files, unread = gitops.knowledge_files(workspace, head)
+        vocabulary = [item["tag"] for item in settings.load()["knowledge_tags"]]
+        return knowledge.lines(knowledge.check(files, vocabulary, unread))
     except Exception as exc:  # noqa: BLE001 - a report, never the reason a proposal is not made
         return [f"- Knowledge: could not be read ({type(exc).__name__})"]
-    vocabulary = [item["tag"] for item in settings.load()["knowledge_tags"]]
-    return knowledge.lines(knowledge.check(files, vocabulary))
 
 
 def _checks(audit: dict, workspace: str = "") -> str:
@@ -227,6 +228,15 @@ def _checks(audit: dict, workspace: str = "") -> str:
     return "\n\n---\n**Checks by the connector** (not written by the assistant)\n\n" + "\n".join(lines) + "\n"
 
 
+_CONNECTORS_HEADING = re.compile(r"checks by the connector|not written by the assistant", re.IGNORECASE)
+
+
+def _own_words(description: str) -> str:
+    """The summary, unable to pass for the connector's own block: the words that head that block are the connector's
+    alone, so a summary that uses them reads them changed."""
+    return _CONNECTORS_HEADING.sub("(words reserved for the connector's checks)", description)
+
+
 def _propose(workspace: str, title: str, description: str) -> dict:
     """A proposal holds what the server has, so that is what must have been audited. Saved work the server does not
     have, allowed or not, waits for version_send, where the audit answers for it."""
@@ -239,7 +249,7 @@ def _propose(workspace: str, title: str, description: str) -> dict:
     if not main:
         return _main_missing(workspace)
     audit, refused = _audit_gate(workspace, main, held)
-    return refused or gitops.pull_request(workspace, title, description + _checks(audit, workspace))
+    return refused or gitops.pull_request(workspace, title, _own_words(description) + _checks(audit, workspace))
 
 
 @mcp.tool()
