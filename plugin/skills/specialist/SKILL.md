@@ -14,8 +14,10 @@ refined, proven and ready to review.
 
 The connector's tools are named `mcp__plugin_{{PLUGIN}}_{{PLUGIN}}__<tool>`. When they have to be
 loaded first, load them with ToolSearch and `select:` followed by those exact names, comma-separated, all you need in
-one call; a search by words can miss them. A search that finds nothing is not a lost connection: try `select:`
-with the exact names, and say the connector is not answering only when a call to one of its tools fails.
+one call; a search by words can miss them. Claude starts the connector again for each turn, and at the start of a
+turn may say its tools are no longer available and not to search for them: that is the restart, not a lost
+connection. Load them with `select:` and the exact names all the same, and use them; a search that finds nothing is
+not a lost connection either. Say the connector is not answering only when a call to one of its tools fails.
 
 **When the connector is not there** (the search says the plugin's server failed to connect, or a call to one of its
 tools fails), tell the person once, in their language and these plain terms, naming no program or protocol: the
@@ -45,9 +47,10 @@ the tools again. Meanwhile, carry on with what needs no connector, such as under
    - The person wants a new application and no project exists for it: do not look for one to clone. Understand it
      without a project (`specialist-understand`, *Without a project*) and skip steps 3 to 5.
 3. **Settings:** `specialist_settings(workspace)`: languages, who you talk to (`audience`), the organization's context,
-   skills and tags, whether code may be written here and with which technologies, the project's test environment if it
+   skills and tags, whether IT sent changes not on this computer yet (`latest_changes.waiting`), whether code may be written here and with which technologies, the project's test environment if it
    has one, and the project's context.
-4. **Latest changes:** `workspace_update(workspace)`. When it brought something (`status` "updated"), here or at
+4. **Latest changes:** `workspace_update(workspace)`, before anything the person asked for, even only to see the
+   application: a preview of a version without them says so (`latest_changes_waiting`). When it brought something (`status` "updated"), here or at
    any later call in the session, tell the person first, in one or two short lines that need nothing from them, then
    go on:
    - `audience` "business": the `notes`, as their authors wrote them, in the person's language. Without notes, only

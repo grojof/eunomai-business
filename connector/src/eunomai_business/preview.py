@@ -1062,6 +1062,18 @@ def start(workspace: str, fresh: bool = False) -> dict:
         raise NeedsIT("This project is set up to be seen on your computer in a way the connector does not accept. "
                       "Your work is safe; IT can correct it.", "the project's preview declaration is not valid",
                       {"Workspace": workspace, "Detail": declared["invalid"]})
+    waiting = bool(files.get("tip")) and gitops.behind_main(workspace, files["tip"])
+    answer = _start(workspace, fresh, files, declared)
+    if not waiting or answer.get("status") not in ("ready", "starting"):
+        return answer
+    return {**answer, "latest_changes_waiting": True, "user_message": f"{answer['user_message']} {_WAITING}"}
+
+
+_WAITING = ("IT has sent changes to this application that this computer does not have yet: what you see is the "
+            "version before them.")
+
+
+def _start(workspace: str, fresh: bool, files: dict, declared: dict) -> dict:
     head = gitops.saved_head(workspace)
     key = _key(workspace)
     with _lock:

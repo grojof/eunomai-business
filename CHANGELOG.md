@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.1 (2026-11-14)
+
+What IT sends reaches the person before anything else, and Claude's restart of the connector each turn is no longer
+taken for a lost connection. Found in a Cowork session the day 0.2.0 came out.
+
+- **Changes from IT come first, said by the connector.** The specialist opened the preview straight away, so the
+  person saw an older version and never the note IT wrote for them. `specialist_settings` now says whether the main
+  branch has changes this version does not (`latest_changes.waiting`), and `app_preview` says it too
+  (`latest_changes_waiting`, and a sentence in the message the person reads): the facts come from the server,
+  whatever the model remembers. The preview still opens, so a person whose update stopped for IT keeps seeing their
+  application meanwhile.
+- **The restart at each turn.** Claude stops the connector at the end of each turn and starts it at the next, and at
+  the start of a turn may say its tools are no longer available and not to search for them. The specialist believed
+  it and told the person the assistant had gone, two seconds before the connector answered. The skill and the
+  connector's instructions now say what that message is: load the tools by their exact names and use them; only a
+  call that fails means the connector is not answering.
+- **The e-mail to IT** is given as the link the connector returns, never rewritten (it reached a person as
+  `https://mailto`).
+- **IT's guide** says how to join, on the person's computer, a version and a main branch that changed the same file,
+  and how to see it coming before a template's update is merged.
+
 ## 0.2.0 (2026-11-14)
 
 The organization says which words its knowledge is filed under, and IT sees in each pull request what departs from
