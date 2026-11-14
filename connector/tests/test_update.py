@@ -411,3 +411,28 @@ def test_history_is_walked_exactly_whatever_the_commits_times(tmp_path):
         assert gitops._merge_bases(repo, *crossed) == sorted([mine, look])  # histories that crossed: two
         repo.close()
 
+
+
+def test_the_settings_and_the_preview_say_when_it_has_changes_not_brought_yet(signed_in, workspaces, monkeypatch):
+    """In Cowork the specialist opened the preview straight away: the person saw an older version, and never the note
+    IT wrote for them. The connector says it from the server's facts, whatever the model remembers."""
+    from eunomai_business import preview, settings
+
+    ws = joined(signed_in, "waiting")
+    gitops.branch("waiting", "draft/mine")
+    (ws / "mine.md").write_bytes(b"mine\n")
+    gitops.save("waiting", "Mine")
+    assert tools._specialist_settings("waiting")["latest_changes"] == {"waiting": False}
+    signed_in.server_commit("waiting", "main", {"theme.css": b"a\n"}, message="New look from IT")
+    assert tools._specialist_settings("waiting")["latest_changes"] == {"waiting": True}
+
+    monkeypatch.setenv("EUNOMAI_SPECIALIST", '{"app_preview": true}')
+    monkeypatch.setattr(settings, "preview", lambda declaration: {"setup": [], "run": [], "environment": {}})
+    monkeypatch.setattr(preview, "_start", lambda *a: {"status": "ready", "user_message": "It is open."})
+    shown = preview.start("waiting")
+    assert shown["status"] == "ready" and shown["latest_changes_waiting"] is True
+    assert shown["user_message"].startswith("It is open. IT has sent changes")
+
+    assert gitops.update("waiting")["status"] == "updated"
+    assert tools._specialist_settings("waiting")["latest_changes"] == {"waiting": False}
+    assert "latest_changes_waiting" not in preview.start("waiting")

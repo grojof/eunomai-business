@@ -265,3 +265,11 @@ def test_what_the_person_explains_is_filed_by_kind_and_found_before_it_is_read()
     deliver = plain(reference("deliver"))
     assert "the archive is history nobody reads" in deliver and "An answer from the review closes its row" in deliver
 
+
+
+def test_claudes_restart_of_the_connector_each_turn_is_not_taken_for_a_lost_connection():
+    """In Cowork, the start of a turn said the tools were no longer available: the specialist told the person the
+    assistant had gone, while it was starting again. And it opened an older version before bringing IT's changes."""
+    text = " ".join(SPECIALIST.split())
+    assert "that is the restart, not a lost connection" in text
+    assert "before anything the person asked for, even only to see the application" in text

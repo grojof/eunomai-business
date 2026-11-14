@@ -1209,6 +1209,17 @@ def server_head(workspace: str) -> str | None:
     return found.decode() if found else None
 
 
+def behind_main(workspace: str, tip: str) -> bool:
+    """Whether the main branch at `tip`, a commit already fetched, has changes the saved version does not: what
+    `update` would bring. False when it cannot tell (nothing saved, an object this computer does not have)."""
+    with _repo(workspace) as repo:
+        head = _ref(repo, b"HEAD")
+        try:
+            return head is not None and not _is_ancestor(repo, tip.encode(), head)
+        except KeyError:
+            return False
+
+
 def saved_head(workspace: str) -> str:
     """The commit of what is saved."""
     with _repo(workspace) as repo:
