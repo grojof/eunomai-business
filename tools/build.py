@@ -40,7 +40,8 @@ SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowe
                    "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests",
                    "message_style", "uv_minimum", "audience", "knowledge_tags"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
-        "providers", "deny", "plugin_name", "plugin_description", "plugin_version", "platform"} | SPECIALIST_KEYS
+        "providers", "deny", "plugin_name", "plugin_description", "plugin_version", "platform",
+        "connector_always_load"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 PLUGIN_NAME = VARIANT  # as connector/src/eunomai_business/__init__.py reads it
 DEFAULT_PLUGIN = "eunomai-business"
@@ -124,7 +125,7 @@ def validate_specialist(cfg: dict) -> list[str]:
     for key in ("docs_language", "code_language"):
         if cfg.get(key) and not LANGUAGE.match(str(cfg[key])):
             errors.append(f"{key} must be a language code such as en or es")
-    for key in ("free_development", "app_preview", "app_tests"):
+    for key in ("free_development", "app_preview", "app_tests", "connector_always_load"):
         if not isinstance(cfg.get(key, False), bool):
             errors.append(f"{key} must be true or false")
     if not _strings(cfg.get("allowed_technologies", [])):
@@ -296,6 +297,11 @@ def build(cfg: dict, out_dir: Path) -> Path:
         json.loads(text)  # fail here, not in Claude, if the result is not valid JSON
         template.with_suffix("").write_text(text, encoding="utf-8", newline="\n")  # LF on every OS
         template.unlink()
+    if cfg.get("connector_always_load"):  # the organization's choice: the connector's tools in every Cowork task
+        mcp_file = out / ".mcp.json"
+        servers = json.loads(mcp_file.read_text(encoding="utf-8"))
+        servers["mcpServers"][plugin]["alwaysLoad"] = True
+        mcp_file.write_text(json.dumps(servers, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     # The skills name the plugin's own tools and skills, and IT's address for when the connector cannot start (they
     # cannot ask it then), by placeholders; nothing else of theirs is replaced
     support = cfg.get("support_email") or "IT"

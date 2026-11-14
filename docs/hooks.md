@@ -21,7 +21,7 @@ to Anthropic's own `permissions.deny` with little change if that ever reaches ev
 | Hook | When | What it does | If it cannot run |
 |---|---|---|---|
 | Guard, `SessionStart` | A task starts | In the cloud, tells Claude the task is refused | Nothing happens |
-| Guard, `UserPromptSubmit` | Each message | In the cloud, blocks it with the reason | Nothing happens |
+| Guard, `UserPromptSubmit` | Each message | In the cloud, blocks it with the reason. In a session that uses this plugin (its specialist or its tools appear in the session), tells Claude in that turn that a notice of its tools being unavailable is the connector starting again, and that searching for them by name waits for them ([sources](sources.md#platform-issues-to-watch)) | Nothing happens |
 | Guard, `PreToolUse` | Each write, shell command and connector call | Refuses the cloud; then [git in a workspace](#git-from-the-sandbox-shell) and the [file guard](barriers.md#between-claudes-sandbox-and-the-computer); then the organization's rules | The call is blocked (`onFailure: "block"`) |
 | A project plugin's hook, `PreToolUse` | Each write and shell command | The project's rules, in its own workspaces only | The call is blocked |
 

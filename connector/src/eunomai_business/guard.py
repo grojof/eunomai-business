@@ -644,6 +644,30 @@ def _refuse_the_cloud(event: str | None) -> None:
     sys.exit(0)
 
 
+_TRANSCRIPT_BYTES = 64 * 1024 * 1024
+
+
+def restart_reminder(payload: dict) -> str | None:
+    """For a session that uses this plugin, a line for this turn: Claude starts the connector again for every message
+    and may say its tools are no longer available meanwhile (anthropics/claude-code#105219). Told then, in the same
+    turn, it searches for them, and the search waits. Other tasks get nothing."""
+    plugin = plugin_name()
+    path = payload.get("transcript_path")
+    if not isinstance(path, str) or not path:
+        return None
+    try:
+        with open(path, "rb") as handle:
+            seen = handle.read(_TRANSCRIPT_BYTES)
+    except OSError:
+        return None
+    if f"{plugin}:specialist".encode() not in seen and f"mcp__plugin_{plugin}_{plugin}__".encode() not in seen:
+        return None
+    return (f"{plugin}: its connector starts again for every message, so Claude may say its tools "
+            f"(mcp__plugin_{plugin}_{plugin}__*) are no longer available. That is the restart, not a lost connection: "
+            "load them with ToolSearch and `select:` with their exact names, which waits for them, and use them. Tell "
+            "the person it is not answering only when a call to one of them fails.")
+
+
 def main(argv: list[str] | None = None) -> None:
     """SessionStart, UserPromptSubmit and PreToolUse hook. In the cloud everything is refused. Otherwise only tool
     calls are checked, and input it cannot read is let through: version_save still holds for workspaces."""
@@ -660,6 +684,12 @@ def main(argv: list[str] | None = None) -> None:
     event = payload.get("hook_event_name") if isinstance(payload, dict) else None
     if in_the_cloud():
         _refuse_the_cloud(event)
+    if event == "UserPromptSubmit" and isinstance(payload, dict):
+        reminder = restart_reminder(payload)
+        if reminder:
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                                     "additionalContext": reminder}}))
+        sys.exit(0)
     if not isinstance(payload, dict) or event not in (None, "PreToolUse"):
         sys.exit(0)
     found = decide(payload, load_policy(arguments.policy))

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.3 (2026-11-14)
+
+The person is no longer told the assistant has gone when it is only starting again. Cowork starts the connector again
+for every message, and the turn can begin before it connects: Claude is told its tools are "no longer available, do
+not search for them", and some models said so to the person (anthropics/claude-code#105219; 9 times in 27 messages,
+measured on Windows, with the connector connecting about 0.8 s after each message, notice or not).
+
+- **In the plugin's sessions only, a line for each message.** The guard, already run before every message, looks in
+  the session for the specialist or the connector's tools; there, and nowhere else, it tells Claude in that same turn
+  that the notice is the restart, and that searching for the tools by name waits for them. Other Cowork tasks get
+  nothing.
+- **Or the connector loaded upfront, if the organization chooses.** `connector_always_load` (off by default) declares
+  it `alwaysLoad`: its tools are in every request and every message waits for it, in every Cowork task, about 3,650
+  tokens and a second each.
+- **The preview inside Cowork too.** When it opens in the person's browser, the specialist says it can also be seen
+  inside Cowork, and opens it there if they ask.
+
 ## 0.2.2 (2026-11-14)
 
 From the same application built with two models: a proposal never reaches IT without its summary, the specialist asks
