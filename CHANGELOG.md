@@ -27,6 +27,10 @@ them; the connector runs on the newest Python with full support, named in one pl
   declare it.
 - **Status lines without version numbers** in the README and the extensions page: the changelog says what each
   version brought.
+- **opentelemetry-api 1.45.2** in the connector's lock and the project-plugin template's
+  ([GHSA-mf5v-w3w3-f6cg](https://github.com/advisories/GHSA-mf5v-w3w3-f6cg), a denial of service through a quadratic
+  parse of `traceparent`, moderate). The connector does not parse incoming traces, so it was not reachable here; the
+  lock follows the fix anyway.
 
 ## 0.1.6 (2026-11-13)
 
