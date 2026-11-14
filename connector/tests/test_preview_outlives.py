@@ -354,7 +354,7 @@ def test_a_host_that_refuses_breakaway_is_told_honestly_and_leaves_nothing(serve
     name, pids = ready_project(server, computer, tmp_path, first)
     answer = first.show(name)
     assert answer["status"] == "ready" and answer["keeps_running"] is False, answer
-    assert "task ends" in answer["user_message"]
+    assert "closing Claude may end it sooner" in answer["user_message"]  # not "the task": a task's end did not end it
     url, numbers = answer["url"], json.loads(pids.read_text())
     first.end("job", job)
     assert gone(*numbers) and not answers(url)

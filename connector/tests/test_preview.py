@@ -143,6 +143,15 @@ def folders() -> list[Path]:
     return sorted({*running, *(p.folder for p in preview._previews.values())})
 
 
+def no_folders_soon(wait: float = 15.0) -> bool:
+    """No preview folder left, once a refused preview's own ending has run: it ends in the background, and on a busy
+    computer a moment after the answer."""
+    deadline = time.time() + wait
+    while folders() and time.time() < deadline:
+        time.sleep(0.2)
+    return folders() == []
+
+
 def wait_for_file(path: Path, wait: float = 30.0) -> None:
     deadline = time.time() + wait
     while time.time() < deadline:
@@ -623,7 +632,7 @@ def test_a_program_that_is_no_packages_console_script_does_not_run(signed_in, wo
     name, _ = project(signed_in, declaration(pids, f'["{program}", "/c", "x"]'))
     answer = show(name)
     assert answer["status"] == "needs_it" and "console script" in answer["it_report"], answer
-    assert not pids.exists() and browser == [] and folders() == []
+    assert not pids.exists() and browser == [] and no_folders_soon()
     run = f'["{program}", "--host", "127.0.0.1", "--port", "{{port}}"]'
     other, _ = project(signed_in, declaration(pids, run=run))
     assert show(other)["status"] == "needs_it" and not pids.exists()

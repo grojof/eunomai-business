@@ -662,6 +662,22 @@ def _listens_beyond_this_computer(current: _Preview, port: int) -> bool:
                                        timeout=30, **_HIDDEN).stdout)
 
 
+def forget_folder(folder: str) -> bool:
+    """What the connector kept for a workspace whose folder is gone: its previews' state and kept data, its tests'
+    output and its kept audit. False, and nothing touched, while a preview of it still runs: its watcher ends it within
+    the hour, and the next listing finishes the job."""
+    stem = hashlib.sha256(folder.encode()).hexdigest()[:16]
+    states = data_dir() / "previews"
+    if _watching(states / f"{stem}.json") or _watching(states / f"{stem}-tests.json"):
+        return False
+    _remove(Path(tempfile.gettempdir()) / f"{_PREFIX}keep-{stem}")
+    for left in (*states.glob(f"{stem}.*"), *states.glob(f"{stem}-tests.*"), *(data_dir() / "tests").glob(f"{stem}.*"),
+                 data_dir() / "audits" / f"{stem}.json"):
+        with contextlib.suppress(OSError):
+            left.unlink(missing_ok=True)
+    return True
+
+
 def _keep(workspace: str) -> Path:
     """What a workspace's previews keep between versions: `data` and `environment`. A name of its own, so a sweep can
     tell it, in the folder where previews are."""
@@ -830,7 +846,10 @@ def _how_long(minutes: int, keeps_running: bool) -> str:
     if keeps_running:
         return (f"It keeps running until you say stop, or for {minutes} more minutes at most from this version, even if "
                 "you close Claude.")
-    return f"It stops when this task ends, or in {minutes} minutes from this version."
+    # Held in Claude's own job: it ends when Claude closes that job, which is not when a task ends (a preview outlived
+    # tasks the person deleted), so only what is certain is said.
+    return (f"It keeps running until you say stop, or for {minutes} more minutes at most from this version; closing "
+            "Claude may end it sooner.")
 
 
 # What an audit's answer depends on besides the files: the rules, as the connector that judged them has them.

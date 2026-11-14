@@ -3,6 +3,7 @@
 Every scenario checks the same promise: nothing the user did is ever lost.
 """
 
+import os
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -436,3 +437,29 @@ def test_the_settings_and_the_preview_say_when_it_has_changes_not_brought_yet(si
     assert gitops.update("waiting")["status"] == "updated"
     assert tools._specialist_settings("waiting")["latest_changes"] == {"waiting": False}
     assert "latest_changes_waiting" not in preview.start("waiting")
+
+
+def test_a_workspace_whose_folder_is_gone_is_forgotten_with_what_was_kept_for_it(signed_in, workspaces, monkeypatch):
+    """Two test projects deleted by the person stayed in the registry, with their previews' data and tests' output."""
+    import hashlib
+    import shutil
+
+    from eunomai_business import data_dir, preview
+
+    ws = joined(signed_in, "deleted")
+    folder = gitops.key("deleted")
+    stem = hashlib.sha256(folder.encode()).hexdigest()[:16]
+    kept = [data_dir() / "previews" / f"{stem}.json", data_dir() / "tests" / f"{stem}.log",
+            data_dir() / "audits" / f"{stem}.json"]
+    for path in kept:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+    shutil.rmtree(ws, onexc=lambda function, path, _: (os.chmod(path, 0o700), function(path)))
+
+    monkeypatch.setattr(preview, "_watching", lambda path: True)  # a preview of it still runs: it waits
+    tools._workspaces()
+    assert folder in gitops._registry() and all(path.exists() for path in kept)
+
+    monkeypatch.undo()
+    assert "deleted" not in [w["workspace"] for w in tools._workspaces()["workspaces"]]
+    assert folder not in gitops._registry() and not any(path.exists() for path in kept)

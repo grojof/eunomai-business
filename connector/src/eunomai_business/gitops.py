@@ -325,6 +325,21 @@ def _remember(folder: Path, **values) -> None:
         os.replace(tmp, data_dir() / "workspaces.json")
 
 
+def gone() -> list[str]:
+    """The registered workspaces whose folder is no longer there: deleted by the person, or by IT."""
+    return [folder for folder in _registry() if not Path(folder).exists()]
+
+
+def forget(folder: str) -> None:
+    """A workspace that is gone, out of the registry: nothing is left to protect there."""
+    with _exclusive("registry"):
+        registry = _registry()
+        if registry.pop(folder, None) is not None:
+            tmp = data_dir() / f"workspaces.json.{os.getpid()}.tmp"
+            tmp.write_text(json.dumps(registry, indent=1), encoding="utf-8")
+            os.replace(tmp, data_dir() / "workspaces.json")
+
+
 def _note_version(repo: Repo, name: str) -> None:
     with _exclusive("registry"):
         folder = Path(repo.path)

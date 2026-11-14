@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.4 (2026-11-14)
+
+Loose ends from the Cowork sessions: what a preview says about its end is what is certain, a deleted project leaves
+nothing behind, and the suite is a little quicker.
+
+- **When a preview ends.** Where Claude holds the preview in its own job, the person was told it stops when the task
+  ends; in Cowork, previews outlived tasks the person had deleted, since Claude closes that job, not the task. It now
+  says what is certain: it runs until they say stop, or the hour ends, and closing Claude may end it sooner.
+- **A deleted project is forgotten.** A workspace whose folder is gone stayed in the connector's registry, with its
+  previews' state and kept data, its tests' output and its kept audit. Listing the workspaces now forgets it and
+  removes them; one whose preview still runs waits until it ends.
+- **The clock-bound tests four at a time** in `tools/test.py`: three runs in a row passed, about 110 s against 150 s.
+- **A test that read a refused preview's cleanup at the instant** of the answer now waits for it: the cleanup runs
+  in the background and, on a busy computer, ends a moment later (it failed twice that way, never on a quiet one).
+
 ## 0.2.3 (2026-11-14)
 
 The person is no longer told the assistant has gone when it is only starting again. Cowork starts the connector again
