@@ -34,7 +34,7 @@ from dulwich.object_store import iter_tree_contents
 from dulwich.objects import Blob, Commit, SubmoduleEncountered, Tree, parse_tree
 from dulwich.repo import ParentsProvider, Repo
 
-from . import auth, data_dir, deps, guard, hosting, plugin_name
+from . import auth, data_dir, deps, guard, hosting, knowledge, plugin_name
 from .support import NeedsIT, Unreachable, clean
 
 # Ignore the computer's own git configuration (system and user): Git for Windows sets core.autocrlf=true there,
@@ -1311,6 +1311,33 @@ def audit_saved(workspace: str, main: str, head: str | None = None, copy: Path |
         if kept:
             kept[1](result)
     return {**result, "head": commit.decode()}
+
+
+_KNOWLEDGE_BYTES = 256 * 1024
+_KNOWLEDGE_FILES = 2000
+_KNOWLEDGE_TOTAL = 4 * 1024 * 1024
+"""What the knowledge check reads at most: a page longer than this is not one a person wrote, and the whole stays small
+enough to answer within a tool call."""
+
+
+@_one_at_a_time
+def knowledge_files(workspace: str, head: str) -> tuple[dict[str, str], int]:
+    """The application's pages and requirements as `head`, a commit already checked and audited, holds them, never the
+    folder; and how many were left unread by the limits, which the report says."""
+    found: dict[str, str] = {}
+    unread = total = 0
+    with _repo(workspace) as repo:
+        for entry in iter_tree_contents(repo.object_store, repo[head.encode()].tree):
+            path = entry.path.decode("utf-8", "replace")
+            if entry.mode == _GITLINK or not knowledge.is_read(path):
+                continue
+            size = len(repo[entry.sha].data)
+            if size > _KNOWLEDGE_BYTES or len(found) >= _KNOWLEDGE_FILES or total + size > _KNOWLEDGE_TOTAL:
+                unread += 1
+                continue
+            total += size
+            found[path] = repo[entry.sha].data.decode("utf-8", "replace")
+    return found, unread
 
 
 def folder(workspace: str) -> Path:

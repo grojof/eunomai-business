@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.2.0 (2026-11-14)
+
+The organization says which words its knowledge is filed under, and IT sees in each pull request what departs from
+them; the connector runs on the newest Python with full support, named in one place.
+
+- **The organization's vocabulary for knowledge** ([decision 16](docs/decisions.md#16--an-applications-knowledge-lives-in-its-repository-by-kind)).
+  A new setting, `knowledge_tags`, holds the organization's closed list of tags (its departments, processes,
+  systems), each with what it means: at most 100, since the specialist reads it in every session. The build refuses a
+  malformed tag, a repeated one or a kind's own. `specialist_settings` returns it as `organization.tags`, and the
+  specialist tags each page of knowledge with its kind and the tags that apply, never one outside the list.
+- **Knowledge in the connector's checks.** Every pull request now reports, below the dependency audit and the tests,
+  what the application knows, read from the commit the server holds: the pages of each kind, the requirements in force
+  and those still in a change, and what to look at: tags outside the vocabulary (with none set, any tag beyond the
+  kind's), a kind's tag on another `type` or two kinds on one page, requirements with no source line, requirements
+  built on an assumption, and files the check did not read. It reports and never refuses, and a check that cannot run
+  says so. What it quotes from the pages was written by the assistant, so it is shown as short code spans, without
+  control characters; and a summary can no longer use the heading of the connector's block.
+- **Python 3.14** ([decision 17](docs/decisions.md#17--the-newest-python-with-full-support)). The connector moves
+  from 3.12, which since its bug-fix stage ended receives security fixes only, to 3.14, the newest version with every
+  fix that has been out long enough for every compiled package it locks to publish wheels for it. The version is
+  written once, in `connector/.python-version`, checked by the build: the build writes it into the plugin's commands,
+  and the connector's start and the tests read it there. The lock changes only its wheels; no package changes
+  version. The project-plugin template does the same with `server/.python-version`. Where IT pre-installs uv's Python
+  on people's computers, it deploys 3.14 before publishing the new plugin, and keeps 3.13 while applications still
+  declare it.
+- **Status lines without version numbers** in the README and the extensions page: the changelog says what each
+  version brought.
+- **opentelemetry-api 1.45.2** in the connector's lock and the project-plugin template's
+  ([GHSA-mf5v-w3w3-f6cg](https://github.com/advisories/GHSA-mf5v-w3w3-f6cg), a denial of service through a quadratic
+  parse of `traceparent`, moderate). The connector does not parse incoming traces, so it was not reachable here; the
+  lock follows the fix anyway.
+
 ## 0.1.6 (2026-11-13)
 
 What a business person explains while building becomes the organization's knowledge, kept in the application's

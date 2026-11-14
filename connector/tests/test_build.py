@@ -43,8 +43,12 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     args = mcp["mcpServers"]["eunomai-business"]["args"]
     assert args[:2] == ["run", "--no-project"] and "--no-config" in args and "--system-certs" in args
     assert "--managed-python" in args  # uv's own Python, never whatever the computer has
+    python = (ROOT / "connector" / ".python-version").read_text(encoding="utf-8").split()[0]
+    assert args[args.index("--python") + 1] == python  # one place for the connector's Python (decision 17)
+    commands = [h["command"] for e in hooks.values() for h in e[0]["hooks"]]
+    assert all(f"--managed-python --python {python} " in command for command in commands)
     assert args[-3:] == ["${CLAUDE_PLUGIN_ROOT}/connector/start.py", "eunomai-business", "eunomai-business"]
-    assert "connector/start.py" in names
+    assert "connector/start.py" in names and "connector/.python-version" in names
     assert "connector/uv.lock" in names and "connector/sbom.cdx.json" in names
 
 
@@ -147,11 +151,43 @@ def test_the_organizations_deny_rules_are_packaged_for_the_guard(tmp_path):
     (lambda c: c.update(dependency_exceptions=[{"package": "pypi:six"}]), 'needs "package"'),
     (lambda c: c.update(organization_context=["text"]), "organization_context must be text"),
     (lambda c: c.update(organization_skills=[{"skill": "brand:web"}]), "organization_skills must be a list"),
+    (lambda c: c.update(knowledge_tags=["sales"]), "knowledge_tags must be a list"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "sales", "means": ""}]), "knowledge_tags must be a list"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "Sales Dept", "means": "Sales"}]), "not lowercase words joined by -"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "glossary", "means": "words"}]), "the kinds' own tags"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "erp", "means": "a"}, {"tag": "erp", "means": "b"}]), "each tag once"),
+    (lambda c: c.update(knowledge_tags=[{"tag": f"t{n}", "means": "m"} for n in range(101)]), "at most 100"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "erp", "means": "m" * 121}]), "at most 120 characters"),
 ])
 def test_configuration_errors_are_reported(change, message):
     cfg = copy.deepcopy(EXAMPLE)
     change(cfg)
     assert any(message in error for error in build.validate(cfg)), build.validate(cfg)
+
+
+def test_the_build_and_the_connector_know_the_same_kinds_and_tags():
+    """The build runs on the standard library alone, so it keeps its own copy of what the connector checks."""
+    from eunomai_business import knowledge
+
+    assert build.KNOWLEDGE_KINDS == tuple(knowledge.KINDS) and build.KNOWLEDGE_TAG.pattern == knowledge.TAG.pattern
+
+
+def test_every_command_takes_the_connectors_python_from_one_place(tmp_path, monkeypatch):
+    """A number typed in a template would pass with today's version and fail at the next: an unlikely one finds it."""
+    monkeypatch.setattr(build, "connector_python", lambda: "3.99")
+    build.build(dict(copy.deepcopy(EXAMPLE), diagnostics=True), tmp_path)
+    plugin = tmp_path / "eunomai-business"
+    commands = [json.dumps(json.loads((plugin / ".mcp.json").read_text(encoding="utf-8")))]
+    commands.append((plugin / "hooks" / "hooks.json").read_text(encoding="utf-8"))  # diagnostics' hooks merged in
+    assert all('"--python", "3.99"' in text or "--python 3.99 " in text for text in commands)
+    assert not re.search(r"--python\"?,? \"?3\.(?!99)", "".join(commands))
+
+
+def test_a_python_version_file_that_is_not_one_version_stops_the_build(tmp_path, monkeypatch):
+    (tmp_path / ".python-version").write_text("3.14; calc\n", encoding="utf-8")
+    monkeypatch.setattr(build, "CONNECTOR_SRC", tmp_path)
+    with pytest.raises(SystemExit, match="one version such as 3.14"):
+        build.connector_python()
 
 
 # --- variants: one base configuration, several packages ------------------------------------------------------

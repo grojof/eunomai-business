@@ -22,7 +22,7 @@ CONNECTOR = ROOT / "connector"
 TESTS = CONNECTOR / "tests"
 PROJECT_PLUGIN = ROOT / "templates" / "project-plugin" / "server"
 AGENT = ROOT / "templates" / "test-environment-agent"
-UV_PYTEST = ["uv", "run", "--frozen", "--group", "dev", "--python", "3.12", "pytest", "-q"]
+UV_PYTEST = ["uv", "run", "--frozen", "--group", "dev", "pytest", "-q"]  # the Python of each folder's .python-version
 NO_TESTS = 5  # pytest's exit code when the selection holds no test: nothing failed
 
 # What a change can break, read top to bottom; the first rule that matches a path decides for it. `everything` means

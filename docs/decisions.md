@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, one recommended stack, its visual layer with a base application to clone, new projects that IT creates from a request, and an application's knowledge kept in its repository, by kind."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, one recommended stack, its visual layer with a base application to clone, new projects that IT creates from a request, an application's knowledge kept in its repository, by kind, and the newest Python with full support."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md, sources.md]
@@ -95,9 +95,8 @@ Claude Desktop is closed, and the person is told so. The person keeps it open wh
 the address of the one it replaces, with the data it had, and reloading the page shows it; the hour counts from the
 latest version.
 
-**What changed, and why.** This decision used to have no exception: a person tried a clickable prototype, and saw the
-application through pictures from the sandbox. The product's owner decided that a person can see the real application
-on their own computer, off by default and turned on by IT.
+**Why the exception:** a clickable prototype, and pictures of the application from the sandbox, were not enough for
+a person to judge it; seeing the real application on their own computer is, and IT turns it on.
 
 | Reason | Evidence |
 |---|---|
@@ -155,8 +154,9 @@ and a save point never carries a change to it.
 
 eunomai-business is one plugin: the specialist and `review-skills` (skills), the file guard (a hook) and the
 connector (a local MCP server). The connector runs on uv, which IT deploys on every computer with its own software
-management, at a version it fixes. uv then runs the locked packages, hashes verified, on its own Python 3.12
-(`--managed-python`), never on whatever Python the computer has. Business users install nothing themselves.
+management, at a version it fixes. uv then runs the locked packages, hashes verified, on its own Python, the version
+[decision 17](#17--the-newest-python-with-full-support) chooses (`--managed-python`), never on whatever Python the
+computer has. Business users install nothing themselves.
 
 **Why one plugin.** The plugin is the unit Anthropic builds for: plugins "are the main way to build third-party
 extensions for Claude" ([Build plugins for Claude](https://claude.com/blog/build-plugins-for-claude)), and "When you
@@ -339,7 +339,7 @@ How each part holds against misuse is in the template's and the agent's pages, a
   IT's is settled with that application.
 - **Consequence:** an application takes a newer version of its organization's template with the base's
   `tools/update_application.py`: the template's change merged into it on a branch, its own changes kept, a conflict
-  left for a person, and the pull request deciding. (Until 2026-11, there was no such mechanism.)
+  left for a person, and the pull request deciding.
 - **Consequence:** generating the stylesheet in Cowork needs the sandbox to download the executable, under the
   organization's network settings, and has been shown on one sandbox only. Where it cannot, a developer's computer
   or CI generates it, as a case for IT ([decision 6](#6--the-user-never-resolves-a-technical-problem)).
@@ -423,5 +423,35 @@ section, not a file.
 | Numbered decision files | Two versions made at once would take the same number |
 | A store outside the repository | Out of IT's review, and away from the code it explains |
 
-**Consequence:** the organization's closed vocabulary of tags (departments, processes, systems), set by IT at build
-time, and a check by the connector reported in the pull request, come with 0.2.0.
+**Consequence:** IT sets the organization's closed vocabulary of tags (departments, processes, systems) at build time
+(`knowledge_tags`, [configuration](configuration.md#settings)); the specialist tags each page with its kind and the
+vocabulary's tags that apply, and the connector reports to IT, under its checks in the pull request, the tags outside
+it, a kind's tag on another `type` and the requirements without a source. It reports and never refuses: the work is
+the person's, the review is IT's.
+
+## 17 · The newest Python with full support
+
+The connector, and the applications made from the base, run on the newest Python that still receives every bug fix
+(the *bugfix* stage in [Python's own table](https://devguide.python.org/versions/)) and has been out for about six
+months. It is written once, in `connector/.python-version`, and the build, the connector's start and the tests read it
+there; the base keeps its own in its `.python-version`.
+
+**Why.**
+
+| Reason | Evidence |
+|---|---|
+| A version in the *security* stage gets no other fix: a bug the connector meets stays | Python's lifecycle ([devguide](https://devguide.python.org/versions/)): about two years of bug fixes, then three of security fixes only |
+| Each new version is faster and fixes more | Python's release notes for each version |
+| Six months let the compiled packages catch up | A new Python's first weeks: packages with compiled parts (cryptography, pydantic-core, psycopg) publish wheels for it over time; uv installs wheels only ([barriers](barriers.md#dependencies)) |
+| One number in one place | The start, the plugin's commands, the tests and CI all name it: one file keeps them the same |
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| The oldest version still supported | It gets security fixes only, and is slower |
+| The newest version the day it is out | Some locked package may have no wheel for it yet |
+| A version range | The connector runs on one Python, which uv downloads: a range decides nothing |
+
+**Consequence:** moving to the next version is a release like any other: the new number in `.python-version`, the lock
+resolved again, every compiled package checked for a wheel on Windows and Linux, and the whole suite.

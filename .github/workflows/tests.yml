@@ -32,14 +32,14 @@ jobs:
           version: "0.13.5"
       # The three passes of tools/test.py: every core, four previews at a time, then two that wait on the clock at a time
       - name: Test the connector, in parallel
-        run: uv run --frozen --group dev --python 3.12 pytest -q -n auto -m "not serial and not preview"
+        run: uv run --frozen --group dev pytest -q -n auto -m "not serial and not preview"
       - name: Test the connector, the previews a few at a time
-        run: uv run --frozen --group dev --python 3.12 pytest -q -n 4 -m "preview and not serial"
+        run: uv run --frozen --group dev pytest -q -n 4 -m "preview and not serial"
       - name: Test the connector, what waits on the clock, two at a time
-        run: uv run --frozen --group dev --python 3.12 pytest -q -n 2 -m serial
+        run: uv run --frozen --group dev pytest -q -n 2 -m serial
       - name: Test the project-plugin template
         working-directory: templates/project-plugin/server
-        run: uv run --frozen --group dev --python 3.12 pytest -q
+        run: uv run --frozen --group dev pytest -q
       - name: Test the branch-following agent
         if: runner.os == 'Linux'
         working-directory: templates/test-environment-agent

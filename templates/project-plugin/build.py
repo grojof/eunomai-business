@@ -21,6 +21,15 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
+PYTHON_VERSION = re.compile(r"3\.\d{1,2}")
+
+
+def server_python() -> str:
+    """The server's Python, as server/.python-version holds it: one place for every command that starts it."""
+    text = (HERE / "server" / ".python-version").read_text(encoding="utf-8").strip()
+    if not PYTHON_VERSION.fullmatch(text):
+        raise SystemExit(f"server/.python-version must hold one version such as 3.14, not {text!r}")
+    return text
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "build", "tests", ".pytest_cache",
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov",
                                 "requirements*.txt")
@@ -113,7 +122,7 @@ def build(cfg: dict, out_dir: Path) -> Path:
     (out / "project.json").write_text(json.dumps(project, indent=2, ensure_ascii=False) + "\n", encoding="utf-8",
                                       newline="\n")
     uv = str(cfg.get("uv") or "uv").replace("\\", "/")
-    values = {"NAME": name, "DISPLAY_NAME": cfg["display_name"], "UV": uv,
+    values = {"NAME": name, "DISPLAY_NAME": cfg["display_name"], "UV": uv, "PYTHON": server_python(),
               # hooks run through whatever shell the app picks: quotes only for a path with spaces
               "UV_COMMAND": f'"{uv}"' if " " in uv else uv}
     for template in out.rglob("*.template"):

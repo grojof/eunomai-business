@@ -28,7 +28,7 @@ flowchart LR
 
 | Who | Needs |
 |---|---|
-| IT | git, [uv](https://docs.astral.sh/uv/) and Python 3.12 through it (`uv python install 3.12`); Edge or Chrome to run a template's browser tests; a clone of this repository and of [eunomai-business-app-base](https://github.com/grojof/eunomai-business-app-base) |
+| IT | git, [uv](https://docs.astral.sh/uv/) and the connector's Python through it (`uv python install`, in `connector/`); Edge or Chrome to run a template's browser tests; a clone of this repository and of [eunomai-business-app-base](https://github.com/grojof/eunomai-business-app-base) |
 | People who use it | Claude Desktop with Cowork, on a Team or Enterprise plan, with Cowork on the person's computer (not in the cloud); uv, deployed by IT; nothing else: no git, no Python. See [what users need](configuration.md#what-users-need-on-their-computer) and [installing uv in an organization](configuration.md#installing-uv-in-an-organization) |
 
 ## 2. The git server
@@ -102,8 +102,10 @@ A person's request reaches IT by e-mail, from a page the plugin opens for them.
 ## 7. Review what is proposed
 
 The specialist sends a pull request with a fixed summary ([what the reviewer receives](guided-flows.md#what-the-reviewer-receives))
-and, below it, the connector's own checks, which the model does not write: the dependency audit, and the last
-whole-suite run of the tests on the person's computer for that commit.
+and, below it, the connector's own checks, which the model does not write: the dependency audit, the last whole-suite
+run of the tests on the person's computer for that commit, and what the application knows. That block is always the
+last one; a summary cannot use its heading. Anything it quotes from the pages (a tag, a path, a requirement's name)
+is shown as code, cut short: it was written by the assistant, and the block only points at it.
 
 | Check | Where |
 |---|---|
@@ -111,6 +113,7 @@ whole-suite run of the tests on the person's computer for that commit.
 | What the business said is filed: context, words, decisions, open questions; assumptions IT can accept; roles, no names | The diff of `docs/`, and *Not settled* |
 | The tests passed **for this commit** | *Checks by the connector*; the whole output stays on the person's computer, `<data>\tests\` |
 | The audit allowed it | *Checks by the connector* |
+| *Knowledge*: the pages of each kind and the requirements, with what to look at: tags outside the organization's vocabulary, a kind's tag on another `type`, requirements with no source line, requirements built on an assumption (each one IT accepts, or asks the person to settle), files the check did not read. *Nothing to look at* says only that none of these was found; the counts say whether anything was filed | *Checks by the connector*, then the diff of `docs/` and `openspec/` |
 | Nothing outside the project's place: the base's files, `.eunomai/project.toml`, the CI | The pull request's files |
 | Access rules and personal data as agreed | The specs in `openspec/` and their tests |
 | The tests run where IT runs them | CI, or the suite on IT's computer: `uv run --frozen python tools/test.py` |

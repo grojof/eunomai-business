@@ -60,6 +60,12 @@
       "use_for": "the look of web pages and applications"
     }
   ],
+  "_knowledge_tags": "The organization's tags for the knowledge pages of every application (departments, processes, systems), besides each kind's own; the connector reports any other in the pull request. Empty: no vocabulary (docs/configuration.md#settings)",
+  "knowledge_tags": [
+    {"tag": "sales", "means": "the Sales department and its orders"},
+    {"tag": "maintenance", "means": "the Maintenance department, equipment and work orders"},
+    {"tag": "erp", "means": "the ERP, for orders and stock"}
+  ],
   "_platform": "The git hosting: gitea. github and gitlab are refused by the build until the connector has their code (docs/configuration.md#the-git-hosting-platform)",
   "platform": "gitea",
   "providers": {

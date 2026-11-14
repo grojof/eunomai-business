@@ -781,7 +781,7 @@ def _declared_python(current: _Preview) -> tuple[str, ...]:
     lines = [line for line in lines if line and not line.startswith("#")]
     if len(lines) != 1 or not _PYTHON_VERSION.fullmatch(lines[0]):
         raise NeedsIT("This project names a Python version the connector does not accept. Your work is safe; IT can "
-                      "correct it.", "the project's .python-version is not a version such as 3.13",
+                      "correct it.", "the project's .python-version is not a version such as 3.14",
                       {"Workspace": current.workspace, "Version": current.head[:12], "File": ".python-version"})
     return ("--python", lines[0])
 

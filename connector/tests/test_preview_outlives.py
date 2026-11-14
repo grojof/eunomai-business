@@ -73,8 +73,9 @@ class Connector:
 
     def __init__(self, environment: dict, job: int = 0, entry: tuple[str, ...] = ()):
         arguments = json.loads(TEMPLATE.read_text(encoding="utf-8"))["mcpServers"]["{{PLUGIN}}"]["args"]
+        python = (CONNECTOR / ".python-version").read_text(encoding="utf-8").split()[0]  # as tools/build.py writes it
         arguments = [word.replace("{{CONNECTOR}}", str(CONNECTOR)).replace("{{PLUGIN}}", "eunomai-business")
-                     for word in arguments]
+                     .replace("{{PYTHON}}", python) for word in arguments]
         uv = os.environ.get("UV") or shutil.which("uv")
         if entry:  # the same command, with a limit a test can wait for
             arguments = [*arguments[:-1], "python", *entry]

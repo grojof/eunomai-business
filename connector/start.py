@@ -1,6 +1,8 @@
 """Starts one of the connector's programs with its Python environment outside the plugin's folder.
 
-    uv run --no-project --no-config --managed-python --python 3.12 <connector>/start.py <plugin> <program> [arguments]
+    uv run --no-project --no-config --managed-python --python <version> <connector>/start.py <plugin> <program> [arguments]
+
+<version> is the one in .python-version beside this file, which the build writes into the plugin's commands.
 
 Windows does not let a folder go while a program runs from it. With the environment inside the plugin's folder, the
 connector, running as long as Claude Desktop is open, kept that folder: uninstalling the plugin did nothing and said
@@ -30,7 +32,11 @@ OVERRIDE = "EUNOMAI_CONNECTOR_ENVIRONMENT"
 PLUGIN_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,39}\Z")  # as eunomai_business.PLUGIN_NAME
 UNUSED_FOR = 7 * 24 * 3600
 USED = ".used"
-UV_ARGUMENTS = ["run", "--frozen", "--no-dev", "--no-config", "--system-certs", "--managed-python", "--python", "3.12"]
+PYTHON = (HERE / ".python-version").read_text(encoding="utf-8").strip()
+if not re.fullmatch(r"3\.\d{1,2}", PYTHON):  # it goes into uv's command line
+    raise SystemExit(f"{HERE / '.python-version'} must hold one version such as 3.14")
+"""The connector's Python, in one place for the build, this file and the tests (docs/decisions.md, decision 17)."""
+UV_ARGUMENTS = ["run", "--frozen", "--no-dev", "--no-config", "--system-certs", "--managed-python", "--python", PYTHON]
 
 
 def environments(plugin: str) -> Path:

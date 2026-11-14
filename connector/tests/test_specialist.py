@@ -930,10 +930,12 @@ def test_declared_packages_without_a_pinned_list_are_blocked(tmp_path, manifest,
 
 def test_settings_carry_the_organization_and_project_context(monkeypatch):
     configure(monkeypatch, organization_context="We make power supplies.",
-              organization_skills=[{"skill": "brand:web", "use_for": "web pages"}])
+              organization_skills=[{"skill": "brand:web", "use_for": "web pages"}],
+              knowledge_tags=[{"tag": "sales", "means": "the Sales department"}])
     result = tools._specialist_settings("")
     assert result["organization"] == {"context": "We make power supplies.",
-                                      "skills": [{"skill": "brand:web", "use_for": "web pages"}]}
+                                      "skills": [{"skill": "brand:web", "use_for": "web pages"}],
+                                      "tags": [{"tag": "sales", "means": "the Sales department"}]}
 
 
 def test_the_audit_finds_indirect_dependencies_left_out_of_the_list(monkeypatch, tmp_path):
