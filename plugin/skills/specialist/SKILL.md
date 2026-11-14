@@ -44,8 +44,8 @@ the tools again. Meanwhile, carry on with what needs no connector, such as under
      about.
    - The person wants a new application and no project exists for it: do not look for one to clone. Understand it
      without a project (`specialist-understand`, *Without a project*) and skip steps 3 to 5.
-3. **Settings:** `specialist_settings(workspace)`: languages, who you talk to (`audience`), the organization's context
-   and skills, whether code may be written here and with which technologies, the project's test environment if it
+3. **Settings:** `specialist_settings(workspace)`: languages, who you talk to (`audience`), the organization's context,
+   skills and tags, whether code may be written here and with which technologies, the project's test environment if it
    has one, and the project's context.
 4. **Latest changes:** `workspace_update(workspace)`. When it brought something (`status` "updated"), here or at
    any later call in the session, tell the person first, in one or two short lines that need nothing from them, then
@@ -98,7 +98,9 @@ changed; never append history. Unless the project's context names other homes:
 | What the application must do, each rule with its source | `openspec/specs/` | none |
 
 Each page starts with frontmatter, its keys in English: `type`, `title` and `description` (what a search finds), and
-`tags: [context]` on one line, the kind's tag first, lowercase ASCII words joined by hyphens. What it is, for whom and
+`tags: [context]` on one line, the kind's tag first, lowercase ASCII words joined by hyphens. After it, the
+organization's tags (`organization.tags`: departments, processes, systems) that the page is about, by what each
+`means`; never a tag outside that list, and with no list, none but the kind's. What it is, for whom and
 why stay in the README, whose index reaches every page. A page exists once it has something to say; one left with
 nothing keeps its frontmatter and says so in one line. Past about 8,000 characters, and once the project's own
 documentation checks accept folders, a page becomes the index of a folder of the same name (`docs/decisions.md` and

@@ -43,8 +43,12 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     args = mcp["mcpServers"]["eunomai-business"]["args"]
     assert args[:2] == ["run", "--no-project"] and "--no-config" in args and "--system-certs" in args
     assert "--managed-python" in args  # uv's own Python, never whatever the computer has
+    python = (ROOT / "connector" / ".python-version").read_text(encoding="utf-8").split()[0]
+    assert args[args.index("--python") + 1] == python  # one place for the connector's Python (decision 17)
+    commands = [h["command"] for e in hooks.values() for h in e[0]["hooks"]]
+    assert all(f"--managed-python --python {python} " in command for command in commands)
     assert args[-3:] == ["${CLAUDE_PLUGIN_ROOT}/connector/start.py", "eunomai-business", "eunomai-business"]
-    assert "connector/start.py" in names
+    assert "connector/start.py" in names and "connector/.python-version" in names
     assert "connector/uv.lock" in names and "connector/sbom.cdx.json" in names
 
 
@@ -147,6 +151,11 @@ def test_the_organizations_deny_rules_are_packaged_for_the_guard(tmp_path):
     (lambda c: c.update(dependency_exceptions=[{"package": "pypi:six"}]), 'needs "package"'),
     (lambda c: c.update(organization_context=["text"]), "organization_context must be text"),
     (lambda c: c.update(organization_skills=[{"skill": "brand:web"}]), "organization_skills must be a list"),
+    (lambda c: c.update(knowledge_tags=["sales"]), "knowledge_tags must be a list"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "sales", "means": ""}]), "knowledge_tags must be a list"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "Sales Dept", "means": "Sales"}]), "not lowercase words joined by -"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "glossary", "means": "words"}]), "the kinds' own tags"),
+    (lambda c: c.update(knowledge_tags=[{"tag": "erp", "means": "a"}, {"tag": "erp", "means": "b"}]), "each tag once"),
 ])
 def test_configuration_errors_are_reported(change, message):
     cfg = copy.deepcopy(EXAMPLE)

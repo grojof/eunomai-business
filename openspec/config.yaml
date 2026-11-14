@@ -5,7 +5,7 @@ schema: spec-driven
 context: |
   eunomai-business: a Claude plugin (Cowork and Claude Code) that lets business people build internal applications
   with an assistant, and IT review and ship them. Parts: plugin/ (skills, hook templates), connector/ (a local MCP
-  server in Python 3.12, run by uv, and the guard), templates/ (project-plugin template, test-environment agent),
+  server in Python (connector/.python-version), run by uv, and the guard), templates/ (project-plugin template, test-environment agent),
   tools/ (build, tests, new_project, audit; standard library only).
   Language: English in code, docs, specs and commits. No names of people anywhere.
   Sources of truth: AGENTS.md (how to work, directions that need a new decision), docs/decisions.md (why),

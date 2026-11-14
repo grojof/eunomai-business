@@ -2,7 +2,7 @@
 name = "eunomai-project"
 version = "0.1.0"
 description = "A project plugin's local server and hook, next to eunomai-business (made from its template)."
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = ["mcp==2.3.0"]
 
 [dependency-groups]

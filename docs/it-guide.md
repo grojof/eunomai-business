@@ -28,7 +28,7 @@ flowchart LR
 
 | Who | Needs |
 |---|---|
-| IT | git, [uv](https://docs.astral.sh/uv/) and Python 3.12 through it (`uv python install 3.12`); Edge or Chrome to run a template's browser tests; a clone of this repository and of [eunomai-business-app-base](https://github.com/grojof/eunomai-business-app-base) |
+| IT | git, [uv](https://docs.astral.sh/uv/) and the connector's Python through it (`uv python install`, in `connector/`); Edge or Chrome to run a template's browser tests; a clone of this repository and of [eunomai-business-app-base](https://github.com/grojof/eunomai-business-app-base) |
 | People who use it | Claude Desktop with Cowork, on a Team or Enterprise plan, with Cowork on the person's computer (not in the cloud); uv, deployed by IT; nothing else: no git, no Python. See [what users need](configuration.md#what-users-need-on-their-computer) and [installing uv in an organization](configuration.md#installing-uv-in-an-organization) |
 
 ## 2. The git server

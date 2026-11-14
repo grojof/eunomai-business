@@ -427,9 +427,29 @@ def test_every_pull_request_carries_the_connectors_own_checks(signed_in, workspa
     pull = signed_in.pulls[-1]
     assert first["created"] and pull["body"].startswith("Summary by the specialist.")
     assert "Checks by the connector" in pull["body"] and "Dependency audit: **allowed**" in pull["body"]
+    assert "- Knowledge: no pages by kind and no requirements yet" in pull["body"]
     again = server.version_propose(name, "Page, revised", "Revised summary.")
     assert again["created"] is False and again["updated"] is True
     assert pull["title"] == "Page, revised" and pull["body"].startswith("Revised summary.")
+
+
+def test_the_knowledge_reported_is_the_proposed_commits_against_the_organizations_vocabulary(
+        signed_in, workspaces, monkeypatch):
+    from eunomai_business import deps, server
+
+    monkeypatch.setenv("EUNOMAI_SPECIALIST", '{"knowledge_tags": [{"tag": "sales", "means": "the Sales department"}]}')
+    name, ws = workspace_with_context(signed_in)
+    (ws / "docs").mkdir()
+    (ws / "docs" / "context.md").write_text("---\ntype: explanation\ntitle: Context\ndescription: Who uses it.\n"
+                                            "tags: [context, purchasing]\n---\n\n# Context\n", encoding="utf-8")
+    gitops.save(name, "Context")
+    gitops.push(name, gitops.project_files(name)["tip"])
+    (ws / "docs" / "context.md").write_text("Changed in the folder, never saved.\n", encoding="utf-8")
+    monkeypatch.setattr(deps, "_get", lambda url: None)
+    server.version_propose(name, "Context", "Summary.")
+    body = signed_in.pulls[-1]["body"]
+    assert "- Knowledge: 1 pages by kind, 0 requirements; the organization's vocabulary; **to look at**" in body
+    assert "outside the organization's vocabulary: docs/context.md (purchasing)" in body
 
 
 def test_a_prototype_is_saved_only_if_it_loads_nothing_from_other_sites(signed_in, workspaces):

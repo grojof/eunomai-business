@@ -36,6 +36,8 @@ running it again. Each line holds, or goes into the summary under *Not settled* 
 - assumptions confirmed by the user; every assumption the code is built on is a row of the open questions page and
   every answered or confirmed row is gone; nothing in `proposal.md` or `design.md` is missing from its home (what is
   for later, a decision and its reason, technical ones too): the archive is history nobody reads;
+- each page of knowledge carries its kind's tag and `type`, and only the organization's tags; each requirement has
+  its `**Source:**` line. The connector reports these to IT under its checks;
 - no secrets, no external resources, no dead code, no debugging leftovers, nothing meant to run on the user's
   computer.
 
@@ -59,7 +61,8 @@ again while it says `running`, in the same turn: it must pass before the send, a
 A failure goes back to Build.
 `version_send(workspace)`, then `version_propose(workspace, <title>, <summary>)`. If it answers `created: false`,
 the pull request was already open: the version just sent updates it, and its description is replaced. The connector
-appends its own checks (the dependency audit) below your summary; do not repeat them.
+appends its own checks (the dependency audit, the tests on this computer, the knowledge pages) below your summary; do
+not repeat them.
 
 Both audit what is saved and refuse unless it is `allowed`, whatever the project declares; nothing was sent then.
 `version_to_test` does the same. Never explain a refusal away, and never send the work another way:

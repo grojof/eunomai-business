@@ -19,7 +19,7 @@ the facts behind them in [sources](sources.md#recommended-stack).
 
 | Piece | Choice | Why |
 |---|---|---|
-| Server | Python 3.12+, FastAPI, Pydantic v2; uv with `uv.lock` | Typed contracts serve the pages, an API and AI tools alike |
+| Server | Python, the newest with full support ([decision 17](decisions.md#17--the-newest-python-with-full-support)), FastAPI, Pydantic v2; uv with `uv.lock` | Typed contracts serve the pages, an API and AI tools alike |
 | Data | PostgreSQL, SQLAlchemy 2, Alembic, psycopg 3 | Mature; versioned migrations; `numeric` arrives as `Decimal` |
 | Reading another system's SQL Server | pyodbc with Microsoft's ODBC Driver 18 and a read-only user | `decimal` arrives as `Decimal` |
 | Pages | Jinja2 with escaping always on, htmx 2.0, a little plain JavaScript in the application's own file | No Node; its authors support htmx 2 indefinitely. `eunomai-business-app-base` built every form, including a searchable select, without Alpine.js: a screen holding a lot of browser state may still want its CSP build, as a decision of its own |

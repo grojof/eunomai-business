@@ -38,7 +38,7 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".venv", "*.egg-info", "
                                 ".env", "*.env", ".ruff_cache", ".mypy_cache", ".coverage", "htmlcov")
 SPECIALIST_KEYS = {"docs_language", "code_language", "free_development", "allowed_technologies",
                    "dependency_exceptions", "organization_context", "organization_skills", "app_preview", "app_tests",
-                   "message_style", "uv_minimum", "audience"}
+                   "message_style", "uv_minimum", "audience", "knowledge_tags"}
 KEYS = {"uv", "connector_source", "connector_path", "workspaces_root", "diagnostics", "support_email",
         "providers", "deny", "plugin_name", "plugin_description", "plugin_version", "platform"} | SPECIALIST_KEYS
 VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -78,6 +78,39 @@ def _strings(value) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value)
 
 
+KNOWLEDGE_KINDS = ("context", "glossary", "decision", "open-question")
+"""The kinds' own tags: always allowed, so never in the organization's vocabulary."""
+KNOWLEDGE_TAG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+
+
+def _knowledge_tags_problems(items) -> list[str]:
+    """The organization's closed vocabulary for the knowledge pages: each tag a lowercase word or words joined by -,
+    once, with what it means, at most 300."""
+    shape = 'knowledge_tags must be a list of {"tag": "<lowercase-words>", "means": "<what it names>"}, at most 300'
+    if not isinstance(items, list) or len(items) > 300 or not all(
+            isinstance(item, dict) and set(item) == {"tag", "means"} and isinstance(item["tag"], str)
+            and isinstance(item["means"], str) and item["means"].strip() and len(item["means"]) <= 200
+            for item in items):
+        return [shape]
+    problems = []
+    names = [item["tag"] for item in items]
+    wrong = [name for name in names if not KNOWLEDGE_TAG.match(name) or len(name) > 40]
+    if wrong:
+        problems.append(f"knowledge_tags: not lowercase words joined by - (at most 40 characters): {', '.join(wrong)}")
+    kinds = [name for name in names if name in KNOWLEDGE_KINDS]
+    if kinds:
+        problems.append(f"knowledge_tags: {', '.join(kinds)} are the kinds' own tags, always allowed; leave them out")
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        problems.append(f"knowledge_tags: each tag once: {', '.join(repeated)}")
+    return problems
+
+
+def connector_python() -> str:
+    """The connector's Python, as connector/.python-version holds it: one place for every command that starts it."""
+    return (CONNECTOR_SRC / ".python-version").read_text(encoding="utf-8").split()[0]
+
+
 def validate_specialist(cfg: dict) -> list[str]:
     errors = []
     for key in ("docs_language", "code_language"):
@@ -103,6 +136,7 @@ def validate_specialist(cfg: dict) -> list[str]:
             or not (isinstance(font, str) and STYLE_FONT.match(font)):
         errors.append('message_style takes "accent" (a colour such as #1f4e79) and "font" (font names separated by '
                       'commas), both optional')
+    errors += _knowledge_tags_problems(cfg.get("knowledge_tags", []))
     if cfg.get("audience", "business") not in ("business", "technical"):
         errors.append('audience must be "business" (people who are not technical) or "technical" (IT)')
     own = cfg.get("plugin_version", "")
@@ -228,6 +262,7 @@ def build(cfg: dict, out_dir: Path) -> Path:
     uv = str(cfg.get("uv") or "uv").replace("\\", "/")
     values = {
         "UV": uv,
+        "PYTHON": connector_python(),
         # Hooks run through whatever shell Claude Desktop picks (Git Bash, cmd, PowerShell). A bare command works in
         # all of them; a quoted one breaks PowerShell, so quotes are only for a path with spaces.
         "UV_COMMAND": f'"{uv}"' if " " in uv else uv,

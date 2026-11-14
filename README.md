@@ -25,8 +25,9 @@ application adds to what the organization knows about its own business.
 It is the counterpart of [eunomai](https://github.com/grojof/eunomai): eunomai is flexible, for developers in
 Claude Code; eunomai-business is deliberately strict, for business users in Cowork.
 
-**Status:** in development (0.1.6). The base is built, tested against a fake git server and validated on a real
-installation; some checks are still partial or pending ([validation](docs/validation/hypotheses.md)).
+**Status:** in development; what each version changed is in the [changelog](CHANGELOG.md). The base is built, tested
+against a fake git server and validated on a real installation; some checks are still partial or pending
+([validation](docs/validation/hypotheses.md)).
 
 ## How it works
 

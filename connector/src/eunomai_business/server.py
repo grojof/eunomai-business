@@ -6,7 +6,7 @@ import os
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
-from . import (auth, deps, gitops, hook, hosting, plugin_name, preview, probe, project_request as requests_for_it,
+from . import (auth, deps, gitops, hook, hosting, knowledge, plugin_name, preview, probe, project_request as requests_for_it,
                project_tests, runtime, settings, support)
 
 mcp = MCPServer(plugin_name(), instructions=(
@@ -202,6 +202,17 @@ def _tests_line(workspace: str, head: str) -> str:
     return f"- Tests on the person's computer, whole suite: **{verdict}**, {counts}, {run.get('at', '')}, for this commit"
 
 
+def _knowledge_lines(workspace: str, head: str) -> list[str]:
+    """What the application knows, by kind and tag, against the organization's vocabulary. Never a refusal: a check
+    that cannot run says so."""
+    try:
+        files = gitops.knowledge_files(workspace, head)
+    except Exception as exc:  # noqa: BLE001 - a report, never the reason a proposal is not made
+        return [f"- Knowledge: could not be read ({type(exc).__name__})"]
+    vocabulary = [item["tag"] for item in settings.load()["knowledge_tags"]]
+    return knowledge.lines(knowledge.check(files, vocabulary))
+
+
 def _checks(audit: dict, workspace: str = "") -> str:
     """The connector's own checks, appended to every pull request: what IT reads there was not written by Claude, and
     it answers for the commit the server holds, which it names."""
@@ -212,6 +223,7 @@ def _checks(audit: dict, workspace: str = "") -> str:
         lines.append(f"  - without hashes: {', '.join(audit['without_hashes'])}")
     if workspace:
         lines.append(_tests_line(workspace, audit["head"]))
+        lines += _knowledge_lines(workspace, audit["head"])
     return "\n\n---\n**Checks by the connector** (not written by the assistant)\n\n" + "\n".join(lines) + "\n"
 
 
@@ -245,7 +257,8 @@ def _specialist_settings(workspace: str) -> dict:
     values = settings.load()
     result = {"docs_language": values["docs_language"], "code_language": values["code_language"],
               "audience": values["audience"],
-              "organization": {"context": values["organization_context"], "skills": values["organization_skills"]}}
+              "organization": {"context": values["organization_context"], "skills": values["organization_skills"],
+                               "tags": values["knowledge_tags"]}}
     if workspace:
         try:
             files = gitops.project_files(workspace)
@@ -271,8 +284,8 @@ def _specialist_settings(workspace: str) -> dict:
 @mcp.tool()
 def specialist_settings(workspace: str = "") -> dict:
     """The organization's and the project's choices for the specialist, as IT keeps them:
-    languages; `audience` ("business": people who are not technical; "technical": IT); the organization's context and
-    skills; and, for a workspace, whether code may be written and with which technologies (empty: any), `test` (the
+    languages; `audience` ("business": people who are not technical; "technical": IT); the organization's context,
+    skills and `tags` (its vocabulary for the knowledge pages: departments, processes, systems; empty: none set); and, for a workspace, whether code may be written and with which technologies (empty: any), `test` (the
     project's test environment), `preview` and `tests` (what can run on this computer, `tests.some` for some files),
     and the project's context from the main branch. They come before anything personal in the session."""
     return _safe(_specialist_settings, workspace)

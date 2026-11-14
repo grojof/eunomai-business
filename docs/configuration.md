@@ -77,6 +77,7 @@ python tools\build.py --all             # the configuration and every variant, e
 | `dependency_exceptions` | `[]` | `{"package": "pypi:<name>" or "npm:<name>", "reason": "..."}`: packages IT vetted despite failing the origin or activity rules. A known vulnerability is never excepted. A common case: `colorama`, which `pytest` and `click` need on Windows, has had no release in over three years. Another: `httpx2-jsfetch`, which `httpx2` needs only in a web browser, publishes no source repository. A third: `execnet`, which `pytest-xdist` needs to share the tests out, publishes only its documentation's address. `uv run --project connector --frozen python tools/audit.py <folder>` gives the audit's answer for a folder with these exceptions: run it on a template before publishing it, since a template that is blocked blocks every project made from it. Without these three, a clone of the base application cannot be sent: the [audit decides the send](barriers.md#dependencies), for every project |
 | `organization_context` | `""` | Up to 4,000 characters the specialist should know about the organization: what it does, the systems that already exist (so it can propose them before building something new) |
 | `organization_skills` | `[]` | `{"skill": "<name>", "use_for": "..."}`: the organization's own skills, by the name they have where people get them (`<plugin>:<skill>` from a plugin, the bare name when the organization shares them on its own), and what the specialist uses them for (for example, its brand for web pages). They apply only where they agree with eunomai-business's rules; conflicts are reported in the pull request. Review them first with the `review-skills` skill |
+| `knowledge_tags` | `[]` | `{"tag": "<lowercase-words>", "means": "..."}`, at most 300: the organization's closed vocabulary for the knowledge pages of every application, such as its departments, processes and systems. The specialist tags each page with its kind's tag and the ones of this list that apply, by what each `means`; the connector reports any other tag in the pull request, never refusing it. The kinds' own tags (`context`, `glossary`, `decision`, `open-question`) are always allowed and stay out of the list. Empty: no vocabulary, and the pages carry their kind's tag alone ([decision 16](decisions.md#16--an-applications-knowledge-lives-in-its-repository-by-kind)) |
 
 Where code may be written, and with what, each project declares in its own repository
 ([`.eunomai/project.toml`](project-practices.md#where-code-may-be-written)); `free_development` covers the projects
@@ -236,7 +237,7 @@ that works implements all of them, and that no hosting API is called anywhere el
 - **uv**, deployed by IT; users install nothing themselves (see
   [Installing uv](#installing-uv-in-an-organization) and
   [decision 9](decisions.md#9--it-provides-the-runtime-the-plugin-carries-everything-else)). It fetches its own
-  Python 3.12 and the connector's packages.
+  Python and the connector's packages.
 - **Nothing else.** Git is not needed: the connector carries its own git implementation and ignores any Git
   installed on the computer ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)).
 - Network access (office or VPN) to the configured hosts. The connector trusts the Windows certificate store, so
@@ -244,16 +245,17 @@ that works implements all of them, and that no hosting API is called anywhere el
 
 ## Installing uv in an organization
 
-The connector starts with `uv run --frozen --no-dev --no-config --system-certs --managed-python --python 3.12`
+The connector starts with `uv run --frozen --no-dev --no-config --system-certs --managed-python --python <version>`
 from the plugin's lock: hashes verified, uv's configuration files ignored, the operating system's certificates,
-and uv's own Python 3.12, never the computer's ([barriers](barriers.md#dependencies)). Claude Desktop does not
+and uv's own Python, of the version in `connector/.python-version`
+([decision 17](decisions.md#17--the-newest-python-with-full-support)), never the computer's ([barriers](barriers.md#dependencies)). Claude Desktop does not
 provide uv to a plugin, so IT deploys it ([decision 9](decisions.md#9--it-provides-the-runtime-the-plugin-carries-everything-else)).
 
 | Topic | Recommendation |
 |---|---|
 | How to deploy | uv is one executable. IT distributes the version it has validated with its usual tools (Intune, Group Policy, a software catalogue) to a folder application control allows and only IT may change, such as `C:\Program Files\uv\`, and adds that folder to the **system** PATH, keeping `uv` as it is in the build. Windows puts the system PATH before each user's, so IT's uv comes before any a person installed in their profile. A full path in `uv` is not the way here: one with a space is quoted, and the hooks, which Claude Desktop may run through PowerShell, do not accept a quoted command. **Use uv 0.13.4 or later**: earlier versions are affected by [GHSA-hq85-5cpj-mr62](https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62) (high). Tested with uv 0.13.5 |
 | For a test computer | The official per-user installer (`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`), then restart Claude Desktop |
-| Python | Always uv's own: **a Python from the Microsoft Store is neither needed nor used**, nor is any other on the computer. The connector runs on 3.12; a preview runs on what the project's `.python-version` says, and the base application says 3.13 (with no such file, the newest Python uv has). So IT does one of two things: deploys every version its base applications declare, run as each person since the folder is per user (`uv python install 3.12 3.13`), or allows the addresses below |
+| Python | Always uv's own: **a Python from the Microsoft Store is neither needed nor used**, nor is any other on the computer. The connector runs on the version in its `.python-version`; a preview runs on what the project's `.python-version` says (with no such file, the newest Python uv has), and the base application follows the same rule ([decision 17](decisions.md#17--the-newest-python-with-full-support)). So IT does one of two things: deploys those versions, run as each person since the folder is per user (`uv python install <version>`), or allows the addresses below |
 | What a person downloads the first time | Measured on a computer with empty uv folders, connector and base application: 22 MB for each Python, 69 MB on disk, and 18 MB and 20 MB of packages, 50 MB and 70 MB in uv's cache. In all about 82 MB down and 257 MB on disk. Every audit also reads about 12 MB of package information, for 51 packages |
 | Network | Through the proxy, for uv: `files.pythonhosted.org` for packages, `pypi.org` for what builds the connector, and, unless the Pythons are deployed, `releases.astral.sh`, or else `github.com` with `release-assets.githubusercontent.com`. For the audit: `pypi.org`, `api.osv.dev`, `registry.npmjs.org` for npm packages, and the source repositories' hosts, mostly `github.com`. When one is closed, the person is told in plain words and the report for IT names it. A preview's installation receives the proxy variables and no `UV_` ones, so a mirror set there does not reach it |
 | Application control | Policies such as AppLocker often block programs in the user's profile. Allow uv where it is deployed |

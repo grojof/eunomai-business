@@ -14,9 +14,10 @@ marked with its status. None is required.
 
 ## A knowledge base built from the repositories
 
-**Status:** the pages are written by the guided flows, each kind with its `type` and tag (0.1.6,
-[decision 16](decisions.md#16--an-applications-knowledge-lives-in-its-repository-by-kind)); the organization's
-vocabulary and its check are planned (0.2.0). The reading service is an idea.
+**Status:** the guided flows write the pages, each kind with its `type` and tag, and the organization's vocabulary;
+the connector reports to IT, in each pull request, what departs from them
+([decision 16](decisions.md#16--an-applications-knowledge-lives-in-its-repository-by-kind)). The reading service is
+an idea.
 
 Business users' repositories accumulate what the organization knows: business rules, specifications, decisions,
 glossaries. An organization can run a service that reads those pages from its git server and serves them as a
