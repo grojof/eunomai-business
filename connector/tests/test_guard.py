@@ -570,3 +570,19 @@ def test_a_proposal_without_its_summary_is_a_mistake_to_correct_not_an_empty_pul
         answer = server.version_propose(name, "Page", summary)
         assert "error" in answer and "description=" in answer["error"]
     assert len(signed_in.pulls) == before
+
+
+def test_in_a_session_of_this_plugin_each_message_carries_the_restart_line(monkeypatch, capsys, tmp_path):
+    """Claude starts the connector again for every message and may say meanwhile that its tools are no longer
+    available (anthropics/claude-code#105219): in this plugin's sessions, and only there, the guard says what that is."""
+    monkeypatch.setenv("EUNOMAI_PLUGIN", "acme-apps")
+    ours = tmp_path / "ours.jsonl"
+    ours.write_text('{"name": "mcp__plugin_acme-apps_acme-apps__whoami"}\n', encoding="utf-8")
+    other = tmp_path / "other.jsonl"
+    other.write_text('{"text": "write an e-mail"}\n', encoding="utf-8")
+    answer = run_hook(monkeypatch, capsys, {"hook_event_name": "UserPromptSubmit", "transcript_path": str(ours)})
+    line = answer["hookSpecificOutput"]
+    assert line["hookEventName"] == "UserPromptSubmit" and "the restart, not a lost connection" in line["additionalContext"]
+    assert "mcp__plugin_acme-apps_acme-apps__*" in line["additionalContext"]
+    for path in (other, tmp_path / "missing.jsonl"):
+        assert run_hook(monkeypatch, capsys, {"hook_event_name": "UserPromptSubmit", "transcript_path": str(path)}) is None

@@ -43,6 +43,7 @@ def test_without_diagnostics_only_the_guard_and_no_validation_skills(tmp_path):
     args = mcp["mcpServers"]["eunomai-business"]["args"]
     assert args[:2] == ["run", "--no-project"] and "--no-config" in args and "--system-certs" in args
     assert "--managed-python" in args  # uv's own Python, never whatever the computer has
+    assert "alwaysLoad" not in mcp["mcpServers"]["eunomai-business"]  # an organization's choice, off by default
     python = (ROOT / "connector" / ".python-version").read_text(encoding="utf-8").split()[0]
     assert args[args.index("--python") + 1] == python  # one place for the connector's Python (decision 17)
     commands = [h["command"] for e in hooks.values() for h in e[0]["hooks"]]
@@ -324,3 +325,11 @@ def test_the_version_in_pyproject_is_the_changelogs_latest():
     root = Path(build.__file__).resolve().parent.parent
     heading = re.search(r"^## (\S+)", (root / "CHANGELOG.md").read_text(encoding="utf-8"), re.MULTILINE)[1]
     assert heading == "Unreleased" or heading == build.eunomai_version()
+
+
+def test_loading_the_connector_upfront_is_the_organizations_choice(tmp_path):
+    build.build(dict(copy.deepcopy(EXAMPLE), connector_always_load=True), tmp_path)
+    mcp = json.loads((tmp_path / "eunomai-business" / ".mcp.json").read_text(encoding="utf-8"))
+    assert mcp["mcpServers"]["eunomai-business"]["alwaysLoad"] is True
+    assert any("connector_always_load must be true or false" in error
+               for error in build.validate(dict(copy.deepcopy(EXAMPLE), connector_always_load="yes")))
