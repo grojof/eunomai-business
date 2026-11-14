@@ -245,6 +245,9 @@ def _own_words(description: str) -> str:
 def _propose(workspace: str, title: str, description: str) -> dict:
     """A proposal holds what the server has, so that is what must have been audited. Saved work the server does not
     have, allowed or not, waits for version_send, where the audit answers for it."""
+    if not description.strip():  # a pull request with no summary reached IT once: the model named it otherwise
+        return {"error": "description is the summary for whoever reviews, and it is empty: write it as "
+                         "specialist-deliver says and call version_propose again with description=<the summary>"}
     held = gitops.server_head(workspace)
     if held != gitops.saved_head(workspace):
         return {"workspace": workspace, "status": "not_sent",
@@ -258,9 +261,9 @@ def _propose(workspace: str, title: str, description: str) -> dict:
 
 
 @mcp.tool()
-def version_propose(workspace: str, title: str, description: str = "") -> dict:
+def version_propose(workspace: str, title: str, description: str) -> dict:
     """Open a pull request that proposes the current version for the main branch, or update the description of the
-    one already open. Send it first (version_send): `status` "not_sent" means the server does not have the latest
+    one already open. `description` is the summary for whoever reviews (the specialist-deliver template), never empty. Send it first (version_send): `status` "not_sent" means the server does not have the latest
     save, and nothing was proposed. The connector appends its own checks to the description, for the commit the server
     holds, and refuses like version_send when the audit is not `allowed`."""
     return _safe(_propose, workspace, title, description)

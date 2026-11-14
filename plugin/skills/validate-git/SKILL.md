@@ -33,7 +33,7 @@ every change goes through the connector's `workspace_*` and `version_*` tools. R
    `crlf_in_changed_files` must be empty.
 8. `version_save(workspace, "eunomai validation: first save point")`. Note `commit` and `files`.
 9. `version_send(workspace)`. Note `web_url`.
-10. `version_propose(workspace, "eunomai validation: proposal from Cowork", "<one line saying what changed>")`.
+10. `version_propose(workspace=<workspace>, title="eunomai validation: proposal from Cowork", description="<one line saying what changed>")`.
     Give the user the pull request `url` and ask them to open it, check the changes, the accents and the author,
     and merge it if they agree.
 11. Read-only observation, only if you have a shell: `git -C <your path> log --oneline -3`. Report the output or the

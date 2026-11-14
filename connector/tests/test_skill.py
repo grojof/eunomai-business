@@ -273,3 +273,12 @@ def test_claudes_restart_of_the_connector_each_turn_is_not_taken_for_a_lost_conn
     text = " ".join(SPECIALIST.split())
     assert "that is the restart, not a lost connection" in text
     assert "before anything the person asked for, even only to see the application" in text
+
+
+def test_the_life_of_the_main_thing_is_asked_and_its_rules_are_enforced_where_data_is_written():
+    """Two models built loans that could lend one tool twice at once: neither had asked what must never happen."""
+    understand = " ".join(reference("understand").split())
+    build = " ".join(reference("build").split())
+    assert "the life of the main thing it keeps" in understand and "what must never happen" in understand
+    assert "Every rule the user confirmed is enforced where the data is written" in build
+    assert "description=<the summary>" in " ".join(reference("deliver").split())
