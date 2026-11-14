@@ -82,6 +82,9 @@ def workspace_clone(repo_url: str, workspace: str = "") -> dict:
 
 
 def _workspaces() -> dict:
+    for folder in gitops.gone():  # deleted by the person or by IT: what the connector kept for it goes too
+        if preview.forget_folder(folder):
+            gitops.forget(folder)
     return {**gitops.workspaces(), "project_requests": requests_for_it.pending()}
 
 
@@ -348,7 +351,7 @@ def app_preview(workspace: str, fresh: bool = False) -> dict:
     ends on it ends the preparation), or a refusal with `user_message` ("not_turned_on", "not_declared",
     "no_lockfile", "audit_refused", "audit_unavailable", "needs_it"). `latest_changes_waiting` true: it shows the
     version before changes IT sent; workspace_update brings them. It runs until `app_preview_stop` or the hour
-    ends; `keeps_running` false: it ends with the task. The same saved version answers the one running
+    ends; `keeps_running` false: closing Claude may end it sooner. The same saved version answers the one running
     (`already_running`); anything else, or one that no longer answers, replaces it (`ended_before` says why). Also
     `unsaved_changes`, `reload`, `address_changed`, `data_reset`, as named. `fresh` true starts with no earlier data.
     What each answer means for the person: `specialist-build`."""

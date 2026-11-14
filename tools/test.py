@@ -113,9 +113,10 @@ def _run(command: list[str], folder: Path) -> int:
 
 PREVIEW_WORKERS = "4"
 """How many tests that start real applications run at once: more, and their own waits are starved."""
-CLOCK_WORKERS = "2"
-"""How many tests that wait on the clock run at once: with every core busy, a time limit or a stop was missed; two at a
-time passed twice in a row, in half the time of one."""
+CLOCK_WORKERS = "4"
+"""How many tests that wait on the clock run at once: with every core busy, a time limit or a stop was missed. Four at
+a time passed three runs in a row, with another suite running on the computer, in about 110 s against 150 s for two.
+CI runs them two at a time: its machines have fewer cores."""
 
 
 def run_connector(files: list[str]) -> int:
