@@ -1,6 +1,6 @@
 [project]
 name = "eunomai-business"
-version = "0.2.1"
+version = "0.2.2"
 description = "Local connector of eunomai-business: sign-in, workspaces, versions and save points for business users in Claude Cowork."
 requires-python = ">=3.14"
 license = "MIT"

@@ -552,3 +552,21 @@ def test_the_proposal_says_the_tests_the_connector_saw_for_that_commit(signed_in
     monkeypatch.setenv("EUNOMAI_SPECIALIST", json.dumps({"app_tests": False}))
     assert "not turned on in this organization" in body()
     assert server._status(name)["tested"] == "unavailable"
+
+
+def test_a_proposal_without_its_summary_is_a_mistake_to_correct_not_an_empty_pull_request(signed_in, workspaces,
+                                                                                           monkeypatch):
+    """A model called version_propose with the summary under another name: MCP ignores unknown arguments, and IT
+    received a pull request holding only the connector's checks."""
+    from eunomai_business import deps, server
+
+    name, ws = workspace_with_context(signed_in)
+    (ws / "index.html").write_bytes(b"<p>Hello</p>")
+    gitops.save(name, "Page")
+    gitops.push(name, gitops.project_files(name)["tip"])
+    monkeypatch.setattr(deps, "_get", lambda url: None)
+    before = len(signed_in.pulls)
+    for summary in ("", "   \n"):
+        answer = server.version_propose(name, "Page", summary)
+        assert "error" in answer and "description=" in answer["error"]
+    assert len(signed_in.pulls) == before

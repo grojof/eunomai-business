@@ -238,6 +238,10 @@ that works implements all of them, and that no hosting API is called anywhere el
   [Installing uv](#installing-uv-in-an-organization) and
   [decision 9](decisions.md#9--it-provides-the-runtime-the-plugin-carries-everything-else)). It fetches its own
   Python and the connector's packages.
+- **A model for the specialist.** Cowork lets each person choose. Tested with the same application and the same
+  answers: Claude Sonnet at medium effort asked about the rules, named what was missing and wrote IT a full summary,
+  in less time and fewer tokens; Claude Haiku took more turns, asked less and skipped steps at low effort. Recommend
+  Sonnet at medium effort; Haiku for small changes.
 - **Nothing else.** Git is not needed: the connector carries its own git implementation and ignores any Git
   installed on the computer ([decision 3](decisions.md#3--git-inside-the-connector-independent-of-any-git-on-the-computer)).
 - Network access (office or VPN) to the configured hosts. The connector trusts the Windows certificate store, so

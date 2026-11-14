@@ -15,7 +15,9 @@ user's own words, before proposing anything.
    touches. Do not ask what they already answer; raise first the open questions this request touches.
 2. **Restate the idea in one sentence**, then ask what is still missing, one question at a time, each as a choice
    in the user's words with your recommendation first: who will use it, how it is done today, what result they
-   expect. If a question puzzles them, explain it in other words and recommend an answer; they choose.
+   expect, and the life of the main thing it keeps (a loan, an order, a request): the states it goes through, what
+   moves it from one to the next, and what must never happen (the same one twice at once, a step from a state that
+   forbids it). If a question puzzles them, explain it in other words and recommend an answer; they choose.
 3. **Sort what you hear** into three kinds and keep them apart:
    - facts the user knows;
    - business rules, which need a source (a document, a role, a regulation);
@@ -30,6 +32,7 @@ user's own words, before proposing anything.
    | Users | ... |
    | Today | ... |
    | Expected result | ... |
+   | Life of the main thing | states, what moves it, what must never happen |
    | Out of scope | ... |
    | Assumptions to confirm | ... |
    | Open questions | ... |

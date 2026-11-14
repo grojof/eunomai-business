@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.2 (2026-11-14)
+
+From the same application built with two models: a proposal never reaches IT without its summary, the specialist asks
+about the life of what an application keeps and enforces the rules it hears, and the guide says which model to use.
+
+- **The summary for IT is required.** A model called `version_propose` with the summary under another name; the
+  connector ignored it, as MCP ignores unknown arguments, and IT received a pull request with nothing but the
+  connector's checks. `description` is now required and never empty: a call without it is an error the model corrects,
+  and the skills name it.
+- **The life of the main thing.** Both models built loans that could lend one tool twice at once: neither had asked
+  what must never happen. Understand now asks for the states of what the application keeps, what moves it and what
+  must never happen, and shows them in "what I understood"; Build enforces each confirmed rule where the data is
+  written, with its test, or lists it as not settled.
+- **Which model.** The guide recommends Claude Sonnet at medium effort for the specialist, from that comparison.
+
 ## 0.2.1 (2026-11-14)
 
 What IT sends reaches the person before anything else, and Claude's restart of the connector each turn is no longer

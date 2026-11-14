@@ -43,6 +43,9 @@ your sandbox.
   Specify and the user decides.
 - For each important rule, break the code for a moment, see its test fail, restore the code and run it again: a
   test that cannot fail proves nothing.
+- **Every rule the user confirmed is enforced where the data is written** (the form and the save, not only the list
+  that shows it), with its test: what must never happen cannot be saved. A rule not built yet is a row of the open
+  questions page and goes under *Not settled*, never left unsaid.
 - No tests that check nothing (everything mocked, assertions that cannot fail).
 
 ## Code

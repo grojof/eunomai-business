@@ -59,7 +59,7 @@ to Propose.
 With `tests.available`, run the whole suite once on what is saved, `app_tests(workspace)` with no `tests`, calling it
 again while it says `running`, in the same turn: it must pass before the send, and a run of some files is not enough.
 A failure goes back to Build.
-`version_send(workspace)`, then `version_propose(workspace, <title>, <summary>)`. If it answers `created: false`,
+`version_send(workspace)`, then `version_propose(workspace=<workspace>, title=<title>, description=<the summary>)`. If it answers `created: false`,
 the pull request was already open: the version just sent updates it, and its description is replaced. The connector
 appends its own checks (the dependency audit, the tests on this computer, the knowledge pages) below your summary; do
 not repeat them.
