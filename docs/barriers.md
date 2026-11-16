@@ -41,7 +41,7 @@ project and its git server. See [project-practices.md](project-practices.md).
 | No versions until the repository has its main branch | A version must start from the shared history, not from nothing |
 | Workspace names are plain folder names, under `workspaces_root` only, never a Windows device name (`con`, `nul`, `com1`...) | No path tricks (`..`, absolute paths) |
 | Version names: parts of letters, digits and `. _ -` separated by `/`, each starting with a letter or digit, none ending in `.` or `.lock`, no `..` | Only names git accepts |
-| Every version's name ends with `--` and the signed-in account, written by the connector (`alta-de-pedidos--grojo`): accounts never hold two signs in a row, so the owner is what follows the last `--`. A name already on the server as theirs is not made again | Two people never make, send to or continue the same version; IT sees whose each one is |
+| Every version's name ends with `--` and the signed-in account, written by the connector (`alta-de-pedidos--jdoe`): accounts never hold two signs in a row, so the owner is what follows the last `--`. A name already on the server as theirs is not made again | Two people never make, send to or continue the same version; IT sees whose each one is |
 | `version_continue` brings only one of the person's own versions, only with nothing unsaved, and checks what it has beyond the main branch by the rules of a save before writing any of its files; a version with different saves here and on the server stops | One person goes on from another computer without leaving anything behind, and never with someone else's work |
 
 ## Bringing the latest changes

@@ -5,7 +5,7 @@
 Several people on one project, and one person on several computers.
 
 - **A version is one person's.** The connector ends every new version's name with `--` and the signed-in account
-  (`alta-de-pedidos--grojo`). Two people with the same goal no longer make the same version, nobody's connector sends
+  (`alta-de-pedidos--jdoe`). Two people with the same goal no longer make the same version, nobody's connector sends
   to another's, and IT sees whose each one is. A name with another account at its end is never sent. Versions made
   before keep working where they were made.
 - **Going on from another computer.** `version_continue` lists the person's versions on the server and brings the one

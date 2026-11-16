@@ -86,7 +86,7 @@ sequenceDiagram
 ## Several people, several computers
 
 Each version belongs to one person: its name ends with their account, which the connector writes
-(`alta-de-pedidos--grojo`). The main branch is the only thing people share, and what reaches it has been reviewed.
+(`alta-de-pedidos--jdoe`). The main branch is the only thing people share, and what reaches it has been reviewed.
 
 | Situation | What happens |
 |---|---|

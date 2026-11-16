@@ -459,7 +459,7 @@ resolved again, every compiled package checked for a wheel on Windows and Linux,
 ## 18 · A version is one person's
 
 Every version's name ends with `--` and the account of whoever made it, which the connector writes
-(`alta-de-pedidos--grojo`). A version is the person's when its name carries their account, on any computer: they go on
+(`alta-de-pedidos--jdoe`). A version is the person's when its name carries their account, on any computer: they go on
 with it from another one (`version_continue`), and nobody else's connector makes, sends to or continues it. The main
 branch stays the only thing people share. Pages of knowledge both sides changed are joined line by line when the
 changes do not meet; anything else still stops for IT.
@@ -478,7 +478,7 @@ changes do not meet; anything else still stops for IT.
 | Alternative | Why not |
 |---|---|
 | A number for a name already taken (`alta-de-pedidos-2`) | Two people could still take it at once, it says nothing about whose it is, and it does not let anyone go on from another computer |
-| The account as a folder (`grojo/alta-de-pedidos`) | A goal reads first in Gitea's lists and in the pull request |
+| The account as a folder (`jdoe/alta-de-pedidos`) | A goal reads first in Gitea's lists and in the pull request |
 | A merge library for the pages | The one dulwich uses, merge3, is GPL-2.0; joining lines that do not meet is a few lines of the standard library |
 | Joining code line by line too | Two edits that do not collide as text can still break each other |
 

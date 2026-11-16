@@ -403,7 +403,7 @@ def _author(current: dict) -> bytes:
 
 
 OWNER_MARK = "--"
-"""What separates a version's name from its owner's account: `alta-de-pedidos--grojo`. Git servers do not allow two
+"""What separates a version's name from its owner's account: `alta-de-pedidos--jdoe`. Git servers do not allow two
 signs in a row in an account (GitHub, Gitea), and the connector folds them in the part it writes, so the owner is
 whatever follows the last `--`, and no account is the end of another's."""
 
