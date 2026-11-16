@@ -60,19 +60,19 @@ def test_on_the_main_branch_the_latest_changes_arrive(signed_in, workspaces):
 @pytest.mark.parametrize("squash", [False, True], ids=["merge-commit", "squash"])
 def test_accepted_proposal_returns_to_the_main_branch(signed_in, workspaces, squash):
     name = f"accepted-{'squash' if squash else 'merge'}"
-    ws = proposed(signed_in, name, "draft/report", {"report.md": b"quarterly report\n"})
-    signed_in.accept(name, "draft/report", squash=squash)
+    ws = proposed(signed_in, name, "draft/report--tester", {"report.md": b"quarterly report\n"})
+    signed_in.accept(name, "draft/report--tester", squash=squash)
     result = gitops.update(name)
     assert result["status"] == "updated" and result["branch"] == "main"
-    assert result["retired_version"] == "draft/report" and local_branches(ws) == {"main"}
+    assert result["retired_version"] == "draft/report--tester" and local_branches(ws) == {"main"}
     assert (ws / "report.md").read_bytes() == b"quarterly report\n"
     assert "accepted" in result["user_message"]
-    assert any(ref.endswith("/draft/report") for ref in backups(ws))  # the retired version can still be recovered
+    assert any(ref.endswith("/draft/report--tester") for ref in backups(ws))  # the retired version can still be recovered
 
 
 def test_unsaved_changes_are_saved_before_anything_else(signed_in, workspaces):
     ws = joined(signed_in, "unsaved")
-    gitops.branch("unsaved", "draft/draft")
+    gitops.branch("unsaved", "draft/draft--tester")
     (ws / "draft.md").write_bytes(b"not saved yet\n")
     signed_in.server_commit("unsaved", "main", {"news.md": b"news\n"})
     result = gitops.update("unsaved")
@@ -91,12 +91,12 @@ def test_edits_made_on_the_main_branch_go_to_a_new_version(signed_in, workspaces
 
 def test_main_moved_on_and_combines_cleanly(signed_in, workspaces):
     ws = joined(signed_in, "combine")
-    gitops.branch("combine", "draft/mine")
+    gitops.branch("combine", "draft/mine--tester")
     (ws / "mine.md").write_bytes(b"mine\n")
     gitops.save("combine", "Mine")
     signed_in.server_commit("combine", "main", {"theirs.md": b"theirs\n"})
     result = gitops.update("combine")
-    assert result["status"] == "updated" and result["branch"] == "draft/mine"
+    assert result["status"] == "updated" and result["branch"] == "draft/mine--tester"
     assert (ws / "mine.md").read_bytes() == b"mine\n" and (ws / "theirs.md").read_bytes() == b"theirs\n"
     with gitops._open(str(ws)) as repo:
         assert len(repo[repo.head()].parents) == 2
@@ -106,7 +106,7 @@ def test_bringing_the_latest_says_what_arrived(signed_in, workspaces):
     """In a Cowork test IT updated an application's look while the person was working: the update was combined, and
     the person was never told why the application looked different."""
     ws = joined(signed_in, "arrived")
-    gitops.branch("arrived", "draft/mine")
+    gitops.branch("arrived", "draft/mine--tester")
     (ws / "mine.md").write_bytes(b"mine\n")
     gitops.save("arrived", "Mine")
     signed_in.server_commit("arrived", "main", {"theme.css": b"a\n"}, message="New look from IT\n\nThe details.")
@@ -123,7 +123,7 @@ def test_a_note_for_people_is_told_in_its_authors_words(signed_in, workspaces):
     """A title such as "Up to date with the template (25f7f82)" told a person in sales nothing: whoever makes the change
     writes what it means to them, and that is what reaches them."""
     ws = joined(signed_in, "noted")
-    gitops.branch("noted", "draft/mine")
+    gitops.branch("noted", "draft/mine--tester")
     (ws / "mine.md").write_bytes(b"mine\n")
     gitops.save("noted", "Mine")
     note = "Your application has the organization's new look. Nothing to do."
@@ -154,7 +154,7 @@ def test_on_the_main_branch_and_on_an_empty_version_it_also_says_what_arrived(si
     signed_in.server_commit("arrived-main", "main", {"a.md": b"a\n"}, message="Fix the totals")
     assert gitops.update("arrived-main")["arrived"] == ["Fix the totals"]
     joined(signed_in, "arrived-empty")
-    gitops.branch("arrived-empty", "draft/idea")
+    gitops.branch("arrived-empty", "draft/idea--tester")
     signed_in.server_commit("arrived-empty", "main", {"b.md": b"b\n"}, message="New report")
     assert gitops.update("arrived-empty")["arrived"] == ["New report"]
 
@@ -162,7 +162,7 @@ def test_on_the_main_branch_and_on_an_empty_version_it_also_says_what_arrived(si
 def test_a_conflict_stops_without_touching_anything(signed_in, workspaces, monkeypatch):
     monkeypatch.setenv("EUNOMAI_SUPPORT_EMAIL", "it@example.test")
     ws = joined(signed_in, "conflict")
-    gitops.branch("conflict", "draft/edit")
+    gitops.branch("conflict", "draft/edit--tester")
     (ws / "README.md").write_bytes(b"# Sandbox\n\nMy notes.\n")
     gitops.save("conflict", "Edit the README")
     signed_in.server_commit("conflict", "main", {"README.md": b"# Sandbox\n\nTheir notes.\n"})
@@ -184,7 +184,7 @@ def test_edits_to_different_lines_of_the_same_file_are_not_combined(signed_in, w
     ws = joined(signed_in, "same-file")
     signed_in.server_commit("same-file", "main", {"list.md": b"one\ntwo\nthree\nfour\nfive\n"})
     gitops.update("same-file")
-    gitops.branch("same-file", "draft/top")
+    gitops.branch("same-file", "draft/top--tester")
     (ws / "list.md").write_bytes(b"ONE\ntwo\nthree\nfour\nfive\n")
     gitops.save("same-file", "Top line")
     signed_in.server_commit("same-file", "main", {"list.md": b"one\ntwo\nthree\nfour\nFIVE\n"})
@@ -195,7 +195,7 @@ def test_edits_to_different_lines_of_the_same_file_are_not_combined(signed_in, w
 
 def test_identical_changes_on_both_sides_combine(signed_in, workspaces):
     ws = joined(signed_in, "identical")
-    gitops.branch("identical", "draft/same")
+    gitops.branch("identical", "draft/same--tester")
     (ws / "shared.md").write_bytes(b"same text\n")
     gitops.save("identical", "Same file")
     signed_in.server_commit("identical", "main", {"shared.md": b"same text\n", "other.md": b"other\n"})
@@ -204,8 +204,8 @@ def test_identical_changes_on_both_sides_combine(signed_in, workspaces):
 
 
 def test_a_version_changed_elsewhere_stops(signed_in, workspaces):
-    ws = proposed(signed_in, "elsewhere", "draft/shared", {"a.md": b"a\n"})
-    signed_in.server_commit("elsewhere", "draft/shared", {"b.md": b"from another computer\n"})
+    ws = proposed(signed_in, "elsewhere", "draft/shared--tester", {"a.md": b"a\n"})
+    signed_in.server_commit("elsewhere", "draft/shared--tester", {"b.md": b"from another computer\n"})
     (ws / "c.md").write_bytes(b"c\n")
     gitops.save("elsewhere", "Local change")
     signed_in.server_commit("elsewhere", "main", {"news.md": b"news\n"})
@@ -250,22 +250,22 @@ def test_an_unexpected_error_reaches_it_not_the_user(monkeypatch):
 
 def test_a_version_with_nothing_saved_just_moves_to_the_latest(signed_in, workspaces):
     ws = joined(signed_in, "empty-version")
-    gitops.branch("empty-version", "draft/idea")
+    gitops.branch("empty-version", "draft/idea--tester")
     signed_in.server_commit("empty-version", "main", {"news.md": b"news\n"})
     result = gitops.update("empty-version")
-    assert result["status"] == "updated" and result["branch"] == "draft/idea" and "retired_version" not in result
+    assert result["status"] == "updated" and result["branch"] == "draft/idea--tester" and "retired_version" not in result
     assert (ws / "news.md").exists() and "accepted" not in result["user_message"]
 
 
 def test_versions_never_stack_on_another_version(signed_in, workspaces):
     joined(signed_in, "stack")
-    gitops.branch("stack", "draft/one")
+    gitops.branch("stack", "draft/one--tester")
     with pytest.raises(PermissionError, match="start from the main branch"):
-        gitops.branch("stack", "draft/two")
+        gitops.branch("stack", "draft/two--tester")
 
 
 def test_the_status_shows_the_versions_proposal(signed_in, workspaces):
-    proposed(signed_in, "with-proposal", "draft/x", {"x.md": b"x\n"})
+    proposed(signed_in, "with-proposal", "draft/x--tester", {"x.md": b"x\n"})
     status = tools._safe(tools._status, "with-proposal")
     assert status["proposal"]["state"] == "open" and status["proposal"]["merged"] is False
     assert status["proposal"]["review"] == {"decision": "none", "complete": True, "requests": []}
@@ -352,19 +352,19 @@ def test_a_review_read_in_part_says_so(signed_in, workspaces):
 
 
 def test_a_closed_proposal_has_no_review(signed_in, workspaces):
-    proposed(signed_in, "closed-one", "draft/c", {"x.md": b"x\n"})
+    proposed(signed_in, "closed-one", "draft/c--tester", {"x.md": b"x\n"})
     next(p for p in signed_in.pulls if p["repo"] == "closed-one")["state"] = "closed"
     assert "review" not in tools._safe(tools._status, "closed-one")["proposal"]
 
 
 def test_sending_never_overwrites_the_server(signed_in, workspaces):
-    ws = proposed(signed_in, "no-force", "draft/v", {"a.md": b"a\n"})
-    elsewhere = signed_in.server_commit("no-force", "draft/v", {"b.md": b"from another computer\n"})
+    ws = proposed(signed_in, "no-force", "draft/v--tester", {"a.md": b"a\n"})
+    elsewhere = signed_in.server_commit("no-force", "draft/v--tester", {"b.md": b"from another computer\n"})
     (ws / "c.md").write_bytes(b"c\n")
     gitops.save("no-force", "Local change")
     result = tools._safe(gitops.push, "no-force", gitops.project_files("no-force")["tip"])
     assert result["status"] == "needs_it" and "changes this computer does not have" in result["it_report"]
-    assert signed_in.repos["no-force"].refs[b"refs/heads/draft/v"] == elsewhere
+    assert signed_in.repos["no-force"].refs[b"refs/heads/draft/v--tester"] == elsewhere
 
 
 def test_an_edit_during_the_update_is_never_overwritten(signed_in, workspaces, monkeypatch):
@@ -420,7 +420,7 @@ def test_the_settings_and_the_preview_say_when_it_has_changes_not_brought_yet(si
     from eunomai_business import preview, settings
 
     ws = joined(signed_in, "waiting")
-    gitops.branch("waiting", "draft/mine")
+    gitops.branch("waiting", "draft/mine--tester")
     (ws / "mine.md").write_bytes(b"mine\n")
     gitops.save("waiting", "Mine")
     assert tools._specialist_settings("waiting")["latest_changes"] == {"waiting": False}

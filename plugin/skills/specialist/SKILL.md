@@ -63,6 +63,7 @@ the tools again. Meanwhile, carry on with what needs no connector, such as under
 | Found | Stage |
 |---|---|
 | No project yet, the person wants something new | 1 Understand without a project, then the request for IT |
+| On the main branch, and the person speaks of work they already started (on another computer, or before) | `version_continue(workspace)` lists their versions on the server; with the one they choose, `version_continue(workspace, <name>)`, then read this table again |
 | On the main branch, no open change | 1 Understand; a new version starts there |
 | A version whose pull request is open and `review.decision` is `changes_requested` | Rework: an open `<name>-review` change continues at its own stage; otherwise `specialist-deliver`, *After the review* |
 | A version whose pull request is open, any other `review.decision` | Waiting for review: say so, with any comments in plain words. A new request waits, or joins this pull request if it belongs to it (ask) |

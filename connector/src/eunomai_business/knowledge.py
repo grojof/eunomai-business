@@ -46,6 +46,12 @@ def is_read(path: str) -> bool:
     return is_page(path) or is_spec(path) or is_proposed_spec(path)
 
 
+def merges_by_line(path: str) -> bool:
+    """A page two people may both change and have joined line by line when the lines do not meet: the application's
+    own pages and anything written in openspec/. Code, configuration and the base's reference never are."""
+    return is_page(path) or (path.startswith("openspec/") and path.endswith(".md"))
+
+
 def frontmatter(text: str) -> dict[str, str] | None:
     """The page's frontmatter, or None without one: each top-level key with its value on one line, a list written as
     `[a, b]` over one or more lines or as `- a` lines below its key. Only what the check reads; keys in lowercase."""

@@ -54,7 +54,7 @@ def project_with_tests(server, some: bool = False, **environment) -> str:
     server.server_commit(name, "main", {"pyproject.toml": PYPROJECT, "uv.lock": LOCK, "runner.py": RUNNER, **TEST_FILES,
                                         ".eunomai/project.toml": declaration_of_tests(some, **environment)})
     gitops.clone(f"{server.url}/me/{name}.git")
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     return name
 
 
@@ -166,7 +166,7 @@ def test_a_project_that_declares_no_tests_is_told_so(signed_in, workspaces, test
     signed_in.initialize(name)
     signed_in.server_commit(name, "main", {".eunomai/project.toml": b"[development]\ncode = true\n"})
     gitops.clone(f"{signed_in.url}/me/{name}.git")
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     assert tools.app_tests(name)["status"] == "not_declared"
 
 
@@ -264,7 +264,7 @@ def test_tests_leave_a_running_preview_alone(signed_in, workspaces, tests_on, mo
                                            "message.txt": b"saved\n", "runner.py": RUNNER,
                                            ".eunomai/project.toml": declaration(pids) + b'\n[tests]\nrun = ["python", "runner.py"]\n'})
     gitops.clone(f"{signed_in.url}/me/{name}.git")
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     shown = show(name)
     assert shown["status"] == "ready"
     assert run(name)["status"] == "done"

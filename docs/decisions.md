@@ -47,9 +47,9 @@ computers have Git with settings of their own (Git for Windows's `core.autocrlf=
 - **Rejected for now:** requiring Git for Windows (installation, varying settings). **To reconsider before 1.0:**
   MinGit, a portable Git distributed per user.
 - **Consequence:** dulwich runs some hooks whatever it is told, so the connector disables them all itself.
-- **No line-level merging:** combining two edits of the same file needs a merge library, and two edits that do
-  not collide as text can still break each other. The connector combines only changes to different files; the
-  rest goes to IT.
+- **Line-level merging only for pages:** two edits of code that do not collide as text can still break each other,
+  so the connector combines changes to different files, and joins one file both sides changed only when it is a page
+  of knowledge and the changes are on other lines ([18](#18--a-version-is-one-persons)); the rest goes to IT.
 
 ## 4 · Configuration at build time, by IT
 
@@ -455,3 +455,32 @@ there; the base keeps its own in its `.python-version`.
 
 **Consequence:** moving to the next version is a release like any other: the new number in `.python-version`, the lock
 resolved again, every compiled package checked for a wheel on Windows and Linux, and the whole suite.
+
+## 18 · A version is one person's
+
+Every version's name ends with `--` and the account of whoever made it, which the connector writes
+(`alta-de-pedidos--jdoe`). A version is the person's when its name carries their account, on any computer: they go on
+with it from another one (`version_continue`), and nobody else's connector makes, sends to or continues it. The main
+branch stays the only thing people share. Pages of knowledge both sides changed are joined line by line when the
+changes do not meet; anything else still stops for IT.
+
+**Why.**
+
+| Reason | Evidence |
+|---|---|
+| Two people with the same goal named their versions alike, and the second send stopped as "changed elsewhere" | The connector only knew the versions made on one computer |
+| A person could not go on with their own work from another computer | The same list, kept per computer |
+| Two people explaining their business both change the same few pages (context, glossary, open questions) | An application's knowledge starts as one page per kind ([16](#16--an-applications-knowledge-lives-in-its-repository-by-kind)) |
+| `--` names the owner without doubt | GitHub and Gitea do not allow two signs in a row in an account, and the connector folds them in what it writes |
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| A number for a name already taken (`alta-de-pedidos-2`) | Two people could still take it at once, it says nothing about whose it is, and it does not let anyone go on from another computer |
+| The account as a folder (`jdoe/alta-de-pedidos`) | A goal reads first in Gitea's lists and in the pull request |
+| A merge library for the pages | The one dulwich uses, merge3, is GPL-2.0; joining lines that do not meet is a few lines of the standard library |
+| Joining code line by line too | Two edits that do not collide as text can still break each other |
+
+**Consequence:** versions made before carry no account and keep working where they were made. IT sees whose each
+version is in its name.

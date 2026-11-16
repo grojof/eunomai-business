@@ -181,7 +181,7 @@ def ready_project(server, computer: dict, tmp_path: Path, connector: Connector, 
         files.update({"app.py": LIVE, "migrate.py": MIGRATE, ".eunomai/project.toml": live_declaration(pids)})
     server.server_commit(name, "main", {**files, **(extra or {})})
     connector.tool("workspace_clone", repo_url=f"{server.url}/me/{name}.git")
-    assert connector.tool("version_create", workspace=name, name="draft/work").get("status") != "needs_it"
+    assert connector.tool("version_create", workspace=name, name="draft/work--tester").get("status") != "needs_it"
     return name, pids
 
 

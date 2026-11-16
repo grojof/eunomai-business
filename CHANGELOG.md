@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.5 (2026-11-16)
+
+Several people on one project, and one person on several computers.
+
+- **A version is one person's.** The connector ends every new version's name with `--` and the signed-in account
+  (`alta-de-pedidos--jdoe`). Two people with the same goal no longer make the same version, nobody's connector sends
+  to another's, and IT sees whose each one is. A name with another account at its end is never sent. Versions made
+  before keep working where they were made.
+- **Going on from another computer.** `version_continue` lists the person's versions on the server and brings the one
+  they choose, as last sent, or as saved here if this computer has more; never with unsaved changes, never someone
+  else's, and checked by the rules of a save before any of its files is written. Back on the first computer,
+  `workspace_update` catches up first; saves on both computers, one of them not sent, stop for IT.
+- **Pages both people changed are joined.** When the version and the main branch changed the same page of knowledge
+  (the application's own `docs/` pages and `openspec/`) on lines that do not meet, `workspace_update` joins them and
+  says which (`combined`). The same or neighbouring lines, and any other file, still stop for IT. The join is the
+  connector's own, a few lines of the standard library: the merge library dulwich would use is GPL-2.0.
+- **The specialist** goes on with a version when the person speaks of work already started, and keeps the change's
+  name without the account.
+
 ## 0.2.4 (2026-11-14)
 
 Loose ends from the Cowork sessions: what a preview says about its end is what is certain, a deleted project leaves

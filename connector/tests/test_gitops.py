@@ -35,7 +35,7 @@ def test_user_joins_saves_sends_and_proposes(signed_in, workspaces):
     assert b"\r\n" not in (ws / "README.md").read_bytes()
     assert "autocrlf = false" in (ws / ".git" / "config").read_text()
 
-    gitops.branch("joined", "draft/first")
+    gitops.branch("joined", "draft/first--tester")
     with open(ws / "README.md", "ab") as readme:
         readme.write("Línea añadida: canción, pingüino.\n".encode())
     (ws / "notes").mkdir()
@@ -54,10 +54,10 @@ def test_user_joins_saves_sends_and_proposes(signed_in, workspaces):
     assert sent["pushed"]
 
     proposal = gitops.pull_request("joined", "Proposal", "Made in Cowork")
-    assert proposal["created"] and proposal["base"] == "main" and proposal["head"] == "draft/first"
+    assert proposal["created"] and proposal["base"] == "main" and proposal["head"] == "draft/first--tester"
     assert gitops.pull_request("joined", "Proposal")["created"] is False
 
-    head = bare[bare.refs[b"refs/heads/draft/first"]]
+    head = bare[bare.refs[b"refs/heads/draft/first--tester"]]
     _, sha = tree_lookup_path(bare.__getitem__, head.tree, b"README.md")
     assert "canción, pingüino" in bare[sha].data.decode("utf-8")
     assert head.parents == [bare.refs[b"refs/heads/main"]]
@@ -172,7 +172,7 @@ def test_config_written_during_an_operation_never_runs_a_command(signed_in, work
 
     initialize(signed_in, "race")
     ws = Path(gitops.clone(f"{signed_in.url}/me/race.git")["path"])
-    gitops.branch("race", "draft/race")
+    gitops.branch("race", "draft/race--tester")
     marker = tmp_path / "filter-ran"
     script = tmp_path / "evil.py"
     script.write_text(f"import sys\nopen(r'{marker}', 'w').write('ran')\nsys.stdout.write(sys.stdin.read())\n")

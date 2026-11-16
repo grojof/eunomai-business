@@ -193,7 +193,7 @@ def test_the_whole_path_needs_neither_git_nor_a_python(signed_in, workspaces, tu
     name, url = project(signed_in, application(pids))
     ws = Path(tools.workspace_clone(url)["path"])
     assert (ws / ".git").is_dir()
-    assert tools.version_create(name, "draft/work").get("status") != "needs_it"
+    assert tools.version_create(name, "draft/work--tester").get("status") != "needs_it"
     (ws / "message.txt").write_bytes(b"changed\n")
     assert tools.version_save(name, "A change").get("status") != "needs_it"
     assert tools.dependency_audit(name)["verdict"] == "allowed"
@@ -239,7 +239,7 @@ def test_a_python_that_cannot_be_downloaded_names_the_addresses_and_the_version(
     monkeypatch.setattr(deps, "audit", lambda folder: dict(ALLOWED))
     name, url = project(signed_in, application(pids, **{".python-version": b"3.13\n"}))
     gitops.clone(url)
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     answer = show(name)
     assert answer["status"] == "needs_it", answer
     plain(answer["user_message"])
@@ -258,7 +258,7 @@ def test_a_package_that_cannot_be_downloaded_names_the_address(
     name, url = project(signed_in, application(pids, **{"pyproject.toml": PACKAGE_PROJECT,
                                                         "uv.lock": PACKAGE_LOCK.replace("HOST", host).encode()}))
     gitops.clone(url)
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     answer = show(name)
     assert answer["status"] == "needs_it", answer
     plain(answer["user_message"])
@@ -298,7 +298,7 @@ def test_an_audit_that_cannot_get_out_names_the_address(signed_in, workspaces, t
     name, url = project(signed_in, application(pids, **{"pyproject.toml": PACKAGE_PROJECT, "uv.lock": PACKAGE_LOCK.replace(
         "HOST", "files.pythonhosted.org").encode()}))
     ws = Path(gitops.clone(url)["path"])
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     (ws / "notes.md").write_bytes(b"Work.\n")
     gitops.save(name, "Work")
     answer = show(name) if tool == "preview" else tools.version_send(name)
@@ -321,7 +321,7 @@ def test_a_source_host_the_network_closes_is_not_a_fault_of_the_packages(signed_
     monkeypatch.setattr(deps, "audit", lambda folder: audited(CLOSED, {**CLOSED, "package": "beta"}))
     name, url = project(signed_in, application(pids))
     ws = Path(gitops.clone(url)["path"])
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     (ws / "notes.md").write_bytes(b"Work.\n")
     gitops.save(name, "Work")
     answer = tools.version_send(name)
@@ -342,7 +342,7 @@ def test_a_failure_with_no_address_stays_as_it_was(signed_in, workspaces, pids, 
     """A server's answer that is incomplete names no address, and there is nothing for IT to allow."""
     name, url = project(signed_in, application(pids))
     ws = Path(gitops.clone(url)["path"])
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     (ws / "notes.md").write_bytes(b"Work.\n")
     gitops.save(name, "Work")
 
