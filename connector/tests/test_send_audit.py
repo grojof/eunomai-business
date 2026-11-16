@@ -30,14 +30,14 @@ def project(server, declaration: bytes | None = CODE) -> tuple[str, Path]:
     if declaration is not None:
         server.server_commit(name, "main", {".eunomai/project.toml": declaration})
     ws = Path(gitops.clone(f"{server.url}/me/{name}.git")["path"])
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     (ws / "notes.md").write_bytes(b"Real work.\n")
     gitops.save(name, "Work")
     return name, ws
 
 
 def on_server(server, name: str) -> bool:
-    return b"refs/heads/draft/work" in server.repos[name].refs
+    return b"refs/heads/draft/work--tester" in server.repos[name].refs
 
 
 def audit_answers(monkeypatch, *answers) -> list:
@@ -231,7 +231,7 @@ def test_a_proposal_says_which_commit_was_audited(signed_in, workspaces, monkeyp
     tools.version_send(name)
     tools.version_propose(name, "Change", "Summary")
     head = gitops.saved_head(name)
-    assert head == signed_in.repos[name].refs[b"refs/heads/draft/work"].decode()
+    assert head == signed_in.repos[name].refs[b"refs/heads/draft/work--tester"].decode()
     assert f"`{head[:12]}`" in signed_in.pulls[-1]["body"]
 
 
@@ -260,13 +260,13 @@ def test_a_blocked_save_after_a_send_cannot_reach_review_behind_the_commit_that_
     name, ws = project(signed_in)
     audit_answers(monkeypatch, ALLOWED)
     assert tools.version_send(name)["pushed"]
-    sent = signed_in.repos[name].refs[b"refs/heads/draft/work"]
+    sent = signed_in.repos[name].refs[b"refs/heads/draft/work--tester"]
     (ws / "more.md").write_bytes(b"More.\n")
     gitops.save(name, "A blocked package")
     audit_answers(monkeypatch, BLOCKED)
     assert tools.version_propose(name, "Change", "Summary")["status"] == "not_sent"
     assert tools.version_send(name)["status"] == "audit_refused"
-    assert signed_in.repos[name].refs[b"refs/heads/draft/work"] == sent and not signed_in.pulls_of(name)
+    assert signed_in.repos[name].refs[b"refs/heads/draft/work--tester"] == sent and not signed_in.pulls_of(name)
     audit_answers(monkeypatch, ALLOWED)
     gitops._audits.clear()
     assert tools.version_send(name)["pushed"] and tools.version_propose(name, "Change", "Summary")["created"]
@@ -278,7 +278,7 @@ def test_what_was_audited_is_what_goes_even_if_the_reference_moves_during_the_se
     (ws / "bad.txt").write_bytes(b"bad\n")
     gitops.save(name, "Bad")
     bad = gitops.saved_head(name)
-    ref = ws / ".git" / "refs" / "heads" / "draft" / "work"
+    ref = ws / ".git" / "refs" / "heads" / "draft" / "work--tester"
     ref.write_bytes(good.encode() + b"\n")  # the sandbox can write this
     audit_answers(monkeypatch, ALLOWED)
     real = gitops._send_commit
@@ -289,7 +289,7 @@ def test_what_was_audited_is_what_goes_even_if_the_reference_moves_during_the_se
 
     monkeypatch.setattr(gitops, "_send_commit", the_sandbox_moves_it)
     tools.version_send(name)
-    assert signed_in.repos[name].refs[b"refs/heads/draft/work"].decode() == good
+    assert signed_in.repos[name].refs[b"refs/heads/draft/work--tester"].decode() == good
 
 
 def test_a_send_still_never_forces(signed_in, workspaces, monkeypatch):
@@ -298,13 +298,13 @@ def test_a_send_still_never_forces(signed_in, workspaces, monkeypatch):
     name, ws = project(signed_in)
     audit_answers(monkeypatch, ALLOWED)
     gitops.push(name, gitops.project_files(name)["tip"])
-    signed_in.server_commit(name, "draft/work", {"other.md": b"Changed elsewhere.\n"})
+    signed_in.server_commit(name, "draft/work--tester", {"other.md": b"Changed elsewhere.\n"})
     (ws / "more.md").write_bytes(b"More.\n")
     gitops.save(name, "More")
-    server_head = signed_in.repos[name].refs[b"refs/heads/draft/work"]
+    server_head = signed_in.repos[name].refs[b"refs/heads/draft/work--tester"]
     with pytest.raises(NeedsIT, match="server has changes"):
         gitops.push(name, gitops.project_files(name)["tip"])
-    assert signed_in.repos[name].refs[b"refs/heads/draft/work"] == server_head
+    assert signed_in.repos[name].refs[b"refs/heads/draft/work--tester"] == server_head
 
 
 # --- the test environment ----------------------------------------------------------------------------------------
@@ -332,7 +332,7 @@ def test_the_test_environment_gets_the_commit_that_was_audited(signed_in, worksp
     (ws / "bad.txt").write_bytes(b"bad\n")
     gitops.save(name, "Bad")
     bad = gitops.saved_head(name)
-    ref = ws / ".git" / "refs" / "heads" / "draft" / "work"
+    ref = ws / ".git" / "refs" / "heads" / "draft" / "work--tester"
     with gitops._repo(name) as repo:
         gitops.porcelain.reset(repo, "hard", good.encode())  # a clean version, at the commit the audit will see
     audit_answers(monkeypatch, ALLOWED)
@@ -384,7 +384,7 @@ def test_a_saved_link_is_copied_as_a_plain_file_never_as_a_link(signed_in, works
         commit = repo[repo.head()]
         commit.tree = getattr(tree, "id", tree)
         repo.object_store.add_object(commit)
-        repo.refs[b"refs/heads/draft/work"] = commit.id
+        repo.refs[b"refs/heads/draft/work--tester"] = commit.id
     target = tmp_path / "copy"
     gitops.export_saved(name, target, gitops.project_files(name)["tip"])
     assert not (target / "link").is_symlink() and (target / "link").read_bytes() == b"../../somewhere/secret"
@@ -404,7 +404,7 @@ def test_a_path_that_leaves_the_copy_stops_it(signed_in, workspaces, tmp_path):
         commit.tree = evil.id
         for item in (blob, Tree(), evil, commit):
             repo.object_store.add_object(item)
-        repo.refs[b"refs/heads/draft/work"] = commit.id
+        repo.refs[b"refs/heads/draft/work--tester"] = commit.id
     with pytest.raises(support.NeedsIT):
         gitops.export_saved(name, tmp_path / "copy", gitops.project_files(name)["tip"])
     assert not (workspaces.parent / "con.txt").exists()
@@ -431,7 +431,7 @@ def forge(ws: Path, name: str, files: dict) -> str:
         commit.commit_timezone = commit.author_timezone = 0
         commit.message = b"forged"
         repo.object_store.add_object(commit)
-        repo.refs[b"refs/heads/draft/work"] = commit.id
+        repo.refs[b"refs/heads/draft/work--tester"] = commit.id
         return commit.id.decode()
 
 
@@ -506,7 +506,7 @@ def test_a_server_that_refuses_the_update_is_told_plainly(signed_in, workspaces,
     name, _ = project(signed_in)
     audit_answers(monkeypatch, ALLOWED)
     monkeypatch.setattr(gitops, "_send_commit", lambda *args: SimpleNamespace(
-        ref_status={b"refs/heads/draft/work": "failed to update ref"}))
+        ref_status={b"refs/heads/draft/work--tester": "failed to update ref"}))
     answer = tools.version_send(name)
     assert answer["status"] == "needs_it" and "did not accept" in answer["user_message"]
 
@@ -515,11 +515,11 @@ def test_a_proposal_audits_the_commit_it_compared_not_one_read_later(signed_in, 
     name, ws = project(signed_in)
     audit_answers(monkeypatch, ALLOWED)
     tools.version_send(name)
-    held = signed_in.repos[name].refs[b"refs/heads/draft/work"].decode()
+    held = signed_in.repos[name].refs[b"refs/heads/draft/work--tester"].decode()
     (ws / "more.md").write_bytes(b"More.\n")
     gitops.save(name, "Saved, never sent")
     other = gitops.saved_head(name)
-    ref = ws / ".git" / "refs" / "heads" / "draft" / "work"
+    ref = ws / ".git" / "refs" / "heads" / "draft" / "work--tester"
     ref.write_bytes(held.encode() + b"\n")
     real = gitops.saved_head
 
@@ -710,8 +710,17 @@ def unrecorded(name: str) -> None:
     (gitops.data_dir() / "workspaces.json").write_text(json.dumps(registry), encoding="utf-8")
 
 
+def named_before_owners(name: str, branch: str = "draft/work") -> None:
+    """A version made before the connector wrote its owner's account at the end of a version's name."""
+    with gitops._repo(name) as repo:
+        repo.refs[f"refs/heads/{branch}".encode()] = repo.refs[b"refs/heads/draft/work--tester"]
+        repo.refs.set_symbolic_ref(b"HEAD", f"refs/heads/{branch}".encode())
+        del repo.refs[b"refs/heads/draft/work--tester"]
+
+
 def test_an_older_workspace_keeps_working_with_a_version_not_on_the_server_yet(signed_in, workspaces, monkeypatch):
     name, _ = project(signed_in)
+    named_before_owners(name)
     unrecorded(name)
     audit_answers(monkeypatch, ALLOWED)
     assert tools.version_send(name)["pushed"]
@@ -720,6 +729,7 @@ def test_an_older_workspace_keeps_working_with_a_version_not_on_the_server_yet(s
 
 def test_an_older_workspace_keeps_working_with_a_version_already_proposed(signed_in, workspaces, monkeypatch):
     name, ws = project(signed_in)
+    named_before_owners(name)
     audit_answers(monkeypatch, ALLOWED)
     tools.version_send(name)
     tools.version_propose(name, "Change", "Summary")
@@ -734,9 +744,9 @@ def test_a_retired_version_is_no_longer_a_version(signed_in, workspaces, monkeyp
     audit_answers(monkeypatch, ALLOWED)
     tools.version_send(name)
     tools.version_propose(name, "Change", "Summary")
-    signed_in.accept(name, "draft/work")
+    signed_in.accept(name, "draft/work--tester")
     gitops.update(name)
-    assert "draft/work" not in gitops._registry()[gitops.key(name)].get("versions", [])
+    assert "draft/work--tester" not in gitops._registry()[gitops.key(name)].get("versions", [])
 
 
 def test_push_needs_the_main_branch(signed_in, workspaces):

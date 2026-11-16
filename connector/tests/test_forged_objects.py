@@ -40,7 +40,7 @@ def project(server, declaration=CODE, extra=None):
     server.server_commit(name, "main", {".eunomai/project.toml": declaration, "AGENTS.md": AGENTS,
                                         ".gitea/workflows/ci.yml": CI, **(extra or {})})
     ws = Path(gitops.clone(f"{server.url}/me/{name}.git")["path"])
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     (ws / "notes.md").write_bytes(b"Real work.\n")
     gitops.save(name, "Work")
     return name, ws
@@ -84,7 +84,7 @@ def order(entry):
 
 
 def point(ws, sha):
-    (ws / ".git" / "refs" / "heads" / "draft" / "work").write_bytes(sha.encode() + b"\n")
+    (ws / ".git" / "refs" / "heads" / "draft" / "work--tester").write_bytes(sha.encode() + b"\n")
 
 
 def a_twin(ws, name, target, wrong, carried_as=b"sample.txt", mode=FILE):
@@ -99,7 +99,7 @@ def a_twin(ws, name, target, wrong, carried_as=b"sample.txt", mode=FILE):
     point(ws, raw_commit(ws, raw_tree(ws, sorted(entries, key=order)), [head]))
 
 
-def on_server(server, name, branch=b"refs/heads/draft/work"):
+def on_server(server, name, branch=b"refs/heads/draft/work--tester"):
     return branch in server.repos[name].refs
 
 
@@ -200,7 +200,7 @@ def test_a_proposal_of_such_a_tree_is_refused_though_the_server_already_holds_it
             server.object_store.add_object(obj)
             stack += [*obj.parents, obj.tree] if isinstance(obj, Commit) else []
             stack += [entry[2] for entry in obj.iteritems()] if obj.type_name == b"tree" else []
-    server.refs[b"refs/heads/draft/work"] = head.encode()
+    server.refs[b"refs/heads/draft/work--tester"] = head.encode()
     allowed(monkeypatch)
     answer = tools.version_propose(name, "Change", "Summary")
     assert answer["status"] == "needs_it" and not signed_in.pulls_of(name)

@@ -64,7 +64,7 @@ def version(server, declaration: bytes = DECLARED) -> tuple[str, Path]:
     server.initialize(name)
     server.server_commit(name, "main", {".eunomai/project.toml": declaration, "AGENTS.md": b"# Project\n"})
     ws = Path(gitops.clone(f"{server.url}/me/{name}.git")["path"])
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     (ws / "app.py").write_bytes(b"print('hola')\n")
     gitops.save(name, "Work")
     return name, ws
@@ -137,7 +137,7 @@ def test_a_version_forged_in_git_with_a_protected_file_is_not_sent(signed_in, wo
         commit.commit_timezone = commit.author_timezone = 0
         commit.message = b"forged"
         repo.object_store.add_object(commit)
-        repo.refs[b"refs/heads/draft/work"] = commit.id
+        repo.refs[b"refs/heads/draft/work--tester"] = commit.id
         repo.get_worktree().reset_index() if hasattr(repo, "get_worktree") else repo.reset_index()
     with pytest.raises(NeedsIT, match="protected or executable file") as stopped:
         tools._to_test(name)
@@ -157,7 +157,7 @@ def test_without_a_test_environment_nothing_is_sent(signed_in, workspaces, decla
 
 def test_never_the_main_branch_nor_onto_it(signed_in, workspaces):
     name, _ = version(signed_in)
-    for branch in ("main", "draft/work"):
+    for branch in ("main", "draft/work--tester"):
         with pytest.raises(PermissionError, match="cannot be the project's test branch"):
             gitops.to_test(name, branch)
     plain = f"plain-{uuid.uuid4().hex[:8]}"

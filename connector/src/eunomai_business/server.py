@@ -137,9 +137,19 @@ def workspace_update(workspace: str) -> dict:
 
 @mcp.tool()
 def version_create(workspace: str, name: str) -> dict:
-    """Create a version (branch) from the main branch and switch to it. Changed files are kept. Refused when the
-    workspace is already on a version: keep working on that one."""
+    """Create a version (branch) from the main branch and switch to it. Changed files are kept. Give only the goal
+    (`alta-de-pedidos`): the connector adds `--` and the signed-in account, and `branch` is the whole name. Refused when
+    the workspace is already on a version: keep working on that one."""
     return _safe(gitops.branch, workspace, name)
+
+
+@mcp.tool()
+def version_continue(workspace: str, name: str = "") -> dict:
+    """Go on here with one of the person's own versions: started on another computer, or here before. Without `name`,
+    `versions` lists theirs on the server (`name`, `last_save`, `saved_at`); with it, that version is brought and made
+    current, as last sent, or as saved here if this computer has more. Refused for another person's version and with
+    unsaved changes."""
+    return _safe(gitops.resume, workspace, name)
 
 
 @mcp.tool()

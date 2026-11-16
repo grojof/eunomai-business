@@ -66,7 +66,7 @@ def live_project(server, pids_file: Path) -> tuple[str, Path]:
                                         "migrate.py": MIGRATE, "message.txt": b"first\n",
                                         ".eunomai/project.toml": live_declaration(pids_file)})
     ws = Path(gitops.clone(f"{server.url}/me/{name}.git")["path"])
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     return name, ws
 
 

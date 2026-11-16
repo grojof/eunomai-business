@@ -19,6 +19,7 @@ import threading
 import time
 import unicodedata
 from contextlib import contextmanager
+from difflib import SequenceMatcher
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -29,7 +30,7 @@ from dulwich.config import ConfigFile, StackedConfig
 from dulwich.diff_tree import tree_changes
 from dulwich.errors import GitProtocolError, HangupException, NotGitRepository, NotTreeError, ObjectFormatException
 from dulwich.index import validate_path, validate_path_element_default, validate_path_element_ntfs
-from dulwich.merge import recursive_merge
+from dulwich.merge import Merger, recursive_merge
 from dulwich.object_store import iter_tree_contents
 from dulwich.objects import Blob, Commit, SubmoduleEncountered, Tree, parse_tree
 from dulwich.repo import ParentsProvider, Repo
@@ -401,6 +402,27 @@ def _author(current: dict) -> bytes:
     return f"{name} <{email}>".encode()
 
 
+OWNER_MARK = "--"
+"""What separates a version's name from its owner's account: `alta-de-pedidos--grojo`. Git servers do not allow two
+signs in a row in an account (GitHub, Gitea), and the connector folds them in the part it writes, so the owner is
+whatever follows the last `--`, and no account is the end of another's."""
+
+
+def _owner_part(current: dict) -> str:
+    """The signed-in account as a version's name carries it: lowercase, one sign between letters and digits."""
+    login = str(current["user"].get(current["cfg"]["login_field"]) or "").lower()
+    part = re.sub(r"[-._]{2,}", "-", re.sub(r"[^a-z0-9._-]+", "-", login)).strip("-._")
+    if not part:
+        raise PermissionError("the signed-in account has no name a version can carry; IT can look at it")
+    return part
+
+
+def _owner(name: str) -> str | None:
+    """Whose version a branch is, by its name: the account after the last `--`, or None for a name without one."""
+    left, mark, owner = name.rpartition(OWNER_MARK)
+    return owner.casefold() if mark and left and owner else None
+
+
 def _check_branch_name(name: str) -> None:
     parts = (name or "").split("/")
     if len(name or "") > 100 or not all(_BRANCH_PART.match(p) and not p.endswith((".", ".lock")) for p in parts) \
@@ -502,14 +524,23 @@ def status(workspace: str) -> dict:
 
 @_one_at_a_time
 def branch(workspace: str, name: str) -> dict:
-    """Create a version (branch) from the main branch and switch to it; local changes are kept."""
+    """Create a version (branch) from the main branch and switch to it; local changes are kept. Its name ends with the
+    signed-in account, which the connector adds: two people never make the same version, and its owner can go on
+    with it from another computer (`resume`)."""
     _check_branch_name(name)
+    mine = _owner_part(_git_session())
     with _repo(workspace) as repo:
         if name.lower() in {p.lower() for p in _protected(repo)}:  # Windows treats Main and main as one
             raise PermissionError(f"{name!r} is the repository's main branch, not a version")
+        if _owner(name) != mine:
+            name = f"{name.rstrip('-._')}{OWNER_MARK}{mine}"
+            _check_branch_name(name)
         ref = f"refs/heads/{name}".encode()
         if ref in repo.refs:
             raise FileExistsError(f"version {name!r} already exists")
+        if f"refs/remotes/origin/{name}".encode() in repo.refs:
+            raise FileExistsError(f"version {name!r} is already yours on the server: go on with it with "
+                                  "version_continue, or pick another name")
         previous = _branch(repo)
         if _main_branch(repo) is None or _head(repo) is None:
             raise PermissionError("the repository has no main branch yet: whoever manages it must initialize it "
@@ -521,6 +552,69 @@ def branch(workspace: str, name: str) -> dict:
         repo.refs.set_symbolic_ref(b"HEAD", ref)  # same commit, so the working tree stays as it is
         _note_version(repo, name)
         return {"workspace": workspace, "branch": name, "from": previous, "head": _head(repo)}
+
+
+def _when(commit: Commit) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(commit.commit_time))
+
+
+@_one_at_a_time
+def resume(workspace: str, name: str = "") -> dict:
+    """The signed-in person's versions on the server, or, with `name`, that one brought to this computer and made
+    current, to go on with it here: started on another computer, or here before. Only their own (the name ends with
+    their account), only with nothing unsaved, and what it has beyond the main branch is checked like a version that
+    is sent before any of its files is written."""
+    current = _git_session()
+    mine = _owner_part(current)
+    with _repo(workspace) as repo:
+        origin = _registered_origin(repo, workspace)
+        _check_host(origin, current)
+        client, path = get_transport_and_path(origin, **_remote(current))
+        fetched = _network(lambda: client.fetch(path.encode(), repo))
+        _track(repo, fetched.refs)
+        heads = {ref.removeprefix(b"refs/heads/").decode(): sha for ref, sha in fetched.refs.items()
+                 if ref.startswith(b"refs/heads/")}
+        versions = {version: sha for version, sha in heads.items() if _owner(version) == mine}
+        here = _branch(repo)
+        if not name:
+            listed = [{"name": version, "last_save": repo[sha].message.decode("utf-8", "replace").split("\n", 1)[0],
+                       "saved_at": _when(repo[sha])} for version, sha in sorted(versions.items())]
+            return {"workspace": workspace, "current": here, "versions": listed}
+        if _owner(name) != mine:
+            raise PermissionError(f"{name!r} is not one of your versions: only a version whose name ends with "
+                                  f"{OWNER_MARK}{mine} is yours to go on with")
+        if name not in versions:
+            raise FileNotFoundError(f"the server has no version {name!r}; call version_continue without a name to "
+                                    "list yours")
+        if here == name:
+            return {"workspace": workspace, "status": "already_here", "branch": name,
+                    "user_message": "You are already on this version here: workspace_update brings what you sent "
+                                    "from elsewhere."}
+        if _dirty(repo):
+            raise PermissionError("this computer has unsaved changes: save them in a version first, so nothing is "
+                                  "left behind")
+        main = _main_branch(repo)
+        remote_main = _ref(repo, f"refs/remotes/origin/{main}".encode()) if main else None
+        if remote_main is None:
+            raise NeedsIT("The project's main version is missing on the server. Your work is safe.",
+                          "main branch not found on the server", _facts(repo, workspace))
+        on_server = versions[name]
+        local = _ref(repo, f"refs/heads/{name}".encode())
+        if local is None or _is_ancestor(repo, local, on_server):
+            target = on_server
+        elif _is_ancestor(repo, on_server, local):  # saved here and not sent yet: kept, it is newer
+            target = local
+        else:
+            raise NeedsIT("This version has different saves here and on the server, so it was not changed. Your work "
+                          "is safe on both; IT can combine them.", "version diverged from its copy on the server",
+                          _facts(repo, workspace))
+        _check_changes(repo, workspace, target, remote_main.decode())
+        backup = _backup(repo, *(branch_name for branch_name in (here, name) if branch_name))
+        _move(repo, name, target, workspace)
+        _note_version(repo, name)
+        return {"workspace": workspace, "status": "continued", "branch": name, "from": here, "head": _head(repo),
+                "backup": backup, "last_save": repo[target].message.decode("utf-8", "replace").split("\n", 1)[0],
+                "user_message": "You are on your version again, as you last left it; go on from there."}
 
 
 @_one_at_a_time
@@ -788,15 +882,25 @@ def _check_changes(repo: Repo, workspace: str, commit: bytes, main: str) -> None
 
 
 def _check_version(repo: Repo, workspace: str, name: str, origin: str, current: dict) -> None:
-    """Only what this connector made as a version is sent: HEAD is in .git, and a branch of the server's is not the
-    sandbox's to choose. A workspace from before it kept them, or a version it lost track of, is taken as one if the
-    server has no such branch yet, or has a proposal from it; anything else goes to IT."""
-    if name in _registry().get(str(Path(repo.path).resolve()), {}).get("versions", []):
+    """Only the signed-in person's versions are sent: HEAD is in .git, and a branch of the server's is not the
+    sandbox's to choose. A version is theirs when its name ends with their account, which only their connector writes
+    (made here or on another computer), or when this connector made it before names carried one. A workspace from
+    before it kept them, or a version it lost track of, is taken as one if the server has no such branch yet, or has a
+    proposal from it; anything else goes to IT. Nothing is ever forced, so even their own version on the server is
+    only ever added to."""
+    owner = _owner(name)
+    if owner == _owner_part(current):
         return
-    client, path = get_transport_and_path(origin, **_remote(current))
-    advertised = _network(lambda: client.get_refs(path.encode()))
-    if f"refs/heads/{name}".encode() in (getattr(advertised, "refs", None) or {}) \
-            and not _proposal_for(origin, current, name):
+    if owner is None and name in _registry().get(str(Path(repo.path).resolve()), {}).get("versions", []):
+        return
+
+    def on_the_server() -> bool:
+        client, path = get_transport_and_path(origin, **_remote(current))
+        advertised = _network(lambda: client.get_refs(path.encode()))
+        return f"refs/heads/{name}".encode() in (getattr(advertised, "refs", None) or {})
+
+    # a name with another account at its end is never this person's, made or not
+    if owner is not None or (on_the_server() and not _proposal_for(origin, current, name)):
         raise NeedsIT("This copy of the project is on something that is not one of your versions, so nothing was sent. "
                       "Your work is safe on this computer; IT can look at it.", "a branch the connector did not create",
                       _facts(repo, workspace))
@@ -1051,6 +1155,40 @@ def _move(repo: Repo, branch_name: str, target: bytes, workspace: str) -> None:
     repo.refs[ref] = target
 
 
+def _hunks(base: list[bytes], other: list[bytes]) -> list[tuple[int, int, list[bytes]]]:
+    """What `other` changed in `base`: the lines replaced (from, to) and what took their place."""
+    matcher = SequenceMatcher(None, base, other, autojunk=False)
+    return [(i1, i2, other[j1:j2]) for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag != "equal"]
+
+
+def join_lines(base: bytes, ours: bytes, theirs: bytes) -> bytes | None:
+    """Both sides' changes to one text, when each changed lines the other left alone and not next to them, as git
+    does; None otherwise. Two changes that touch, or two additions at the same place, are never put in an order."""
+    if ours == theirs:
+        return ours
+    lines = base.splitlines(keepends=True)
+    mine, others = _hunks(lines, ours.splitlines(keepends=True)), _hunks(lines, theirs.splitlines(keepends=True))
+    if any(start <= other_end and other_start <= end
+           for start, end, _ in mine for other_start, other_end, _ in others):  # overlapping or next to each other
+        return None
+    joined, at = [], 0
+    for start, end, replacement in sorted(mine + others, key=lambda change: change[:2]):
+        joined += lines[at:start] + replacement
+        at = end
+    return b"".join(joined + lines[at:])
+
+
+class _PagesMerger(Merger):
+    """Joins a file both sides changed by its lines (join_lines), never with a merge driver nor another library: only
+    pages reach it (update checks that first), and anything it cannot join is a conflict, which stops for IT."""
+
+    def merge_blobs(self, base_blob, ours_blob, theirs_blob, path=None):
+        if base_blob is None or ours_blob is None or theirs_blob is None:  # added on both, or deleted on one side
+            return (ours_blob.data if ours_blob else b""), True
+        joined = join_lines(base_blob.data, ours_blob.data, theirs_blob.data)
+        return (ours_blob.data, True) if joined is None else (joined, False)
+
+
 NOTE_FOR_PEOPLE = "Note-for-people:"
 """A line in a commit's message, written by whoever made the change, for the people who build on the project: what it
 means to them, in their words. A title is written for whoever reviews it."""
@@ -1138,19 +1276,29 @@ def update(workspace: str) -> dict:
                                                       _what_arrived(brought)]).strip()}
 
         version_head = repo.refs[f"refs/heads/{name}".encode()]
+        on_server = _ref(repo, f"refs/remotes/origin/{name}".encode())
+        caught_up = False
+        if _owner(name) == _owner_part(current) and on_server not in (None, version_head) \
+                and _is_ancestor(repo, version_head, on_server):
+            # the person sent more of this version from another computer: this one catches up first, checked as a
+            # version is before its files are written
+            _check_changes(repo, workspace, on_server, remote_main.decode())
+            result["backup"] = _backup(repo, name)
+            _move(repo, name, on_server, workspace)
+            version_head, caught_up = on_server, True
+            notes.append("What you sent of this version from another computer is here too.")
         local_main = _ref(repo, f"refs/heads/{main}".encode())  # fetching does not move it
         if local_main is not None and _is_ancestor(repo, version_head, local_main):
             # nothing saved in the version yet: it is not a proposal, it just moves to the latest main branch
             if version_head == remote_main:
-                return {**result, "status": "up_to_date", "branch": name,
-                        "user_message": " ".join(notes + ["Everything is up to date."])}
+                return {**result, "status": "updated" if caught_up else "up_to_date", "branch": name,
+                        "head": _head(repo), "user_message": " ".join(notes + ["Everything is up to date."])}
             brought = _brought(repo, remote_main, version_head)
             result["backup"] = _backup(repo, name)
             _move(repo, name, remote_main, workspace)
             return {**result, "status": "updated", "branch": name, "head": _head(repo), **brought,
                     "user_message": " ".join(notes + ["The latest changes of the project are here.",
                                                       _what_arrived(brought)]).strip()}
-        on_server = _ref(repo, f"refs/remotes/origin/{name}".encode())
         proposal = _proposal_for(origin, current, name)
         merged = _is_ancestor(repo, version_head, remote_main) or bool(
             proposal and proposal["merged"] and proposal["head"] == version_head.decode())
@@ -1170,24 +1318,30 @@ def update(workspace: str) -> dict:
         if proposal and proposal["state"] == "closed" and not proposal["merged"]:
             notes.append("Your last proposal was closed without being accepted; your version is kept.")
         if _is_ancestor(repo, remote_main, version_head):  # the version already has everything
-            return {**result, "status": "up_to_date", "branch": name,
-                    "user_message": " ".join(notes + ["Everything is up to date."])}
+            return {**result, "status": "updated" if caught_up else "up_to_date", "branch": name,
+                    "head": _head(repo), "user_message": " ".join(notes + ["Everything is up to date."])}
 
-        # 4c. the main branch moved on: combine it into the version, only when no file was changed on both sides.
-        # Lines of the same file are never merged automatically: two edits that do not collide as text can still
-        # break each other, and that is not a call to make on the user's behalf.
+        # 4c. the main branch moved on: combine it into the version, only when no file was changed on both sides, or
+        # the only ones are pages of knowledge and their lines do not meet. Lines of any other file are never merged
+        # automatically: two edits of code that do not collide as text can still break each other, and that is not a
+        # call to make on the user's behalf. A page is read by people, and IT reviews the proposal it goes in.
         bases = _merge_bases(repo, version_head, remote_main)
         shared = _changed_on_both_sides(repo, bases, version_head, remote_main)
-        if shared:
+        if any(not knowledge.merges_by_line(path) for path in shared):
             raise NeedsIT("The latest changes of the project touch the same files as your version, so they are not "
                           "combined automatically. Your work is safe; IT can combine them.",
                           "the version and the main branch changed the same files",
                           _facts(repo, workspace, files=shared))
-        tree, conflicts = recursive_merge(repo.object_store, bases, repo[version_head], repo[remote_main])
-        if conflicts:  # cannot happen when no file changed on both sides; kept as a second safety net
-            raise NeedsIT("The latest changes of the project could not be combined with your version. Your work is "
-                          "safe; IT can combine them.", "merge conflict between the version and the main branch",
+        tree, conflicts = recursive_merge(repo.object_store, bases, repo[version_head], repo[remote_main],
+                                          merger=_PagesMerger(repo.object_store))
+        if conflicts:  # the same lines of a page; for any other file it cannot happen: a second safety net
+            raise NeedsIT("The latest changes of the project change the same lines of a page as your version, so they "
+                          "are not combined automatically. Your work is safe; IT can combine them.",
+                          "the version and the main branch changed the same lines",
                           _facts(repo, workspace, conflicts=_text(conflicts)))
+        if shared:
+            result["combined"] = shared
+            notes.append(f"Pages you both changed were joined line by line: {', '.join(shared)}.")
         repo.object_store.add_object(tree)
         merge = Commit()
         merge.tree, merge.parents = tree.id, [version_head, remote_main]

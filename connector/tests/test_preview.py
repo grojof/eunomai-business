@@ -113,7 +113,7 @@ def project(server, text: bytes | None, lock: bool = True, app: bytes = APP) -> 
     if text is not None:
         server.server_commit(name, "main", {".eunomai/project.toml": text})
     ws = Path(gitops.clone(f"{server.url}/me/{name}.git")["path"])
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     return name, ws
 
 
@@ -1045,7 +1045,7 @@ def test_grafts_that_hide_a_forged_commit_do_not_run(signed_in, workspaces, turn
         parent = repo.head()
         commit.tree, commit.parents = getattr(tree, "id", tree), [parent]
         repo.object_store.add_object(commit)
-        repo.refs[b"refs/heads/draft/work"] = commit.id
+        repo.refs[b"refs/heads/draft/work--tester"] = commit.id
         forged = commit.id.decode()
     main = signed_in.repos[name].refs[b"refs/heads/main"].decode()
     (ws / ".git" / "info").mkdir(exist_ok=True)
@@ -1271,7 +1271,7 @@ def test_a_commit_the_sandbox_forged_past_the_saves_rules_does_not_run(signed_in
         commit = repo[repo.head()]
         commit.tree, commit.parents = getattr(tree, "id", tree), [repo.head()]
         repo.object_store.add_object(commit)
-        repo.refs[b"refs/heads/draft/work"] = commit.id
+        repo.refs[b"refs/heads/draft/work--tester"] = commit.id
     answer = show(name)
     assert answer["status"] == "needs_it" and planted.decode() in answer["it_report"]
     assert browser == [] and not pids.exists()

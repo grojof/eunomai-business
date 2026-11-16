@@ -185,7 +185,7 @@ def workspace_with_context(server) -> tuple[str, Path]:
     server.initialize(name)
     server.server_commit(name, "main", {"AGENTS.md": b"# Project\n\nWritten by IT.\n"})
     ws = Path(gitops.clone(f"{server.url}/me/{name}.git")["path"])
-    gitops.branch(name, "draft/work")
+    gitops.branch(name, "draft/work--tester")
     return name, ws
 
 
@@ -295,8 +295,8 @@ def test_a_save_puts_the_declaration_back(signed_in, workspaces):
 def test_notes_an_editor_adds_to_a_branch_are_accepted(signed_in, workspaces):
     name, ws = workspace_with_context(signed_in)
     with open(ws / ".git" / "config", "a", encoding="utf-8") as config:
-        config.write('[branch "draft/work"]\n\tvscode-merge-base = origin/main\n\tdescription = notes\n')
-    assert gitops.status(name)["branch"] == "draft/work"
+        config.write('[branch "draft/work--tester"]\n\tvscode-merge-base = origin/main\n\tdescription = notes\n')
+    assert gitops.status(name)["branch"] == "draft/work--tester"
 
 
 def test_a_link_planted_where_protected_files_go_is_never_followed(signed_in, workspaces, tmp_path):
@@ -334,7 +334,7 @@ def test_removing_an_executable_the_project_had_can_be_saved(signed_in, workspac
     signed_in.initialize(name)
     signed_in.server_commit(name, "main", {"tools/run.bat": b"@echo off\r\n"})
     ws = Path(gitops.clone(f"{signed_in.url}/me/{name}.git")["path"])
-    gitops.branch(name, "draft/clean")
+    gitops.branch(name, "draft/clean--tester")
     (ws / "tools" / "run.bat").unlink()
     assert gitops.save(name, "Remove the launcher")["saved"]
 
@@ -362,7 +362,7 @@ def test_a_case_variant_never_removes_the_projects_files(signed_in, workspaces):
     signed_in.initialize(name)
     signed_in.server_commit(name, "main", {".claude/settings.json": b"{\"it\": true}"})
     ws = Path(gitops.clone(f"{signed_in.url}/me/{name}.git")["path"])
-    gitops.branch(name, "draft/case")
+    gitops.branch(name, "draft/case--tester")
     from dulwich.repo import Repo
 
     with Repo(str(ws)) as repo:  # the sandbox stages a case variant, which Windows takes for the same file

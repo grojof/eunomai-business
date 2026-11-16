@@ -83,6 +83,18 @@ sequenceDiagram
     Git-->>IT: Review, then merge into main
 ```
 
+## Several people, several computers
+
+Each version belongs to one person: its name ends with their account, which the connector writes
+(`alta-de-pedidos--grojo`). The main branch is the only thing people share, and what reaches it has been reviewed.
+
+| Situation | What happens |
+|---|---|
+| Two people on one project | Each works on their own versions; neither can send to the other's. When one is merged, the other's next `workspace_update` brings it in |
+| Both changed the same page of knowledge | Joined line by line when their changes are on other lines; otherwise, and for any other file, it stops for IT |
+| One person, another computer | `version_continue` lists their versions on the server and brings the chosen one; back on the first computer, `workspace_update` catches up first |
+| Saves on two computers, not sent from one of them | Stops for IT: both are kept |
+
 ## Bringing the latest changes
 
 `workspace_update` decides on its own, and stops whenever it is not certain. The full rules are in
@@ -96,11 +108,14 @@ flowchart TD
     where -- yes --> ff{"Fast-forward<br/>possible?"}
     ff -- yes --> moved["Back up, then move to the<br/>latest main branch"]
     ff -- no --> stop
-    where -- no --> saved{"Anything saved<br/>in the version?"}
+    where -- no --> elsewhere{"Own version sent further<br/>from another computer?"}
+    elsewhere -- yes --> catch["Back up, catch up with it<br/>(checked like a send)"]
+    catch --> saved
+    elsewhere -- no --> saved{"Anything saved<br/>in the version?"}
     saved -- no --> moved
     saved -- yes --> accepted{"Version accepted?<br/>in main, or its PR merged"}
     accepted -- yes --> retire["Back up, back to the main<br/>branch, retire the version"]
-    accepted -- no --> clean{"No file changed<br/>on both sides?"}
+    accepted -- no --> clean{"No file changed on both sides,<br/>or only pages, on other lines?"}
     clean -- yes --> combine["Back up, add the latest<br/>main changes to the version"]
     clean -- no --> stop["Stop: nothing changes<br/>user message + report for IT"]
 
@@ -108,8 +123,8 @@ flowchart TD
     classDef decision fill:#f3e8ff,stroke:#9333ea,color:#581c87
     classDef safeguard fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef halt fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
-    class keep,fetch action
-    class where,saved,ff,accepted,clean decision
+    class keep,fetch,catch action
+    class where,elsewhere,saved,ff,accepted,clean decision
     class moved,retire,combine safeguard
     class stop halt
 ```
