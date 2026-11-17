@@ -1300,8 +1300,15 @@ def update(workspace: str) -> dict:
                     "user_message": " ".join(notes + ["The latest changes of the project are here.",
                                                       _what_arrived(brought)]).strip()}
         proposal = _proposal_for(origin, current, name)
-        merged = _is_ancestor(repo, version_head, remote_main) or bool(
-            proposal and proposal["merged"] and proposal["head"] == version_head.decode())
+        # What IT accepted, when it accepted this version's proposal. A squash or a rebase puts other commits on the
+        # main branch, so the history alone cannot tell; the proposal's own commit can.
+        accepted = proposal["head"].encode() if proposal and proposal["merged"] and proposal.get("head") else None
+        known = accepted is not None and accepted in repo.object_store
+        merged = _is_ancestor(repo, version_head, remote_main) or accepted == version_head or bool(
+            known and _is_ancestor(repo, version_head, accepted))  # nothing here beyond what was accepted
+        # saved here after what was accepted (an automatic save included): that work goes on top of the project
+        carried = bool(known and not merged and _is_ancestor(repo, accepted, version_head)
+                       and not _is_ancestor(repo, remote_main, version_head))
         if merged:  # 4b. the version is in the main branch: back to it, retire the version
             result["backup"] = _backup(repo, name, main)
             _move(repo, main, remote_main, workspace)
@@ -1325,7 +1332,9 @@ def update(workspace: str) -> dict:
         # the only ones are pages of knowledge and their lines do not meet. Lines of any other file are never merged
         # automatically: two edits of code that do not collide as text can still break each other, and that is not a
         # call to make on the user's behalf. A page is read by people, and IT reviews the proposal it goes in.
-        bases = _merge_bases(repo, version_head, remote_main)
+        # After an accepted proposal, what the version has beyond it is measured from what was accepted: the main
+        # branch holds that already, under another commit.
+        bases = [accepted] if carried else _merge_bases(repo, version_head, remote_main)
         shared = _changed_on_both_sides(repo, bases, version_head, remote_main)
         if any(not knowledge.merges_by_line(path) for path in shared):
             raise NeedsIT("The latest changes of the project touch the same files as your version, so they are not "
@@ -1353,6 +1362,12 @@ def update(workspace: str) -> dict:
         brought = _brought(repo, remote_main, version_head)
         result["backup"] = _backup(repo, name)
         _move(repo, name, merge.id, workspace)
+        if carried:
+            return {**result, "status": "updated", "branch": name, "head": _head(repo), **brought,
+                    "accepted_proposal": proposal["number"],
+                    "user_message": " ".join(notes + ["Your proposal was accepted. What you saved after sending it is "
+                                                      "still in your version, now on top of the latest project.",
+                                                      _what_arrived(brought)]).strip()}
         return {**result, "status": "updated", "branch": name, "head": _head(repo), **brought,
                 "user_message": " ".join(notes + ["The latest changes of the project were added to your version; "
                                                   "your work is kept.", _what_arrived(brought)]).strip()}
@@ -1590,9 +1605,12 @@ def proposal_state(workspace: str) -> dict | None:
             name, origin_url = _branch(repo), _origin(repo)
             if name is None or name in _protected(repo) or origin_url is None:
                 return None
+            head = _head(repo)
         proposal = _proposal_for(origin_url, current, name)
     except Exception:
         return None
+    if proposal and proposal["merged"] and not (proposal.get("head") or "").startswith(head or "-"):
+        return None  # an accepted proposal of what the version was before: what it has now is not proposed yet
     if proposal and proposal["state"] == "open" and proposal["number"]:
         try:
             proposal["review"] = _hosting(origin_url, current).review(proposal["number"], proposal["author"],

@@ -240,7 +240,8 @@ class FakeServer:
         return commit.id
 
     def accept(self, name: str, version: str, squash: bool = False) -> None:
-        """IT merges the version's pull request (merge commit or squash) and deletes the branch."""
+        """IT merges the version's pull request (merge commit or squash) and deletes the branch. As Gitea does, the
+        deleted branch leaves the pull request's head as `refs/pull/<n>/head`, its name kept only in the label."""
         repo = self.repos[name]
         head = repo.refs[f"refs/heads/{version}".encode()]
         main = self.default_branch[name]
@@ -251,6 +252,7 @@ class FakeServer:
         for pull in self.pulls:
             if pull["repo"] == name and pull["head"]["ref"] == version and pull["state"] == "open":
                 pull.update(state="closed", merged=True)
+                pull["head"]["ref"] = f"refs/pull/{pull['number']}/head"
         del repo.refs[f"refs/heads/{version}".encode()]
 
     def pulls_of(self, name: str) -> list[dict]:
@@ -303,7 +305,8 @@ class FakeServer:
                     return reply("404 Not Found", {"message": "head not found"})
                 number = len(self.pulls) + 1
                 self.pulls.append({"repo": name, "number": number, "state": "open", "merged": False,
-                                   "head": {"ref": body["head"], "sha": head.decode()}, "base": body["base"],
+                                   "head": {"ref": body["head"], "label": body["head"], "sha": head.decode()},
+                                   "base": body["base"],
                                    "title": body["title"], "body": body.get("body", ""), "reviews": [],
                                    "comments": [], "user": {"login": "tester"}})
                 return reply("201 Created", {"number": number, "html_url": f"{self.url}/me/{name}/pulls/{number}"})

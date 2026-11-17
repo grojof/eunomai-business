@@ -74,6 +74,8 @@ class Gitea(Hosting):
         self.headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
     def find_proposal(self, version: str) -> dict | None:
+        """The latest pull request whose head is the version. Once its branch is deleted, as IT may do when merging,
+        Gitea names the head `refs/pull/<n>/head` and keeps the branch only in its label."""
         mine = []
         try:
             with auth.http_client() as client:  # most recently updated first; a version's proposal is recent
@@ -83,7 +85,7 @@ class Gitea(Hosting):
                     if response.status_code != 200:
                         return None
                     batch = response.json()
-                    mine += [p for p in batch if (p.get("head") or {}).get("ref") == version]
+                    mine += [p for p in batch if version in _branch_names(p.get("head") or {})]
                     if mine or len(batch) < 50:
                         break
         except Exception:
@@ -188,6 +190,13 @@ class Gitea(Hosting):
             raise RuntimeError(f"git server answered {response.status_code}: {response.text[:300]}")
         made = response.json()
         return {"created": True, "number": made.get("number"), "url": made.get("html_url"), "base": base}
+
+
+def _branch_names(head: dict) -> set[str]:
+    """The branch a pull request's head names: its ref while the branch exists, its label always (`owner:branch` when
+    it comes from another repository, which a version never does)."""
+    ref, label = head.get("ref") or "", head.get("label") or ""
+    return {name for name in (ref.removeprefix("refs/heads/"), label) if name and not name.startswith("refs/")}
 
 
 PLATFORMS: dict[str, type[Hosting]] = {"gitea": Gitea}
