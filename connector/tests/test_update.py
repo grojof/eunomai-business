@@ -70,6 +70,46 @@ def test_accepted_proposal_returns_to_the_main_branch(signed_in, workspaces, squ
     assert any(ref.endswith("/draft/report--tester") for ref in backups(ws))  # the retired version can still be recovered
 
 
+@pytest.mark.parametrize("squash", [False, True], ids=["merge-commit", "squash"])
+def test_what_was_saved_after_an_accepted_proposal_goes_on_top_of_it(signed_in, workspaces, squash):
+    """Seen in Cowork: IT squashed a proposal and deleted its branch; the person, told so, asked for the latest and was
+    stopped for IT, as if the project and the version had changed the same files."""
+    name = f"after-accepted-{'squash' if squash else 'merge'}"
+    ws = proposed(signed_in, name, "draft/report--tester", {"report.md": b"quarterly report\n"})
+    (ws / "report.md").write_bytes(b"quarterly report, revised\n")
+    gitops.save(name, "Revised after sending")
+    signed_in.accept(name, "draft/report--tester", squash=squash)
+    signed_in.server_commit(name, "main", {"news.md": b"news\n"})
+    result = gitops.update(name)
+    assert result["status"] == "updated" and result["branch"] == "draft/report--tester"
+    assert result["accepted_proposal"] == signed_in.pulls_of(name)[0]["number"] and "accepted" in result["user_message"]
+    assert (ws / "report.md").read_bytes() == b"quarterly report, revised\n" and (ws / "news.md").exists()
+    assert gitops.proposal_state(name) is None  # what it has now is not proposed yet
+    assert gitops.update(name)["status"] == "up_to_date"
+    gitops.push(name, gitops.project_files(name)["tip"])
+    assert gitops.pull_request(name, "Second change")["created"]
+
+
+def test_an_automatic_save_after_an_accepted_proposal_is_kept(signed_in, workspaces):
+    ws = proposed(signed_in, "accepted-then-edited", "draft/report--tester", {"report.md": b"report\n"})
+    signed_in.accept("accepted-then-edited", "draft/report--tester", squash=True)
+    (ws / "notes.md").write_bytes(b"written after sending, never saved\n")
+    result = gitops.update("accepted-then-edited")
+    assert result["status"] == "updated" and result["branch"] == "draft/report--tester"
+    assert (ws / "notes.md").read_bytes() == b"written after sending, never saved\n"
+
+
+@pytest.mark.parametrize("head, found", [
+    ({"ref": "draft/x--tester", "label": "draft/x--tester"}, True),
+    ({"ref": "refs/pull/4/head", "label": "draft/x--tester"}, True),  # its branch deleted, as Gitea shows it
+    ({"ref": "refs/pull/4/head", "label": "draft/y--tester"}, False),
+    ({"ref": "refs/pull/4/head"}, False),
+])
+def test_a_proposal_is_found_by_its_branch_even_once_deleted(head, found):
+    from eunomai_business import hosting
+    assert ("draft/x--tester" in hosting._branch_names(head)) is found
+
+
 def test_unsaved_changes_are_saved_before_anything_else(signed_in, workspaces):
     ws = joined(signed_in, "unsaved")
     gitops.branch("unsaved", "draft/draft--tester")

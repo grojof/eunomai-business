@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.6 (2026-11-17)
+
+An accepted proposal is recognized however IT merges it. In Cowork, IT squashed a proposal and deleted its branch;
+the person, told so, asked for the latest and was stopped for IT, as if the project and the version had changed the
+same files.
+
+- **A proposal is found by its branch even once deleted.** Gitea then names the pull request's head
+  `refs/pull/<n>/head` and keeps the branch only in its label; the connector looked at the first alone, found no
+  proposal, and a squash or a rebase leaves no trace in the history. It reads both now, and the test server behaves
+  as Gitea does.
+- **What was saved after the accepted proposal is kept.** A save after sending, or the automatic one before bringing
+  the latest, used to stop for IT as well: it now goes on top of the project, measured from what was accepted, and
+  the version goes on for its next proposal. Its old, accepted proposal is no longer reported as the version's.
+- **Dependencies,** from the weekly update (#80): anyio 4.16.0, pydantic 2.14.2, pydantic-core 2.50.2 and
+  python-multipart 0.0.33. None fixes a published advisory.
+
 ## 0.2.5 (2026-11-16)
 
 Several people on one project, and one person on several computers.
