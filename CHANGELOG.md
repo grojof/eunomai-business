@@ -13,6 +13,8 @@ same files.
 - **What was saved after the accepted proposal is kept.** A save after sending, or the automatic one before bringing
   the latest, used to stop for IT as well: it now goes on top of the project, measured from what was accepted, and
   the version goes on for its next proposal. Its old, accepted proposal is no longer reported as the version's.
+- **Dependencies,** from the weekly update (#80): anyio 4.16.0, pydantic 2.14.2, pydantic-core 2.50.2 and
+  python-multipart 0.0.33. None fixes a published advisory.
 
 ## 0.2.5 (2026-11-16)
 
