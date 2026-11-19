@@ -42,7 +42,38 @@ def declared(text: str) -> dict:
 def test_a_project_declares_its_technologies(monkeypatch):
     monkeypatch.delenv("EUNOMAI_SPECIALIST", raising=False)
     allowed = settings.development(declared('[development]\ncode = true\ntechnologies = ["Python"]\n'))
-    assert allowed == {"code_allowed": True, "technologies": ["Python"], "reason": "the project declares it"}
+    assert allowed == {"code_allowed": True, "technologies": ["Python"], "static": False,
+                       "reason": "the project declares it"}
+
+
+def test_a_project_declares_itself_static(monkeypatch):
+    monkeypatch.delenv("EUNOMAI_SPECIALIST", raising=False)
+    text = '[development]\ncode = true\nstatic = true\ntechnologies = ["Python"]\n'
+    assert settings.development(declared(text)) == {"code_allowed": True, "technologies": ["Python"], "static": True,
+                                                    "reason": "the project declares it"}
+    assert settings.static(declared(text)) is True
+
+
+def test_static_gives_no_permission_of_its_own(monkeypatch):
+    configure(monkeypatch, free_development=True)
+    text = "[development]\ncode = false\nstatic = true\n"
+    refused = settings.development(declared(text))
+    assert refused["code_allowed"] is False and refused["static"] is True
+    assert refused["reason"] == "the project declares that no code is written here"
+    assert settings.static(declared(text)) is True
+
+
+@pytest.mark.parametrize("text, expected", [
+    (None, False),
+    ('[test]\nbranch = "pruebas"\n', False),
+    ("[development]\ncode = true\n", False),
+    ("[development]\ncode = true\nstatic = false\n", False),
+    ('[development]\ncode = true\nstatic = "yes"\n', None),
+    ("[development]\ncode = true\nstatik = true\n", None),
+    ("[development\nstatic = true\n", None),
+])
+def test_whether_the_main_branch_declares_the_project_static(text, expected):
+    assert settings.static(declared(text) if text is not None else None) is expected
 
 
 @pytest.mark.parametrize("text, reason", [
@@ -50,6 +81,8 @@ def test_a_project_declares_its_technologies(monkeypatch):
     ('[development]\ncode = "yes"\n', "is not valid: [development] takes code"),
     ('[development]\ncode = true\ntechnologies = "Python"\n', "is not valid"),
     ('[development]\ncode = true\ntechnologies = [""]\n', "is not valid"),
+    ('[development]\ncode = true\nstatic = "yes"\n', "is not valid: [development] takes code and static"),
+    ("[development]\ncode = true\nstatic = 1\n", "is not valid"),
     ("development = true\n", "is not valid"),
     ("[development\ncode = true\n", "is not valid TOML"),
     ('[development]\ncode = true\ntechnologie = ["Python"]\n', "unknown keys in [development] (technologie)"),
@@ -57,7 +90,7 @@ def test_a_project_declares_its_technologies(monkeypatch):
 def test_the_project_decides_even_against_free_development(monkeypatch, text, reason):
     configure(monkeypatch, free_development=True)
     refused = settings.development(declared(text))
-    assert refused["code_allowed"] is False and reason in refused["reason"]
+    assert refused["code_allowed"] is False and reason in refused["reason"] and refused["static"] is False
 
 
 def test_a_declaration_without_development_leaves_it_to_the_build(monkeypatch):
@@ -69,7 +102,7 @@ def test_a_declaration_without_development_leaves_it_to_the_build(monkeypatch):
 
 def test_free_development_with_a_list(monkeypatch):
     configure(monkeypatch, free_development=True, allowed_technologies=["Python"])
-    assert settings.development(None) == {"code_allowed": True, "technologies": ["Python"],
+    assert settings.development(None) == {"code_allowed": True, "technologies": ["Python"], "static": False,
                                           "reason": "free development is enabled"}
 
 

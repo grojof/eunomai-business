@@ -44,19 +44,21 @@ project's `docs/` holds only the application's pages.
    ```
 
    `--name` sets the repository's name instead of the request's proposal; `--requester`, the requester's git user
-   when the request names none (they were not signed in when it was prepared).
+   when the request names none (they were not signed in when it was prepared); `--static` declares the project
+   [static](#a-static-project). The request says which kind the person asked for, when they settled it; IT decides,
+   and the tool says so when the two differ.
 3. Send the requester the reply it prints, in the request's language.
 
 | Step | What it does | Why |
 |---|---|---|
-| Read the request | Its fixed lines (proposed name, request, requester's git user), in English, Spanish or Catalan | They are the connector's own; nothing is typed again |
-| Check first | The template exists and is a template; no repository has the name | A name in use stops everything before any change |
+| Read the request | Its fixed lines (proposed name, request, requester's git user, and static or with a server when settled), in English, Spanish or Catalan | They are the connector's own; nothing is typed again |
+| Check first | The template exists and is a template; no repository has the name; with `--static`, the template's declaration has one `[development]` table | A name in use, or a template that cannot say static, stops everything before any change, in a dry run too |
 | Create | From the template, private, with its labels | Every project starts from the same files |
-| Name it | One commit sets `APP_NAME` in `.env.example` and in the preview's environment | Before `main` is protected, so it needs no pull request; a template with no such line is refused, never guessed |
+| Name it | One commit sets `APP_NAME` in `.env.example` and in the preview's environment, and with `--static` adds `static = true` to `[development]` | Before `main` is protected, so it needs no pull request; a template with no such line is refused, never guessed |
 | Protect `main` | No direct push, one approval, up to date with `main`, blocked by a rejected review, stale approvals dismissed | What reaches `main` has been reviewed by IT |
 | Give access | The requester gets write access | They work through versions and pull requests |
 | Actions off | Only with `actions: false` | A server without a runner would queue every run forever |
-| Check after | Reads back the protection, the access and the name | Says what to check by hand if any does not show |
+| Check after | Reads back the protection, the access, the name and, with `--static`, the declaration | Says what to check by hand if any does not show |
 
 Certificates are always verified; `ca_file` names an organization's own authority. If a step fails after the
 repository exists, the tool says what was done and what is left, and never deletes it.
@@ -187,6 +189,40 @@ technologies = ["Python", "HTML, CSS and JavaScript"]   # empty: any
 The connector reads it from the server, never from the user's folder, and business users' versions cannot change
 it. Protect it like `AGENTS.md`. Without a `[development]` section, the build's `free_development` decides
 ([configuration](configuration.md#the-specialist)); a file that is not valid allows no code, and says why.
+
+## A static project
+
+A tool that works in the browser and keeps nothing (a calculator, a guide, a page that reads a file the person
+opens) needs no application server. Declare it in the same table:
+
+```toml
+[development]
+code = true
+static = true   # exported pages: no application process, database or identity of its own
+```
+
+| Key | Meaning |
+|---|---|
+| `static` | `true` or `false` (the default). It gives no permission of its own: with `code = false` nothing is written all the same. Any other value is not valid, and allows no code |
+
+| Who | What changes |
+|---|---|
+| The specialist | Builds no database, migrations, identity, roles, sessions, forms that save, uploads, or htmx and routes that answer on the server; its tests check the exported pages. A request that needs a server is offered as a new project ([decision 19](decisions.md#19--a-project-may-be-static-exported-pages-with-no-application-server)) |
+| The connector | Returns `development.static` to the specialist, and says in its checks on every pull request whether `main` declares the project static |
+| IT | Reviews it as a static project and publishes the exported files behind the sign-in proxy, with their headers ([IT guide](it-guide.md#8-deploy)) |
+
+The export is the template's: in the organization's base, `uv run --frozen python tools/export_static.py <folder>`
+writes the pages to `<folder>/site/` and the headers to serve them with to `<folder>/headers.json`, and ends with an
+error and its reasons when a page needs a server. A preview can serve what it exported, on this computer only:
+
+```toml
+[preview]
+setup = [["python", "tools/export_static.py", "{data}"]]
+run = ["python", "-m", "http.server", "{port}", "--bind", "127.0.0.1", "--directory", "{data}/site"]
+```
+
+Connectors before 0.3.0 read `static` as an unknown key and allow no code: update the plugin everywhere before a
+project declares it.
 
 ## A test environment without waiting for IT
 

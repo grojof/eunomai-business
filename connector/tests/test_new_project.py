@@ -6,6 +6,7 @@ import base64
 import json
 import sys
 import threading
+import tomllib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -20,14 +21,17 @@ import new_project  # noqa: E402
 
 TOKEN = "token-that-must-never-be-printed-0123456789"
 ENV = '# The application\nAPP_ENVIRONMENT="development"\nAPP_NAME="Our applications"\nAPP_LANGUAGES=["en","es"]\n'
-TOML = '[preview.environment]\nAPP_ENVIRONMENT = "development"\nAPP_NAME = "Our applications"\n'
+TOML = ('# What IT declares\n\n[development]\ncode = true\ntechnologies = ["Python"]\n\n[preview.environment]\n'
+        'APP_ENVIRONMENT = "development"\nAPP_NAME = "Our applications"\n')
+EXPORT = '"""Export the application\'s pages."""\n'  # the template's tools/export_static.py; empty: it has none
 
 
-def request_text(language: str = "en", name: str = "asset-inventory", requester: str | None = "ana.it") -> str:
+def request_text(language: str = "en", name: str = "asset-inventory", requester: str | None = "ana.it",
+                 static: bool | None = None) -> str:
     """A request as the connector writes it, from its own words."""
     fields = {"request": name, "name": name, "requester": requester or "", "created": "2026-11-04T10:00:00+0100",
               "language": language, "purpose": "Track the computers.", "users": "IT.", "today": "A spreadsheet.",
-              "first_version": "A list.", "out_of_scope": "", "open_questions": ["Which columns?"]}
+              "first_version": "A list.", "out_of_scope": "", "open_questions": ["Which columns?"], "static": static}
     return project_request.message(fields)[1]
 
 
@@ -48,6 +52,13 @@ def test_a_request_is_read_in_each_language(language):
     read = new_project.read_request(request_text(language))
     assert (read.name, read.request, read.requester, read.language) == ("asset-inventory", "asset-inventory",
                                                                         "ana.it", language)
+    assert read.static is None
+
+
+@pytest.mark.parametrize("language", ["en", "es", "ca"])
+@pytest.mark.parametrize("static", [True, False])
+def test_whether_the_request_asks_for_a_static_project_is_read_in_each_language(language, static):
+    assert new_project.read_request(request_text(language, static=static)).static is static
 
 
 def test_a_request_pasted_from_a_mail_program_is_read_too():
@@ -108,8 +119,12 @@ class FakeGitea:
             return 201, {"full_name": target, "default_branch": "main"}
         if rest[:1] == ["contents"]:
             path_in_repo = "/".join(rest[1:])
-            files = self.files[repo]
+            # the template's files, as a project made from it now would get them
+            files = {".env.example": ENV, ".eunomai/project.toml": TOML, **({"tools/export_static.py": EXPORT}
+                     if EXPORT else {})} if repo == "acme/template" else self.files[repo]
             if method == "GET":
+                if path_in_repo not in files:
+                    return 404, {"message": "not found"}
                 text = files[path_in_repo]
                 return 200, {"content": base64.b64encode(text.encode()).decode(), "sha": f"sha-{len(text)}"}
             if method == "POST" and not path_in_repo:
@@ -174,9 +189,10 @@ def gitea(tmp_path):
     server.shutdown()
 
 
-def run(fake: FakeGitea, tmp_path: Path, capsys, *extra: str, language: str = "es", requester: str | None = "ana.it"):
+def run(fake: FakeGitea, tmp_path: Path, capsys, *extra: str, language: str = "es", requester: str | None = "ana.it",
+        static: bool | None = None):
     request = tmp_path / "request.txt"
-    request.write_text(request_text(language, requester=requester), encoding="utf-8")
+    request.write_text(request_text(language, requester=requester, static=static), encoding="utf-8")
     code = new_project.main(["--request", str(request), "--title", "Asset inventory", "--config", str(fake.config),
                              *extra])
     out, err = capsys.readouterr()
@@ -202,6 +218,75 @@ def test_the_whole_project_is_made_in_its_order_and_the_reply_is_in_the_requests
     assert named < steps.index(f"POST /api/v1/repos/{target}/branch_protections"), "the name goes in before main is shut"
     assert "Tu proyecto ya existe: acme/asset-inventory" in out and "IT ya ha creado el proyecto" in out
     assert all(header == f"token {TOKEN}" for header in gitea.headers)
+
+
+def test_a_static_project_is_declared_in_the_same_commit_before_main_is_protected(gitea, tmp_path, capsys):
+    code, out, err = run(gitea, tmp_path, capsys, "--static", static=True)
+    assert code == 0, err
+    target = "acme/asset-inventory"
+    declared = tomllib.loads(gitea.files[target][".eunomai/project.toml"])
+    assert declared["development"] == {"code": True, "static": True, "technologies": ["Python"]}
+    assert declared["preview"]["environment"]["APP_NAME"] == "Asset inventory"
+    steps = [f"{method} {path.split('?')[0]}" for method, path in gitea.calls]
+    assert steps.count(f"POST /api/v1/repos/{target}/contents") == 1, "the name and static go in one commit"
+    assert steps.index(f"POST /api/v1/repos/{target}/contents") < steps.index(
+        f"POST /api/v1/repos/{target}/branch_protections")
+    assert "declared the project static in .eunomai/project.toml" in out and "Note:" not in out
+
+
+def test_without_static_the_declaration_says_nothing_of_it(gitea, tmp_path, capsys):
+    code, _, err = run(gitea, tmp_path, capsys)
+    assert code == 0, err
+    assert "static" not in tomllib.loads(gitea.files["acme/asset-inventory"][".eunomai/project.toml"])["development"]
+
+
+@pytest.mark.parametrize(("static", "extra", "said"), [
+    (True, (), "Note: the request asks for a static project; without --static it is made as one with a server."),
+    (False, ("--static",), "Note: the request asks for a project with a server; --static declares it static"),
+])
+def test_it_decides_and_is_told_when_the_request_asks_otherwise(gitea, tmp_path, capsys, static, extra, said):
+    code, out, _ = run(gitea, tmp_path, capsys, "--dry-run", *extra, static=static)
+    assert code == 0 and said in out
+    assert ("), static. Nothing was changed." if extra else "), with a server. Nothing was changed.") in out
+
+
+@pytest.mark.parametrize("template", [
+    'APP_NAME = "Our applications"\n',
+    '[development]\ncode = true\nstatic = false\n\n[preview.environment]\nAPP_NAME = "Our applications"\n',
+])
+def test_a_template_that_cannot_be_declared_static_is_refused_before_anything_is_created(
+        gitea, tmp_path, capsys, monkeypatch, template):
+    monkeypatch.setattr(sys.modules[__name__], "TOML", template)
+    for extra in (("--dry-run",), ()):
+        code, out, err = run(gitea, tmp_path, capsys, "--static", *extra)
+        assert code == 1 and "Nothing was changed:" in err and "static" in err and "Dry run" not in out
+        assert "acme/asset-inventory" not in gitea.repos
+        assert all(method == "GET" for method, _ in gitea.calls)
+
+
+def test_a_static_dry_run_reads_the_templates_declaration_and_changes_nothing(gitea, tmp_path, capsys):
+    code, out, _ = run(gitea, tmp_path, capsys, "--static", "--dry-run", static=True)
+    assert code == 0 and "), static. Nothing was changed." in out
+    assert ("GET", "/api/v1/repos/acme/template/contents/.eunomai/project.toml?ref=main") in gitea.calls
+    assert ("GET", "/api/v1/repos/acme/template/contents/tools/export_static.py?ref=main") in gitea.calls
+    assert all(method == "GET" for method, _ in gitea.calls) and "acme/asset-inventory" not in gitea.repos
+
+
+def test_a_template_that_cannot_export_is_refused_before_anything_is_created(gitea, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(sys.modules[__name__], "EXPORT", "")
+    for extra in (("--dry-run",), ()):
+        code, out, err = run(gitea, tmp_path, capsys, "--static", *extra)
+        assert code == 1 and "Nothing was changed: acme/template has no tools/export_static.py on main" in err
+        assert "make the template again" in err and "Dry run" not in out
+        assert "acme/asset-inventory" not in gitea.repos and all(method == "GET" for method, _ in gitea.calls)
+    code, _, err = run(gitea, tmp_path, capsys)
+    assert code == 0, "a project with a server does not need it"
+
+
+def test_the_check_after_says_when_the_server_does_not_show_it_static(gitea, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(new_project, "made_static", lambda text: text)  # as if the server had dropped the line
+    code, _, err = run(gitea, tmp_path, capsys, "--static")
+    assert code == 1 and ".eunomai/project.toml does not declare the project static" in err
 
 
 def test_the_token_is_never_printed(gitea, tmp_path, capsys):

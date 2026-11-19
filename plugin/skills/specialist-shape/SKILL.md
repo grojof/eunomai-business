@@ -27,6 +27,9 @@ Build them before tests and the full specification: the point is to agree on the
   refinements, nothing the user has not asked to see. Time spent here on what may change is wasted.
 - Example data the application holds itself: roles and invented names, never real personal data. Say plainly that
   it is example data.
+- **A static project** (`development.static`): pages that work with what the person types or opens and with data
+  that ships with the page; nothing saved, and the page does not know who uses it. A screen the user asks for that needs a server is not
+  shaped here: `specialist` says what to do.
 - Dependencies as in `specialist-build`: `dependency_check`, the whole tree pinned, `dependency_audit` allowed. Neither
   `app_preview` nor the send works without them.
 - `version_save(workspace, <message>)`, then show them as `specialist-build` says, one way at a time.

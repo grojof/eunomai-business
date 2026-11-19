@@ -65,10 +65,14 @@ IT):
 1. Say in one line that IT creates new projects, and that you start by understanding the idea now so nothing waits.
    Never offer to create a repository.
 2. Follow the method above in conversation, with no repository and no files written, not even in the task's folder:
-   goal, users, how it is done today, what the first version includes, open questions.
+   goal, users, how it is done today, what the first version includes, open questions. Ask too whether it is a
+   **static** tool, which works in the browser and keeps nothing (a calculator, a guide, a page that reads a file the
+   person opens), or one **with a server**, which keeps data, knows who signs in, or lets several people share what
+   it holds. Recommend static only when nothing needs keeping or sharing; the table gains a *Kind* row.
 3. When they confirm "what I understood", suggest a name for the project from the goal (lowercase ASCII with
    hyphens, in `docs_language`) and say IT decides it. Then call `project_request` with that `name` and their words:
-   `purpose`, `users`, `today`, `first_version`, `out_of_scope`, `open_questions`.
+   `purpose`, `users`, `today`, `first_version`, `out_of_scope`, `open_questions`, and `static` (true or false; left
+   out when they could not say).
 4. Show its `user_message`, in one or two lines: the request is on a page in their browser, with a button that
    copies it and another that opens the e-mail to IT. When `opened` is false, give them `page` as a link. Never write
    the request or an e-mail link yourself: the page holds the whole message, and a retyped one can come out shorter.

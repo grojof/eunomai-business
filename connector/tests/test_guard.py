@@ -242,7 +242,19 @@ def test_the_project_declaration_comes_from_the_server_not_the_folder(signed_in,
     assert files["context"]["text"] == "# Project\n\nWritten by IT.\n"
     from eunomai_business import server as tools
     development = tools._specialist_settings(name)["development"]
-    assert development == {"code_allowed": True, "technologies": ["Python"], "reason": "the project declares it"}
+    assert development == {"code_allowed": True, "technologies": ["Python"], "static": False,
+                           "reason": "the project declares it"}
+
+
+def test_the_settings_say_whether_the_main_branch_declares_the_project_static(signed_in, workspaces):
+    from eunomai_business import server as tools
+    name, ws = workspace_with_context(signed_in)
+    (ws / ".eunomai").mkdir()
+    (ws / ".eunomai" / "project.toml").write_bytes(b"[development]\ncode = true\nstatic = true\n")
+    assert tools._specialist_settings(name)["development"]["static"] is False, "the folder's copy never counts"
+    signed_in.server_commit(name, "main", {".eunomai/project.toml": b"[development]\ncode = true\nstatic = true\n"})
+    assert tools._specialist_settings(name)["development"] == {"code_allowed": True, "technologies": [],
+                                                               "static": True, "reason": "the project declares it"}
 
 
 def test_a_folder_where_the_declaration_should_be_is_no_declaration(signed_in, workspaces):
@@ -428,9 +440,31 @@ def test_every_pull_request_carries_the_connectors_own_checks(signed_in, workspa
     assert first["created"] and pull["body"].startswith("Summary by the specialist.")
     assert "Checks by the connector" in pull["body"] and "Dependency audit: **allowed**" in pull["body"]
     assert "- Knowledge: no pages by kind and no requirements yet" in pull["body"]
+    assert "- Declared static on the main branch: no\n" in pull["body"]
     again = server.version_propose(name, "Page, revised", "Revised summary.")
     assert again["created"] is False and again["updated"] is True
     assert pull["title"] == "Page, revised" and pull["body"].startswith("Revised summary.")
+
+
+@pytest.mark.parametrize(("declaration", "line"), [
+    (b"[development]\ncode = true\nstatic = true\n", "- Declared static on the main branch: **yes**: no application "
+                                                     "process, database or identity; what is published is the "
+                                                     "exported pages, behind the sign-in proxy"),
+    (b'[development]\ncode = true\nstatic = "yes"\n', "- Declared static on the main branch: cannot tell, its "
+                                                      "`[development]` is not valid"),
+])
+def test_the_checks_say_whether_the_project_is_declared_static(signed_in, workspaces, monkeypatch, declaration, line):
+    from eunomai_business import deps, server
+
+    name, ws = workspace_with_context(signed_in)
+    signed_in.server_commit(name, "main", {".eunomai/project.toml": declaration})
+    (ws / "index.html").write_bytes(b"<p>Hello</p>")
+    gitops.save(name, "Page")
+    gitops.push(name, gitops.project_files(name)["tip"])
+    monkeypatch.setattr(deps, "_get", lambda url: None)
+    assert server.version_propose(name, "Page", "Summary.")["created"]
+    body = signed_in.pulls[-1]["body"]
+    assert line in body and body.index(line) > body.index("Checks by the connector")
 
 
 def test_the_knowledge_reported_is_the_proposed_commits_against_the_organizations_vocabulary(

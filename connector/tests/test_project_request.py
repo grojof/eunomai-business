@@ -120,6 +120,27 @@ def test_empty_optional_sections_say_so():
     assert "Out of scope\nNothing stated." in text and "Open questions\nNone." in text
 
 
+@pytest.mark.parametrize(("static", "line"), [
+    (True, "\nKind: static (it works in the browser; no database, keeps nothing)\n"),
+    (False, "\nKind: with a server (it keeps data or knows who signs in)\n"),
+])
+def test_whether_it_is_static_is_a_fixed_line(static, line):
+    answer = prepare(static=static)
+    text = text_of(answer)
+    assert line in text and text.index("Request: alta-de-pedidos") < text.index(line) < text.index("Requested: ")
+    assert tools.workspace_list()["project_requests"][0]["static"] is static
+    assert line.strip() in page_of(answer)
+
+
+def test_without_an_answer_the_request_says_nothing_of_its_kind():
+    text = text_of(prepare())
+    assert "Kind:" not in text and tools.workspace_list()["project_requests"][0]["static"] is None
+
+
+def test_static_is_true_false_or_left_out():
+    assert "error" in prepare(static="yes") and not saved_files()
+
+
 # --- the page ------------------------------------------------------------------------------------------------
 
 def test_the_page_opens_in_the_browser_with_the_whole_message(opened):

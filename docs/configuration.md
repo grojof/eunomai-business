@@ -83,7 +83,8 @@ python tools\build.py --all             # the configuration and every variant, e
 Where code may be written, and with what, each project declares in its own repository
 ([`.eunomai/project.toml`](project-practices.md#where-code-may-be-written)); `free_development` covers the projects
 that declare nothing. Without either, the specialist analyses, shapes and specifies, and delivers that to IT as a
-proposal, but writes no code.
+proposal, but writes no code. Whether a project is [static](project-practices.md#a-static-project) (exported pages,
+no application server) is declared there too, never in the build.
 
 Keys starting with `_` are comments. Any other unknown key is an error, so a typo does not go unnoticed.
 

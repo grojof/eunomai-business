@@ -67,6 +67,12 @@ your sandbox.
 | External resources | None: fonts, scripts and styles are served by the application |
 | Errors | A clear message to the user, never a raw error page; no tokens or personal data in logs. "Not found" and "not allowed" answer alike |
 
+- **A static project** (`development.static`): the rows of identity, authorization, forms with sessions and the same
+  action twice do not apply, because nothing of the kind may exist (`specialist`); input, external resources and
+  errors do. Its rules are enforced in the page, where the value is entered. Run the export into a temporary folder
+  outside the workspace after every change to pages: it must end with no reasons. Its tests read the exported HTML:
+  each agreed screen is there, with its texts, and no page posts a form or calls a route on a server.
+
 - **The application's documentation, in `docs_language`, kept with the code in the same save:**
   - `README.md` is a map for someone who has never seen the application: what it is, for whom and why, a diagram
     when a picture says it better, how IT runs it and runs its tests, and an index that reaches every page of

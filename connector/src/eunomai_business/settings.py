@@ -23,8 +23,11 @@ def load() -> dict:
     return values
 
 
-def _no_code(reason: str) -> dict:
-    return {"code_allowed": False, "technologies": [], "reason": reason}
+_IT_CORRECTS = "; IT corrects it"  # how every reason for a declaration IT must correct ends
+
+
+def _no_code(reason: str, static: bool = False) -> dict:
+    return {"code_allowed": False, "technologies": [], "static": static, "reason": reason}
 
 
 def _declared(text: str) -> dict | None:
@@ -37,32 +40,44 @@ def _declared(text: str) -> dict | None:
     if "development" not in declared:
         return None
     section = declared["development"]
-    unknown = sorted(set(section) - {"code", "technologies"}) if isinstance(section, dict) else []
+    unknown = sorted(set(section) - {"code", "technologies", "static"}) if isinstance(section, dict) else []
     if unknown:  # a misspelt technologies would otherwise mean any technology
         return _no_code(f"the project's declaration has unknown keys in [development] ({', '.join(unknown)}); IT "
                         "corrects it")
     code = section.get("code", False) if isinstance(section, dict) else None
     technologies = section.get("technologies", []) if isinstance(section, dict) else None
-    if not isinstance(code, bool) or not isinstance(technologies, list) \
+    static = section.get("static", False) if isinstance(section, dict) else None
+    if not isinstance(code, bool) or not isinstance(static, bool) or not isinstance(technologies, list) \
             or not all(isinstance(item, str) and item.strip() for item in technologies):
-        return _no_code("the project's declaration is not valid: [development] takes code (true or false) and "
-                        "technologies (a list of names); IT corrects it")
-    if not code:
-        return _no_code("the project declares that no code is written here")
-    return {"code_allowed": True, "technologies": technologies, "reason": "the project declares it"}
+        return _no_code("the project's declaration is not valid: [development] takes code and static (true or "
+                        "false) and technologies (a list of names); IT corrects it")
+    if not code:  # static says what the application is, and gives no permission of its own
+        return _no_code("the project declares that no code is written here", static)
+    return {"code_allowed": True, "technologies": technologies, "static": static, "reason": "the project declares it"}
 
 
 def development(declaration: dict | None) -> dict:
-    """Whether code may be written in a workspace, and with which technologies (empty list: any). The project's
-    declaration on its main branch decides; without one, the build's free development does."""
+    """Whether code may be written in a workspace, and with which technologies (empty list: any); and whether the
+    project is `static`: published as exported pages, with no application process, database or identity. The
+    project's declaration on its main branch decides; without one, the build's free development does, and nothing is
+    static."""
     declared = _declared(declaration.get("text", "")) if declaration is not None else None
     if declared is not None:
         return declared
     values = load()
     if values["free_development"]:
-        return {"code_allowed": True, "technologies": values["allowed_technologies"],
+        return {"code_allowed": True, "technologies": values["allowed_technologies"], "static": False,
                 "reason": "free development is enabled"}
     return _no_code("the project declares no development and free development is off")
+
+
+def static(declaration: dict | None) -> bool | None:
+    """Whether the main branch declares the project static; None when its [development] is not valid, which IT
+    corrects. Without a declaration, or without `static`, it is not."""
+    declared = _declared(declaration.get("text", "")) if declaration is not None else None
+    if declared is None:
+        return False
+    return None if declared["reason"].endswith(_IT_CORRECTS) else declared["static"]
 
 
 _BRANCH_PART = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

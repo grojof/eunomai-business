@@ -47,8 +47,8 @@ the tools again. Meanwhile, carry on with what needs no connector, such as under
    - The person wants a new application and no project exists for it: do not look for one to clone. Understand it
      without a project (`specialist-understand`, *Without a project*) and skip steps 3 to 5.
 3. **Settings:** `specialist_settings(workspace)`: languages, who you talk to (`audience`), the organization's context,
-   skills and tags, whether IT sent changes not on this computer yet (`latest_changes.waiting`), whether code may be written here and with which technologies, the project's test environment if it
-   has one, and the project's context.
+   skills and tags, whether IT sent changes not on this computer yet (`latest_changes.waiting`), whether code may be written here and with which technologies, whether the project is
+   static (`development.static`, below), the project's test environment if it has one, and the project's context.
 4. **Latest changes:** `workspace_update(workspace)`, before anything the person asked for, even only to see the
    application: a preview of a version without them says so (`latest_changes_waiting`). When it brought something (`status` "updated"), here or at
    any later call in the session, tell the person first, in one or two short lines that need nothing from them, then
@@ -143,6 +143,17 @@ pull request, and tell the user in one sentence that building it needs IT's appr
 
 A change of mind sends the work back to the stage it affects. Say so in one line, update the decision where it
 lives (replace it, do not append history), and carry on.
+
+## A static project
+
+When `development.static` is true, the application is pages exported as files and served with no application
+process: a tool that works in the person's browser and keeps nothing. Nothing that needs a server: no database or migrations, no
+identity, roles or sessions, no form that saves, no uploads, no htmx or routes that answer on the server; what it
+calculates, the page calculates. What is published is what the project's export writes (in the organization's base,
+`uv run --frozen python tools/export_static.py <folder>`: the pages in `<folder>/site/` and the headers to serve them
+with in `<folder>/headers.json`; it stops, with its reasons, when a page needs a server). Tests check the exported
+pages, not identity, authorization or cross-site protection. A request that needs any of those things does not fit
+the project: say so in one line and offer to ask IT for one with a server; never build around it.
 
 ## How you talk
 
