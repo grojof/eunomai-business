@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0 (2026-11-19)
+
+A project may be static: pages exported as files and served behind the sign-in proxy with no application process,
+for tools that work in the browser and keep nothing ([decision 19](docs/decisions.md#19--a-project-may-be-static-exported-pages-with-no-application-server)).
+
+**Update the connector before any project uses the key.** Connectors up to 0.2.6 read `static` as an unknown key in
+`[development]` and allow no code in that project. Publish this version to everyone first, then declare it.
+
+- **`static` in `[development]`** of `.eunomai/project.toml`: `true` or `false`. It gives no permission of its own
+  (`static = true` with `code = false` writes nothing); any other value is not valid and allows no code.
+  `specialist_settings` returns `development.static`.
+- **The connector's checks** on every pull request say whether `main` declares the project static, or that its
+  `[development]` is not valid.
+- **The specialist**, on a static project, builds no database, migrations, identity, sessions, forms that save,
+  uploads or server routes; the result is the template's export, and its tests read the exported pages. When it
+  understands a new project, it asks whether it is static or needs a server.
+- **The request for IT** carries that answer as a fixed line, in its three languages, when the person settled it.
+- **`tools/new_project.py --static`** adds `static = true` to `[development]` in the commit that names the
+  application, before `main` is protected, and checks it after. The template's declaration is checked first, in a
+  dry run too, so a template that cannot say it stops nothing half-way. The tool says when the request asked for the
+  other kind; IT decides.
+
 ## 0.2.6 (2026-11-17)
 
 An accepted proposal is recognized however IT merges it. In Cowork, IT squashed a proposal and deleted its branch;

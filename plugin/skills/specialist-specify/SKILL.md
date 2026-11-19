@@ -40,6 +40,9 @@ headings) stay in English; the content is in `docs_language`.
 - Cover the edges a reviewer will ask about (who may do it and who may not, nobody on their own record, wrong or
   missing input, limits, the same action twice) as scenarios, or as requirements of their own when a requirement
   would pass three.
+- **A static project** (`development.static`): no requirement keeps data, names who may do something, or needs a
+  server; the edges are wrong or missing input, limits and what the page shows for them. A requirement that needs
+  one of those things goes back to the user, as `specialist` says.
 - A business rule cites its source in its `**Source:**` line, right after the SHALL sentence. Without one it is
   built as the most restrictive assumption: the line says `assumption` and the question is a row of the open
   questions page, naming the requirement; never invent it.

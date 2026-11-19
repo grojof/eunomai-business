@@ -316,6 +316,18 @@ def test_other_ways_of_saying_this_computer_only_are_valid(run):
     assert "invalid" not in settings.preview({"text": f"[preview]\nrun = {run}\n"})
 
 
+def test_a_static_project_can_serve_its_exported_pages():
+    text = '''
+    [preview]
+    setup = [["python", "tools/export_static.py", "{data}"]]
+    run = ["python", "-m", "http.server", "{port}", "--bind", "127.0.0.1", "--directory", "{data}/site"]
+    '''
+    assert settings.preview({"text": textwrap.dedent(text)}) == {
+        "setup": [["python", "tools/export_static.py", "{data}"]],
+        "run": ["python", "-m", "http.server", "{port}", "--bind", "127.0.0.1", "--directory", "{data}/site"],
+        "environment": {}}
+
+
 def test_ordinary_environment_values_are_valid():
     found = settings.preview({"text": f'[preview]\n{GOOD}\n[preview.environment]\nAPP_ENVIRONMENT = "development"\n'
                                       'FLASK_RUN_HOST = "127.0.0.1"\nGUNICORN_CMD_ARGS = "--workers 2"\n'

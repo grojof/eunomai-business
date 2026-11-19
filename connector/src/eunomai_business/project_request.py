@@ -34,6 +34,8 @@ WORDS = {
     "en": {"subject": "new project request: {name}", "title": "New project request",
            "name": "Proposed name: {name} (a suggestion: IT decides the name)", "request": "Request: {request}",
            "requester": "Requester's git user: {login}", "date": "Requested: {date}",
+           "static": "Kind: static (it works in the browser; no database, keeps nothing)",
+           "server": "Kind: with a server (it keeps data or knows who signs in)",
            "purpose": "What it is for", "users": "Who will use it",
            "today": "How it is done today", "first_version": "What the first version includes",
            "out_of_scope": "Out of scope", "nothing": "Nothing stated.", "open_questions": "Open questions",
@@ -51,6 +53,8 @@ WORDS = {
     "es": {"subject": "solicitud de proyecto nuevo: {name}", "title": "Solicitud de proyecto nuevo",
            "name": "Nombre propuesto: {name} (una sugerencia: el nombre lo decide IT)", "request": "Solicitud: {request}",
            "requester": "Usuario de git de quien lo solicita: {login}", "date": "Fecha: {date}",
+           "static": "Tipo: estática (funciona en el navegador; sin base de datos, no guarda nada)",
+           "server": "Tipo: con servidor (guarda datos o sabe quién entra)",
            "purpose": "Para qué sirve", "users": "Quién lo usará",
            "today": "Cómo se hace hoy", "first_version": "Qué incluye la primera versión",
            "out_of_scope": "Fuera de alcance", "nothing": "No se ha indicado nada.", "open_questions": "Preguntas abiertas",
@@ -69,6 +73,8 @@ WORDS = {
     "ca": {"subject": "sol·licitud de projecte nou: {name}", "title": "Sol·licitud de projecte nou",
            "name": "Nom proposat: {name} (un suggeriment: el nom el decideix IT)", "request": "Sol·licitud: {request}",
            "requester": "Usuari de git de qui ho sol·licita: {login}", "date": "Data: {date}",
+           "static": "Tipus: estàtica (funciona al navegador; sense base de dades, no desa res)",
+           "server": "Tipus: amb servidor (desa dades o sap qui hi entra)",
            "purpose": "Per a què serveix", "users": "Qui l'utilitzarà",
            "today": "Com es fa avui", "first_version": "Què inclou la primera versió",
            "out_of_scope": "Fora de l'abast", "nothing": "No s'ha indicat res.", "open_questions": "Preguntes obertes",
@@ -121,11 +127,14 @@ def language() -> str:
 
 def parts(fields: dict) -> tuple[str, list[str], list[tuple[str, str | list[str]]]]:
     """(title, lead lines, sections) of a request, in its language: what both the text and the page are made of.
-    The lead lines are fixed so IT, or a tool of IT's, can read the name, the request and the requester's git user."""
+    The lead lines are fixed so IT, or a tool of IT's, can read the name, the request, the requester's git user and,
+    when the person settled it, whether the application is static or needs a server."""
     words = WORDS[fields["language"]]
     lead = [words["name"].format(name=fields["name"]), words["request"].format(request=fields["request"])]
     if fields.get("requester"):
         lead.append(words["requester"].format(login=fields["requester"]))
+    if fields.get("static") is not None:
+        lead.append(words["static" if fields["static"] else "server"])
     lead.append(words["date"].format(date=fields["created"][:10]))
     sections: list[tuple[str, str | list[str]]] = [(words[key], fields[key]) for key in _SECTIONS]
     sections.append((words["out_of_scope"], fields["out_of_scope"] or words["nothing"]))
@@ -182,9 +191,13 @@ def _now() -> str:
 
 
 def prepare(name: str, purpose: str, users: str, today: str, first_version: str, out_of_scope: str = "",
-            open_questions: list[str] | None = None, requester: str = "") -> dict:
-    """`requester` is the git user the connector is signed in as, never words of the model's."""
+            open_questions: list[str] | None = None, requester: str = "", static: bool | None = None) -> dict:
+    """`requester` is the git user the connector is signed in as, never words of the model's. `static`: true for an
+    application that works in the browser with no server, false for one that needs one, None when not settled."""
     name = _check_name(name)
+    if static is not None and not isinstance(static, bool):
+        raise ValueError("static: true (it works in the browser and saves nothing), false (it needs a server), or left "
+                         "out when the person has not settled it")
     requester = requester if isinstance(requester, str) and _LOGIN.match(requester) else ""
     fields = {key: _text(value, key, True) for key, value in
               (("purpose", purpose), ("users", users), ("today", today), ("first_version", first_version))}
@@ -207,8 +220,8 @@ def prepare(name: str, purpose: str, users: str, today: str, first_version: str,
         request = next(candidate for candidate in (name, *(f"{name}-{n}" for n in range(2, 1000)))
                        if candidate not in taken)
         path, created = folder / f"{request}.json", _now()
-    record = {"request": request, "status": "pending", "name": name, **fields, "requester": requester,
-              "created": created, "language": language()}
+    record = {"request": request, "status": "pending", "name": name, **fields, "static": static,
+              "requester": requester, "created": created, "language": language()}
     if pending:
         record["updated"] = _now()
     subject, text = message(record)
@@ -233,7 +246,7 @@ def prepare(name: str, purpose: str, users: str, today: str, first_version: str,
 def pending() -> list[dict]:
     """Requests not yet marked done, oldest first, with what was understood (not the message itself)."""
     keys = ("request", "name", "purpose", "users", "today", "first_version", "out_of_scope", "open_questions",
-            "created")
+            "static", "created")
     found = [{key: saved.get(key) for key in keys} for _, saved in _saved() if saved["status"] == "pending"]
     return sorted(found, key=lambda entry: (str(entry["created"]), entry["request"]))
 

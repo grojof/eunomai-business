@@ -2,13 +2,17 @@
 
     python tools/new_project.py --request request.txt --title "Asset inventory"
     python tools/new_project.py --request - --title "Asset inventory" --dry-run      # the e-mail pasted on stdin
+    python tools/new_project.py --request request.txt --title "Price calculator" --static
 
 The request is the e-mail a person sent through the assistant, pasted as it arrived. Its fixed lines give the
-proposed name, the request and the requester's git user, in the organization's documentation language. The tool:
+proposed name, the request, the requester's git user and, when the person settled it, whether the application is
+static or needs a server, in the organization's documentation language. The tool:
 
-1. checks the template exists and is a template, and that no repository has that name;
+1. checks the template exists and is a template, that no repository has that name and, with `--static`, that the
+   template's declaration has the one `[development]` table to say it in and the template has `tools/export_static.py`;
 2. creates the repository from the template (private, with its labels);
-3. commits the application's name into `.env.example` and `.eunomai/project.toml`, before anything is protected;
+3. commits the application's name into `.env.example` and `.eunomai/project.toml`, and with `--static` declares the
+   project static there (`static = true` in `[development]`), in one commit, before anything is protected;
 4. protects the main branch: changes only by a reviewed pull request, up to date, no rejected review;
 5. gives the requester write access, and turns Actions off when the server has no runner (`actions: false`);
 6. checks all of it, and prints the reply for the requester.
@@ -25,6 +29,7 @@ import json
 import re
 import ssl
 import sys
+import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -42,11 +47,17 @@ TITLE = re.compile(r"[^\"\\\r\n\x00-\x1f]{1,60}\Z")
 # The request's fixed lines, as project_request.WORDS writes them; a test keeps both in step.
 LINES = {
     "en": {"name": "Proposed name: {name} (a suggestion: IT decides the name)", "request": "Request: {request}",
-           "requester": "Requester's git user: {login}"},
+           "requester": "Requester's git user: {login}",
+           "static": "Kind: static (it works in the browser; no database, keeps nothing)",
+           "server": "Kind: with a server (it keeps data or knows who signs in)"},
     "es": {"name": "Nombre propuesto: {name} (una sugerencia: el nombre lo decide IT)", "request": "Solicitud: {request}",
-           "requester": "Usuario de git de quien lo solicita: {login}"},
+           "requester": "Usuario de git de quien lo solicita: {login}",
+           "static": "Tipo: estática (funciona en el navegador; sin base de datos, no guarda nada)",
+           "server": "Tipo: con servidor (guarda datos o sabe quién entra)"},
     "ca": {"name": "Nom proposat: {name} (un suggeriment: el nom el decideix IT)", "request": "Sol·licitud: {request}",
-           "requester": "Usuari de git de qui ho sol·licita: {login}"},
+           "requester": "Usuari de git de qui ho sol·licita: {login}",
+           "static": "Tipus: estàtica (funciona al navegador; sense base de dades, no desa res)",
+           "server": "Tipus: amb servidor (desa dades o sap qui hi entra)"},
 }
 REPLY = {
     "en": "Your project exists: {address}. Tell the assistant \"IT has created the project: {address}\", and the work "
@@ -58,6 +69,9 @@ REPLY = {
 }
 FILES = {".env.example": re.compile(r'^APP_NAME="[^"\n]*"$', re.M),
          ".eunomai/project.toml": re.compile(r'^APP_NAME = "[^"\n]*"$', re.M)}
+DECLARATION = ".eunomai/project.toml"
+EXPORT = "tools/export_static.py"  # what writes a static project's pages, in the organization's base
+DEVELOPMENT = re.compile(r"^\[development\][ \t]*(?:#[^\n]*)?$", re.M)
 PROTECTION = {"enable_push": False, "required_approvals": 1, "block_on_outdated_branch": True,
               "block_on_rejected_reviews": True, "dismiss_stale_approvals": True}
 CONFIG_KEYS = {"platform", "server", "owner", "template", "header_file", "actions", "protection", "ca_file"}
@@ -75,6 +89,7 @@ class Request:
     request: str
     requester: str
     language: str
+    static: bool | None = None  # what the request says: static, with a server, or nothing; IT decides with --static
 
 
 @dataclass
@@ -120,7 +135,8 @@ def read_request(text: str, name: str = "", requester: str = "") -> Request:
     if not login or not LOGIN.match(login):
         raise Refused("the request names no valid git user for the requester (they were not signed in when it was "
                       "prepared): ask them for it and give it with --requester")
-    return Request(chosen, values["request"], login, language)
+    static = True if found["static"] else False if found["server"] else None
+    return Request(chosen, values["request"], login, language, static)
 
 
 def read_config(path: Path) -> Config:
@@ -164,8 +180,9 @@ class Platform:
     OPERATIONS = ("check", "generate", "read_file", "commit_files", "protect", "grant_write", "turn_off_actions",
                   "delete_merged_branches", "is_protected", "can_write")
 
-    def check(self, config: Config, request: Request) -> None:
-        """What must hold before anything is created: the template exists and is one, the target does not."""
+    def check(self, config: Config, request: Request) -> str:
+        """What must hold before anything is created: the template exists and is one, the target does not. Gives back
+        the template's main branch's name."""
         raise NotImplementedError
 
     def generate(self, config: Config, request: Request, title: str) -> str:
@@ -242,7 +259,7 @@ class Gitea(Platform):
         except urllib.error.URLError as error:
             raise Refused(f"the server does not answer at {self.api}: {error.reason}") from None
 
-    def check(self, config: Config, request: Request) -> None:
+    def check(self, config: Config, request: Request) -> str:
         status, template = self.call("GET", f"/repos/{config.owner}/{config.template}")
         if status != 200 or not isinstance(template, dict):
             raise Refused(f"the template {config.owner}/{config.template} cannot be read ({status}): check the "
@@ -255,6 +272,7 @@ class Gitea(Platform):
                           "with --name")
         if status != 404:
             raise Refused(f"whether {config.owner}/{request.name} exists cannot be told ({status})")
+        return str(template.get("default_branch") or "main")
 
     def generate(self, config: Config, request: Request, title: str) -> str:
         status, made = self.call("POST", f"/repos/{config.owner}/{config.template}/generate", {
@@ -346,7 +364,41 @@ def named(text: str, path: str, title: str) -> str:
     return pattern.sub(lambda _: line, text, count=1)
 
 
-def create(platform: Platform, config: Config, request: Request, title: str, done: list[str]) -> str:
+def is_static(text: str) -> bool:
+    try:
+        development = tomllib.loads(text).get("development")
+    except tomllib.TOMLDecodeError:
+        return False
+    return isinstance(development, dict) and development.get("static") is True
+
+
+def made_static(text: str) -> str:
+    """The declaration with `static = true` in its one `[development]` table; refused rather than guessed when there is
+    no such table, or the line would not read as meant (a `static` there already, for example)."""
+    if len(DEVELOPMENT.findall(text)) != 1:
+        raise Refused(f"{DECLARATION} in the template has no single [development] table to declare the project static "
+                      "in: the template is not what this tool expects")
+    changed = DEVELOPMENT.sub(lambda found: f"{found.group(0)}\nstatic = true", text, count=1)
+    if not is_static(changed):
+        raise Refused(f"{DECLARATION} in the template does not read static = true once it is added (does it say "
+                      "static already?): correct the template, or create the project without --static and declare "
+                      "it in a reviewed pull request")
+    return changed
+
+
+def check_static_template(platform: Platform, config: Config, branch: str) -> None:
+    """Before anything is created: the template can declare a project static, and can export it. The pinned base can
+    be new enough while the template repository was not made from it again."""
+    made_static(platform.read_file(config.owner, config.template, DECLARATION, branch)[0])
+    try:
+        platform.read_file(config.owner, config.template, EXPORT, branch)
+    except Refused:
+        raise Refused(f"{config.owner}/{config.template} has no {EXPORT} on {branch}, so a static project made from it "
+                      "could not be exported: make the template again from a base that has it") from None
+
+
+def create(platform: Platform, config: Config, request: Request, title: str, done: list[str],
+           static: bool = False) -> str:
     """Every step, each said in `done` once it holds. Gives back the main branch's name."""
     owner, name = config.owner, request.name
     branch = platform.generate(config, request, title)
@@ -355,9 +407,12 @@ def create(platform: Platform, config: Config, request: Request, title: str, don
     files = []
     for path in FILES:
         text, version = platform.read_file(owner, name, path, branch)
-        files.append((path, named(text, path, title), version))
-    platform.commit_files(owner, name, branch, f"The application's name: {title}", files)
-    done.append(f"committed the application's name, {title!r}, into {' and '.join(FILES)}")
+        text = named(text, path, title)
+        files.append((path, made_static(text) if static and path == DECLARATION else text, version))
+    message = f"The application's name: {title}" + ("; declared static" if static else "")
+    platform.commit_files(owner, name, branch, message, files)
+    done.append(f"committed the application's name, {title!r}, into {' and '.join(FILES)}"
+                + (f", and declared the project static in {DECLARATION}" if static else ""))
 
     platform.protect(owner, name, branch, config.protection)
     done.append(f"protected {branch}: changes by a reviewed pull request ({config.protection['required_approvals']} "
@@ -375,7 +430,8 @@ def create(platform: Platform, config: Config, request: Request, title: str, don
     return branch
 
 
-def verify(platform: Platform, config: Config, request: Request, title: str, branch: str) -> list[str]:
+def verify(platform: Platform, config: Config, request: Request, title: str, branch: str,
+           static: bool = False) -> list[str]:
     """What is wrong in the new repository, read back from the server; empty when all holds."""
     owner, name, wrong = config.owner, request.name, []
     if not platform.is_protected(owner, name, branch):
@@ -389,6 +445,8 @@ def verify(platform: Platform, config: Config, request: Request, title: str, bra
             text = ""
         if f'"{title}"' not in text:
             wrong.append(f"{path} does not hold the application's name")
+        if static and path == DECLARATION and not is_static(text):
+            wrong.append(f"{path} does not declare the project static")
     return wrong
 
 
@@ -399,6 +457,8 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--name", default="", help="the repository's name, instead of the request's proposal")
     parser.add_argument("--requester", default="", help="the requester's git user, when the request names none")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="the configuration file")
+    parser.add_argument("--static", action="store_true",
+                        help="declare the project static: exported pages, with no server, database or identity")
     parser.add_argument("--dry-run", action="store_true", help="check everything and change nothing")
     args = parser.parse_args(arguments)
     done: list[str] = []
@@ -409,14 +469,21 @@ def main(arguments: list[str] | None = None) -> int:
         request = read_request(text, args.name, args.requester)
         config = read_config(args.config)
         platform = platform_for(config)
-        platform.check(config, request)
+        template_branch = platform.check(config, request)
+        if args.static:  # the template as the new repository will have it: a refusal changes nothing
+            check_static_template(platform, config, template_branch)
         address = f"{config.owner}/{request.name}"
+        if request.static is not None and request.static != args.static:  # IT decides; the request only asks
+            print("Note: the request asks for a static project; without --static it is made as one with a server."
+                  if request.static else "Note: the request asks for a project with a server; --static declares it "
+                  "static all the same.")
         if args.dry_run:
+            kind = "static" if args.static else "with a server"
             print(f"Dry run: {address} can be created from {config.owner}/{config.template} for {request.requester} "
-                  f"(request {request.request}, {request.language}). Nothing was changed.")
+                  f"(request {request.request}, {request.language}), {kind}. Nothing was changed.")
             return 0
-        branch = create(platform, config, request, args.title, done)
-        wrong = verify(platform, config, request, args.title, branch)
+        branch = create(platform, config, request, args.title, done, args.static)
+        wrong = verify(platform, config, request, args.title, branch, args.static)
     except Refused as error:
         if done:
             print("Done so far:\n" + "\n".join(f"- {step}" for step in done), file=sys.stderr)

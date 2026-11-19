@@ -232,7 +232,19 @@ def _knowledge_lines(workspace: str, head: str) -> list[str]:
         return [f"- Knowledge: could not be read ({type(exc).__name__})"]
 
 
-def _checks(audit: dict, workspace: str = "") -> str:
+def _static_line(declaration: dict | None) -> str:
+    """Whether the main branch declares the project static, so IT reviews it as one: no application process, database
+    or identity, and what is published is the exported pages."""
+    static = settings.static(declaration)
+    if static is None:
+        return "- Declared static on the main branch: cannot tell, its `[development]` is not valid"
+    if static:
+        return ("- Declared static on the main branch: **yes**: no application process, database or identity; what is "
+                "published is the exported pages, behind the sign-in proxy")
+    return "- Declared static on the main branch: no"
+
+
+def _checks(audit: dict, workspace: str = "", declaration: dict | None = None) -> str:
     """The connector's own checks, appended to every pull request: what IT reads there was not written by Claude, and
     it answers for the commit the server holds, which it names."""
     listed = ", ".join(audit["files"]) or "no pinned list"
@@ -241,6 +253,7 @@ def _checks(audit: dict, workspace: str = "") -> str:
     if audit["without_hashes"]:
         lines.append(f"  - without hashes: {', '.join(audit['without_hashes'])}")
     if workspace:
+        lines.append(_static_line(declaration))
         lines.append(_tests_line(workspace, audit["head"]))
         lines += _knowledge_lines(workspace, audit["head"])
     return "\n\n---\n**Checks by the connector** (not written by the assistant)\n\n" + "\n".join(lines) + "\n"
@@ -266,11 +279,13 @@ def _propose(workspace: str, title: str, description: str) -> dict:
         return {"workspace": workspace, "status": "not_sent",
                 "user_message": "Your latest saved work has not been sent yet, so nothing was proposed. It is safe on "
                                 "this computer."}
-    main = gitops.project_files(workspace).get("tip")
+    files = gitops.project_files(workspace)
+    main = files.get("tip")
     if not main:
         return _main_missing(workspace)
     audit, refused = _audit_gate(workspace, main, held)
-    return refused or gitops.pull_request(workspace, title, _own_words(description) + _checks(audit, workspace))
+    return refused or gitops.pull_request(workspace, title, _own_words(description)
+                                          + _checks(audit, workspace, files.get("declaration")))
 
 
 @mcp.tool()
@@ -295,11 +310,11 @@ def _specialist_settings(workspace: str) -> dict:
             files = gitops.project_files(workspace)
         except support.Unreachable:
             unavailable = "the server could not be reached; ask again later"
-            result["development"] = {"code_allowed": False, "technologies": [], "reason": unavailable}
+            result["development"] = {"code_allowed": False, "technologies": [], "static": False, "reason": unavailable}
             result["project_context"] = {"unavailable": unavailable}
         else:
             result["development"] = settings.development(files["declaration"]) if files["read"] else {
-                "code_allowed": False, "technologies": [],
+                "code_allowed": False, "technologies": [], "static": False,
                 "reason": "the project's main branch could not be read on the server, so neither could its declaration"}
             result["project_context"] = files["context"]
             result["latest_changes"] = {"waiting": bool(files.get("tip"))
@@ -318,7 +333,8 @@ def _specialist_settings(workspace: str) -> dict:
 def specialist_settings(workspace: str = "") -> dict:
     """The organization's and the project's choices for the specialist, as IT keeps them:
     languages; `audience` ("business": people who are not technical; "technical": IT); the organization's context,
-    skills and `tags` (its vocabulary for the knowledge pages: departments, processes, systems; empty: none set); and, for a workspace, whether code may be written and with which technologies (empty: any), `test` (the
+    skills and `tags` (its vocabulary for the knowledge pages: departments, processes, systems; empty: none set); and, for a workspace, whether code may be written and with which technologies (empty: any), whether
+    the project is static (`development.static`: exported pages, with no application process, database or identity), `test` (the
     project's test environment), `preview` and `tests` (what can run on this computer, `tests.some` for some files),
     and the project's context from the main branch; `latest_changes.waiting` true: the main branch has changes
     this version does not, which workspace_update brings. They come before anything personal in the session."""
@@ -408,26 +424,27 @@ def dependency_audit(workspace: str) -> dict:
 
 @mcp.tool()
 def project_request(name: str, purpose: str, users: str, today: str, first_version: str, out_of_scope: str = "",
-                    open_questions: list[str] | None = None) -> dict:
+                    open_questions: list[str] | None = None, static: bool | None = None) -> dict:
     """Prepare a request for IT to create a new project, only after the person confirmed what was
     understood and no project exists. Sends nothing: opens a page in their browser to copy it or e-mail it to the
     organization's support address, and returns `user_message` and `page`, never the message. A copy stays on this
     computer, listed by workspace_list until project_request_done or project_request_withdraw. `name`: a suggested
     repository name (lowercase ASCII letters, digits, hyphens; IT decides); the other fields are the person's words,
-    in their language. The fixed text names the signed-in git user.
+    in their language. `static`: true for a tool that works in the browser and saves nothing, false when it needs a
+    server, left out when not settled; a fixed line says it. The fixed text names the signed-in git user.
     The same name while one is pending replaces it (`replaced` true)."""
-    return _safe(_project_request, name, purpose, users, today, first_version, out_of_scope, open_questions)
+    return _safe(_project_request, name, purpose, users, today, first_version, out_of_scope, open_questions, static)
 
 
 def _project_request(name: str, purpose: str, users: str, today: str, first_version: str, out_of_scope: str,
-                     open_questions: list[str] | None) -> dict:
+                     open_questions: list[str] | None, static: bool | None = None) -> dict:
     try:
         signed = auth.whoami("git")
     except (OSError, ValueError, RuntimeError):  # no git provider or no sign-in: the request goes without the user
         signed = {}
     requester = str(signed.get("login", "")) if signed.get("signed_in") else ""
     return requests_for_it.prepare(name, purpose, users, today, first_version, out_of_scope, open_questions,
-                                   requester)
+                                   requester, static)
 
 
 def _request_done(request: str, workspace: str) -> dict:

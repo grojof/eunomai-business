@@ -96,14 +96,17 @@ A person's request reaches IT by e-mail, from a page the plugin opens for them.
    `python tools/new_project.py --request <file> --title "<Application name>" --dry-run`, and again without
    `--dry-run`. It creates the repository from the template, commits the application's name, protects `main`, sets
    merged branches to be deleted, gives the requester write access (their git account must exist), turns Actions off
-   where there is no runner, checks it all, and prints the reply for the requester.
+   where there is no runner, checks it all, and prints the reply for the requester. Add `--static` for a
+   [static project](project-practices.md#a-static-project): the request says which kind the person asked for, and IT
+   decides.
 3. Reply with that text, and the answers to the request's open questions.
 
 ## 7. Review what is proposed
 
 The specialist sends a pull request with a fixed summary ([what the reviewer receives](guided-flows.md#what-the-reviewer-receives))
-and, below it, the connector's own checks, which the model does not write: the dependency audit, the last whole-suite
-run of the tests on the person's computer for that commit, and what the application knows. That block is always the
+and, below it, the connector's own checks, which the model does not write: the dependency audit, whether `main`
+declares the project static, the last whole-suite run of the tests on the person's computer for that commit, and what
+the application knows. That block is always the
 last one; a summary cannot use its heading. Anything it quotes from the pages (a tag, a path, a requirement's name)
 is shown as code, cut short: it was written by the assistant, and the block only points at it.
 
@@ -117,6 +120,7 @@ is shown as code, cut short: it was written by the assistant, and the block only
 | Nothing outside the project's place: the base's files, `.eunomai/project.toml`, the CI | The pull request's files |
 | Access rules and personal data as agreed | The specs in `openspec/` and their tests |
 | The tests run where IT runs them | CI, or the suite on IT's computer: `uv run --frozen python tools/test.py` |
+| *Declared static* **yes**: the version brings no database, migrations, identity, sessions or server routes, and the export ends with no reasons | *Checks by the connector*, the diff, and the export on IT's computer: `uv run --frozen python tools/export_static.py <folder>` |
 
 Merge it, or ask for changes in the pull request: the person brings them back to the specialist.
 
@@ -125,6 +129,10 @@ Merge it, or ask for changes in the pull request: the person brings them back to
 [Deployment](https://github.com/grojof/eunomai-business-app-base/blob/main/docs/base/deployment.md) in the base: the
 server's needs, `uv sync` and the migration, the settings, a service unit and the identity proxy in front, with its
 headers and roles from groups.
+
+A static project is deployed as files: what the export wrote in `<folder>/site/`, served at the root of a host of
+its own, behind the same sign-in proxy as any application, with every header in `<folder>/headers.json`. There is
+no application process, database or settings to run; the proxy still decides who may open it.
 
 ## 9. Keep it up to date
 

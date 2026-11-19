@@ -79,8 +79,8 @@ and no files written; then the request goes to IT, and the journey goes on once 
 
 | Moment | The user sees | Behind the scenes |
 |---|---|---|
-| Understand | The same questions and "what I understood" | Nothing written anywhere |
-| The request | A suggested name (IT decides), and a page in their browser with the request, a button that copies it and one that opens the e-mail to IT; nothing is sent until they send it | `project_request`: a fixed message in the organization's documentation language, with the signed-in git user, on a page that copies it and starts an e-mail to `support_email` with its subject, and a copy in the connector's folder |
+| Understand | The same questions and "what I understood", and whether it is a tool that works in the browser and keeps nothing (static) or needs a server | Nothing written anywhere |
+| The request | A suggested name (IT decides), and a page in their browser with the request, a button that copies it and one that opens the e-mail to IT; nothing is sent until they send it | `project_request`: a fixed message in the organization's documentation language, with the signed-in git user and, when settled, a fixed line for static or with a server, on a page that copies it and starts an e-mail to `support_email` with its subject, and a copy in the connector's folder |
 | Waiting for IT | At the start of any later task, "has IT created *name*?" | `workspace_list` lists the pending request |
 | No longer wanted | When IT refused it or they changed their mind, an offer to withdraw it | `project_request_withdraw`: the request kept, marked withdrawn, and no longer asked about |
 | The project exists | The summary they confirmed, and a question only if something changed | The project cloned, the first proposal written from the request and saved, the request marked done with `project_request_done` and kept |
@@ -94,7 +94,8 @@ Every pull request opens with the same short summary: the goal, what was built m
 test of each scenario, what is **not settled** (the open questions page, and the rules whose source is an assumption),
 what was skipped, the skills used besides the specialist and any conflict with its rules, lines proposed for the
 project's context, and course changes that matter. Below it, the connector appends its own checks, which the model
-does not write: the dependency audit; the last whole-suite run of `app_tests` as the connector recorded it (passed or
+does not write: the dependency audit; whether the main branch declares the project
+[static](project-practices.md#a-static-project); the last whole-suite run of `app_tests` as the connector recorded it (passed or
 not, its counts, and whether it was for the commit proposed or another); and what the application knows, read from
 that commit (the pages of each kind, the requirements, and what departs from decision 16 and the organization's
 vocabulary). A version the audit does not allow is not sent at all

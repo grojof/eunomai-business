@@ -1,7 +1,7 @@
 ---
 type: decision
 title: Decisions
-description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, one recommended stack, its visual layer with a base application to clone, new projects that IT creates from a request, an application's knowledge kept in its repository, by kind, and the newest Python with full support."
+description: "Why eunomai-business is built the way it is: a local connector, public sign-in clients, git without Git, configuration at build time, no project rules, no technical problem left to the user, nothing run on the user's computer, a project context that belongs to IT, a runtime IT provides, projects that bring their own capabilities, project plugins made from a template, organization rules in Claude Code's permission syntax, one recommended stack, its visual layer with a base application to clone, new projects that IT creates from a request, an application's knowledge kept in its repository, by kind, the newest Python with full support, a version that is one person's, and projects that may be static."
 tags: [decisions, architecture]
 audience: [it, developers]
 related: [architecture.md, sources.md]
@@ -256,7 +256,7 @@ What a project needs beyond that belongs to the project:
 |---|---|---|
 | Project plugins are made from a [template](../templates/project-plugin/README.md) | IT copies it into the project, configures it, writes the project's tools in one file and builds the zip | It brings decision 10's rules built in: the dependency on eunomai-business, a hook that only denies in the project's own workspaces, tools that start from those workspaces, no secrets in the build |
 | The project's tools run in a **local** server | The same way as the connector, on the user's computer | A remote server is reached from Anthropic's cloud, so the project's internal servers would have to be on the internet or behind an MCP tunnel (Enterprise, by request, research preview) ([sources](sources.md#plugins-connectors-and-extensions)) |
-| A project declares its own development in **`.eunomai/project.toml`** on its main branch | `[development]`: `code`, `technologies`; read from the server, never from the folder; protected like `AGENTS.md` | One home for the permission, kept by IT through the git server; a new project needs no new build of the base |
+| A project declares its own development in **`.eunomai/project.toml`** on its main branch | `[development]`: `code`, `technologies`, `static` ([19](#19--a-project-may-be-static-exported-pages-with-no-application-server)); read from the server, never from the folder; protected like `AGENTS.md` | One home for the permission, kept by IT through the git server; a new project needs no new build of the base |
 | Real changes travel **through the git server** | A tool prepares and checks a change; the user saves it as a version; IT reviews it | No credentials to databases or deployments on users' computers |
 | A **test environment** users can update without waiting for IT | `[test]` declares a branch; `version_to_test` replaces it with the user's saved version; the test server pulls it ([agent](../templates/test-environment-agent/README.md)) | Speed where it is safe: the git server decides who may (a protected branch for a team), the credentials stay on the test server, production still takes review ([how to set it up](project-practices.md#a-test-environment-without-waiting-for-it)) |
 
@@ -484,3 +484,32 @@ changes do not meet; anything else still stops for IT.
 
 **Consequence:** versions made before carry no account and keep working where they were made. IT sees whose each
 version is in its name.
+
+## 19 · A project may be static: exported pages, with no application server
+
+[Decision 13](#13--one-recommended-stack-pages-made-on-the-server) makes pages on the server. A project that declares
+`static = true` in `[development]` is the exception: the same stack and templates make its pages, and the template's
+export writes them as files, which are what IT publishes, behind the same sign-in proxy as any application. It
+runs no application process and has no database or identity of its own, and the specialist builds nothing that
+would need one.
+
+**Why.**
+
+| Reason | Evidence |
+|---|---|
+| Many requests are tools that keep nothing: a calculator, a guide, a page that reads a file the person opens | Requests reaching IT; an application server for each would be a process, a database and settings to run for pages that never change |
+| Fewer moving parts to review and run | No sessions, roles, cross-site protection or migrations to check; the export refuses a page that needs a server |
+| One stack still | The pages are made by the same templates and macros, so the organization's look and IT's review are the same |
+| The project declares it, beside the permission | `.eunomai/project.toml` on `main`, read from the server and protected like `AGENTS.md` ([decision 11](#11--project-plugins-from-a-template-a-project-declares-its-own-development)) |
+
+**Rejected:**
+
+| Alternative | Why not |
+|---|---|
+| A separate stack for static sites (a site generator, a front-end framework) | A second way to make pages, and npm for some; decision 13's reasons hold |
+| Static as a setting of the build | It is a fact of one project, not of the organization |
+| Deciding from the code (no database found, so static) | IT publishes differently, so it must be declared and reviewed, not guessed |
+
+**Consequence:** connectors before 0.3.0 read `static` as an unknown key and allow no code; the plugin is updated
+everywhere before a project declares it. The kind is asked when a new project is understood, travels as a fixed line
+of the request, and IT sets it with `tools/new_project.py --static`.

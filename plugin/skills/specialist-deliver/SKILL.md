@@ -39,7 +39,10 @@ running it again. Each line holds, or goes into the summary under *Not settled* 
 - each page of knowledge carries its kind's tag and `type`, and only the organization's tags; each requirement has
   its `**Source:**` line. The connector reports these to IT under its checks;
 - no secrets, no external resources, no dead code, no debugging leftovers, nothing meant to run on the user's
-  computer.
+  computer;
+- a static project (`development.static`): the export, run now, ends with no reasons, and *Evidence* says so; the
+  version brings no database, migrations, identity or server routes. The connector tells IT the project is declared
+  static.
 
 **Code not allowed in this workspace:** check only that the pieces agree and that the open questions are listed;
 do not archive (the change stays open for IT to build); put "not built: needs IT's approval" under *Skipped*; go
@@ -61,7 +64,8 @@ again while it says `running`, in the same turn: it must pass before the send, a
 A failure goes back to Build.
 `version_send(workspace)`, then `version_propose(workspace=<workspace>, title=<title>, description=<the summary>)`. If it answers `created: false`,
 the pull request was already open: the version just sent updates it, and its description is replaced. The connector
-appends its own checks (the dependency audit, the tests on this computer, the knowledge pages) below your summary; do
+appends its own checks (the dependency audit, whether the project is declared static, the tests on this computer, the
+knowledge pages) below your summary; do
 not repeat them.
 
 Both audit what is saved and refuse unless it is `allowed`, whatever the project declares; nothing was sent then.
